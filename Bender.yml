@@ -1,0 +1,11 @@
+package:
+  name: BGPU
+  authors:
+    - "Tobias Senti <git@tsenti.li>"
+
+dependencies:
+  common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.37.0 }
+
+sources:
+  - src/fetcher.sv
+  - src/dummy_reconvergence_stack.sv
