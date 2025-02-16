@@ -13,7 +13,7 @@
 module fetcher #(
     /// Width of the Program Counter
     parameter int PcWidth = 32,
-    /// Number of warps
+    /// Number of warps per compute unit
     parameter int NumWarps = 8,
     /// Number of threads per warp
     parameter int WarpWidth = 32,
@@ -33,17 +33,30 @@ module fetcher #(
 
     /// To/From instruction cache
     input  logic      ic_ready_i,
-    output logic      ic_pc_valid_o,
-    output pc_t       ic_pc_o,
-    output act_mask_t ic_act_mask_o,
-    output wid_t      ic_warp_id_o
+    output logic      fe_valid_o,
+    output pc_t       fe_pc_o,
+    output act_mask_t fe_act_mask_o,
+    output wid_t      fe_warp_id_o,
+
+    /// From Decoder
+    input logic dec_decoded_i,
+    input wid_t dec_decoded_warp_id_i
 );
+    // #######################################################################################
+    // # Typedefs                                                                            #
+    // #######################################################################################
+
     // Arbiter data input
     typedef struct packed {
         pc_t pc;
         act_mask_t act_mask;
     } arb_warp_data_t;
 
+    // #######################################################################################
+    // # Signals                                                                             #
+    // #######################################################################################
+
+    // Arbiter data input
     arb_warp_data_t [NumWarps-1:0] arb_in_data;
     logic [NumWarps-1:0] rr_warp_ready;
 
@@ -56,11 +69,21 @@ module fetcher #(
     pc_t       [NumWarps-1:0] rs_warp_pc;
     act_mask_t [NumWarps-1:0] rs_warp_act_mask;
 
-    // Generate arbiter data
+    // #######################################################################################
+    // # Round Robin Arbiter                                                                 #
+    // #######################################################################################
+
+    // Arbiter data input
     for(genvar i = 0; i < NumWarps; i++) begin : gen_arb_data
         assign arb_in_data[i].pc       = rs_warp_pc[i];
         assign arb_in_data[i].act_mask = rs_warp_act_mask[i];
-    end
+
+        always_comb assert(!rs_warp_ready[i] || (rs_warp_ready[i] && rs_warp_act_mask[i] != '0))
+        else $fatal("Warp is ready, but has no active threads");
+    end : gen_arb_data
+
+    // Warp can be fetched if there is space in the instruction buffer and reconvergence stack is ready
+    assign rr_warp_ready = ib_space_available_i & rs_warp_ready;
 
     // Round robin arbiter
     rr_arb_tree #(
@@ -74,25 +97,25 @@ module fetcher #(
         .clk_i ( clk_i),
         .rst_ni( rst_ni),
         
-        .req_i  ( ib_space_available_i ),
-        .gnt_o  ( arb_gnt              ),
-        .data_i ( arb_in_data          ),
+        .req_i  ( rr_warp_ready ),
+        .gnt_o  ( arb_gnt       ),
+        .data_i ( arb_in_data   ),
 
         // Directly to instruction cache
-        .req_o ( ic_pc_valid_o ),
+        .req_o ( fe_valid_o ),
         .gnt_i ( ic_ready_i    ),
         .data_o( arb_sel_data  ),
-        .idx_o ( ic_warp_id_o  ),
+        .idx_o ( fe_warp_id_o  ),
         
         // Unused
         .flush_i( 1'b0 ),
         .rr_i   ( '0   )
     );
-    
-    // Warp can be fetched if there is space in the instruction buffer and reconvergence stack is ready
-    assign rr_warp_ready = ib_space_available_i & rs_warp_ready;
 
-    // Reconvergence stack
+    // #######################################################################################
+    // # Reconvergence Stack                                                                 #
+    // #######################################################################################
+
     dummy_reconvergence_stack #(
         .PcWidth   ( PcWidth   ),
         .NumWarps  ( NumWarps  ),
@@ -101,8 +124,8 @@ module fetcher #(
         .clk_i             ( clk_i  ),
         .rst_ni            ( rst_ni ),
 
-        .instruction_decoded_i( 1'b0 ),
-        .decode_wid_i         ( '0   ),
+        .instruction_decoded_i( dec_decoded_i         ),
+        .decode_wid_i         ( dec_decoded_warp_id_i ),
 
         .warp_selected_i    ( arb_gnt             ),
         .warp_ready_o       ( rs_warp_ready       ),
@@ -110,8 +133,12 @@ module fetcher #(
         .warp_act_mask_o    ( rs_warp_act_mask    )
     );
 
-    // Outputs to instruction cache
-    assign ic_pc_o       = arb_sel_data.pc;
-    assign ic_act_mask_o = arb_sel_data.act_mask;
+    // #######################################################################################
+    // # Outputs                                                                             #
+    // #######################################################################################
 
-endmodule
+    // To instruction cache
+    assign fe_pc_o       = arb_sel_data.pc;
+    assign fe_act_mask_o = arb_sel_data.act_mask;
+
+endmodule : fetcher

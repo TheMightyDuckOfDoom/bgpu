@@ -1,7 +1,7 @@
 set_part $device
 
 # read all design files
-source ../vivado.f
+source vivado.f
 
 # read constraints
 read_xdc dummy_constraints.xdc
