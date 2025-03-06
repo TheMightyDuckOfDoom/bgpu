@@ -80,7 +80,7 @@ module dummy_reconvergence_stack #(
             for(int i = 0; i < NumWarps; i++) begin
                 warp_data_d[i].active   = 1'b1;
                 warp_data_d[i].ready    = 1'b1;
-                warp_data_d[i].act_mask = i+'d1;
+                warp_data_d[i].act_mask = i[WarpWidth-2:0]+'d1;
             end
         end
 

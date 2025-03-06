@@ -116,7 +116,7 @@ module tb_compute_unit #(
 
         ic_write = 1'b1;
         for(int i = 0; i < MemorySize; i++) begin
-            ic_write_pc = i;
+            ic_write_pc = i[PcWidth-1:0];
             ic_write_inst = i;
             if(i == MemorySize-1) begin
                 ic_write_inst = '1;
@@ -168,7 +168,7 @@ module tb_compute_unit #(
 
             if(warp_stopped == '1) begin
                 $display("\nAll warps have stopped.");
-                assert(warp_stopped && warp_active == '0)
+                assert((warp_stopped & warp_active) == '0)
                 else $fatal("Warps %b have stopped, but %b are still active.", warp_stopped, warp_active);
                 stop = 1'b1;
             end
