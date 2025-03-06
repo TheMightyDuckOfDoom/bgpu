@@ -1,0 +1,10 @@
+name: Simulate
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  tb_compute_unit:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_compute_unit

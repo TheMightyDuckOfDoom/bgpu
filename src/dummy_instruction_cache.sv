@@ -48,7 +48,7 @@ module dummy_instruction_cache #(
     // # Signals                                                                             #
     // #######################################################################################
 
-    enc_inst_t [MemorySize-1:0] inst_memory;
+    enc_inst_t inst_memory [MemorySize];
 
     // #######################################################################################
     // # Write logic                                                                         #
@@ -70,7 +70,8 @@ module dummy_instruction_cache #(
     assign ic_valid_o = fe_valid_i;
 
     // Lookup instruction in memory
-    assign ic_inst_o = fe_pc_i < MemorySize[PcWidth-1:0] ? inst_memory[fe_pc_i] : '0;
+    assign ic_inst_o = fe_pc_i < MemorySize[PcWidth-1:0]
+                            ? inst_memory[fe_pc_i[$clog2(MemorySize)-1:0]] : '0;
 
     // Passthrough pc, act_mask and warp_id
     assign ic_pc_o       = fe_pc_i;

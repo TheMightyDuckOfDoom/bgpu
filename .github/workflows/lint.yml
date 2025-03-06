@@ -1,12 +1,23 @@
-name: Verible linter
+name: Lint RTL
 on: [push, pull_request, workflow_dispatch]
 jobs:
-  lint:
-    runs-on: ubuntu-latest
+  verible-lint:
+    runs-on: self-hosted
     steps:
-    - uses: actions/checkout@master
-    - uses: chipsalliance/verible-linter-action@main
-      with:
-        paths: |
-          src/
-          test/
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Verible Lint
+        uses: chipsalliance/verible-linter-action@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          paths: |
+            ./src
+            ./test
+
+  verilator-lint:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Verilator Lint
+        run: make lint-verilator

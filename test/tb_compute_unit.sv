@@ -15,10 +15,10 @@ module tb_compute_unit #(
 
     parameter int MemorySize = 32,
 
-    parameter time TCLK_PERIOD = 10ns,
+    parameter time TclkPeriod = 10ns,
     parameter int MaxSimCycles = 10000
 );
-    localparam TCLK_HALF = TCLK_PERIOD / 2;
+    localparam time TCLKHALF = TclkPeriod / 2;
 
     typedef logic [     PcWidth-1:0] pc_t;
     typedef logic [   WarpWidth-1:0] act_mask_t;
@@ -29,7 +29,7 @@ module tb_compute_unit #(
 
     // Generate clock
     always begin
-        #TCLK_HALF clk = ~clk;
+        #TCLKHALF clk = ~clk;
     end
 
     // Reset
@@ -53,9 +53,12 @@ module tb_compute_unit #(
     logic[NumWarps-1:0] ib_space_available, new_ib_space_available;
 
     always_comb begin
-        new_ib_space_available = {ib_space_available[NumWarps-2:0], ib_space_available[NumWarps-1]};
-        new_ib_space_available = {new_ib_space_available[NumWarps-2:0], new_ib_space_available[NumWarps-1]};
-        new_ib_space_available = {new_ib_space_available[NumWarps-2:0], new_ib_space_available[NumWarps-1]};
+        new_ib_space_available = {ib_space_available[NumWarps-2:0],
+                                    ib_space_available[NumWarps-1]};
+        new_ib_space_available = {new_ib_space_available[NumWarps-2:0],
+                                    new_ib_space_available[NumWarps-1]};
+        new_ib_space_available = {new_ib_space_available[NumWarps-2:0],
+                                    new_ib_space_available[NumWarps-1]};
     end
 
     always @(posedge clk) begin
@@ -107,7 +110,7 @@ module tb_compute_unit #(
         initialized = 1'b0;
         stop = 1'b0;
 
-        $timeformat(-9, 0, "ns", 12); // 1: scale (ns=-9), 2: decimals, 3: suffix, 4: print-field width
+        $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("cu.vcd");
         $dumpvars(1,i_cu);
@@ -169,7 +172,8 @@ module tb_compute_unit #(
             if(warp_stopped == '1) begin
                 $display("\nAll warps have stopped.");
                 assert((warp_stopped & warp_active) == '0)
-                else $fatal("Warps %b have stopped, but %b are still active.", warp_stopped, warp_active);
+                else $fatal("Warps %b have stopped, but %b are still active.",
+                    warp_stopped, warp_active);
                 stop = 1'b1;
             end
         end

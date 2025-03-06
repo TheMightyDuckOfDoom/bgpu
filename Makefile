@@ -9,39 +9,71 @@ BENDER          ?= bender
 VERILATOR       ?= verilator
 VIVADO          ?= vivado
 VIVADO_SETTINGS ?= /tools/Xilinx/Vivado/202?.?/settings64.sh
+VERIBLE_LINT    ?= verible-verilog-lint
 
 VERILATOR_FLAGS:= verilator/config.vlt
+
+BENDER_DEPS:= Bender.lock Bender.yml
 
 TOP ?= compute_unit
 TB_TOP ?= tb_$(TOP)
 
 @PHONY: lint synth clean
 
-# Targets
-verilator/verilator.f: Bender.lock Bender.yml
-	$(BENDER) script verilator > $@
+####################################################################################################
+# Linting
+####################################################################################################
 
-verilator/verilator_tb.f: Bender.lock Bender.yml
-	$(BENDER) script verilator -t sim > $@
-
-synth/vivado.f: Bender.lock Bender.yml
-	$(BENDER) script vivado > $@
-
+# Lint using Verilator and Verible
 lint: lint-verilator lint-verible
 
-lint-verilator: verilator/verilator.f verilator/config.vlt $(SRCS)
+# Generate filelist for Verilator linting
+verilator/verilator.f: $(BENDER_DEPS)
+	$(BENDER) script verilator > $@
+
+# Lint using Verilator
+lint-verilator: verilator/verilator.f verilator/config.vlt $(SRCS) $(TB_SRCS)
 	$(VERILATOR) -lint-only $(VERILATOR_FLAGS) -f $< --top $(TOP)
 
-lint-verible: $(SRCS)
-	verible-verilog-lint $(SRCS)
+# Lint using Verible
+lint-verible: $(SRCS) $(TB_SRCS)
+	$(VERIBLE_LINT) $(SRCS) $(TB_SRCS)
 
-sim: verilator/verilator_tb.f $(SRCS) $(TB_SRCS) verilator/config.vlt
-	$(VERILATOR) $(VERILATOR_FLAGS) -f $< --top $(TB_TOP) --binary -j 0 --timing --trace --trace-structs
-	make -C obj_dir -j -f V$(TB_TOP).mk V$(TB_TOP)
-	./obj_dir/V$(TB_TOP)
+####################################################################################################
+# Verilator simulation
+####################################################################################################
 
-synth: synth/vivado.f $(SRCS) synth/build.tcl synth/dummy_constraints.xdc
+# Generate filelist for Verilator simulation
+verilator/verilator_tb.f: $(BENDER_DEPS)
+	$(BENDER) script verilator -t sim > $@
+
+# Translate RTL to C++ using Verilator
+verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)
+	$(VERILATOR) $(VERILATOR_FLAGS) -f $< --top $* --binary -j 0 --timing --trace --trace-structs --Mdir verilator/obj_dir
+
+# Build the testbench
+verilator/obj_dir/V%: verilator/obj_dir/V%.mk
+	make -C verilator/obj_dir -j -f V$*.mk V$*
+
+# Run the testbench
+tb_%: verilator/obj_dir/Vtb_%
+	./$<
+
+####################################################################################################
+# Synthesis
+####################################################################################################
+
+# Generate filelist for Vivado synthesis
+synth/vivado.f: $(BENDER_DEPS)
+	$(BENDER) script vivado > $@
+
+# Run Vivado synthesis
+synth: synth/vivado.f $(SRCS) synth/build.tcl synth/dummy_constraints.xdc synth/run.sh
 	time ./synth/run.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
+
+####################################################################################################
+# Clean
+####################################################################################################
 
 clean:
 	rm -f verilator/*.f
