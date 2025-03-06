@@ -1,4 +1,4 @@
-// Copyright Feb 2025 Tobias Senti
+// Copyright Feb-March 2025 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -28,6 +28,10 @@ module fetcher #(
     input logic clk_i,
     input logic rst_ni,
 
+    input  logic set_ready_i,
+    output logic [NumWarps-1:0] warp_active_o,
+    output logic [NumWarps-1:0] warp_stopped_o,
+
     /// From instruction buffer -> which warp has space for a new instruction?
     input  logic [NumWarps-1:0] ib_space_available_i,
 
@@ -40,7 +44,9 @@ module fetcher #(
 
     /// From Decoder
     input logic dec_decoded_i,
-    input wid_t dec_decoded_warp_id_i
+    input logic dec_stop_warp_i,
+    input wid_t dec_decoded_warp_id_i,
+    input pc_t  dec_decoded_next_pc_i
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -124,11 +130,17 @@ module fetcher #(
         .clk_i             ( clk_i  ),
         .rst_ni            ( rst_ni ),
 
+        .set_ready_i       ( set_ready_i ),
+
         .instruction_decoded_i( dec_decoded_i         ),
+        .decode_stop_warp_i   ( dec_stop_warp_i       ),
         .decode_wid_i         ( dec_decoded_warp_id_i ),
+        .decode_next_pc_i     ( dec_decoded_next_pc_i ),
 
         .warp_selected_i    ( arb_gnt             ),
         .warp_ready_o       ( rs_warp_ready       ),
+        .warp_active_o      ( warp_active_o       ),
+        .warp_stopped_o     ( warp_stopped_o      ),
         .warp_pc_o          ( rs_warp_pc          ),
         .warp_act_mask_o    ( rs_warp_act_mask    )
     );

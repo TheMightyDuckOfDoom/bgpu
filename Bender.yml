@@ -7,7 +7,12 @@ dependencies:
     common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.37.0 }
 
 sources:
-    - src/fetcher.sv
     - src/dummy_reconvergence_stack.sv
+    - src/fetcher.sv
     - src/dummy_instruction_cache.sv
+    - src/decoder.sv
     - src/compute_unit.sv
+
+    - target: sim
+      files:
+          - test/tb_compute_unit.sv

@@ -1,12 +1,10 @@
-// Copyright Feb 2025 Tobias Senti
+// Copyright Feb-March 2025 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
 /// Dummy Instruction Cache
 /// contains a simple lookup memory, no real cache functionality
 module dummy_instruction_cache #(
-    /// Program to have in the instruction cache
-    parameter string MemoryFile = "",
     /// Program size
     parameter int MemorySize = 0,
     /// Width of the Program Counter
@@ -25,6 +23,12 @@ module dummy_instruction_cache #(
     parameter type act_mask_t = logic [   WarpWidth-1:0],
     parameter type enc_inst_t = logic [EncInstWidth-1:0]
 ) (
+    // Write into memory
+    input  logic      clk_i,
+    input  logic      mem_write_i,
+    input  pc_t       mem_pc_i,
+    input  enc_inst_t mem_inst_i,
+
     // From Fetcher
     output logic      ic_ready_o,
     input  logic      fe_valid_i,
@@ -44,17 +48,16 @@ module dummy_instruction_cache #(
     // # Signals                                                                             #
     // #######################################################################################
 
-    enc_inst_t inst_memory [0:MemorySize-1];
+    enc_inst_t [MemorySize-1:0] inst_memory;
 
     // #######################################################################################
-    // # Load Memory File                                                                    #
+    // # Write logic                                                                         #
     // #######################################################################################
 
-    if (MemoryFile != "") begin : load_memory
-        initial begin
-            $readmemh(MemoryFile, inst_memory);
-        end
-    end : load_memory
+    always_ff @(posedge clk_i) begin
+        if (mem_pc_i < MemorySize && mem_write_i)
+            inst_memory[mem_pc_i] <= mem_inst_i;
+    end
 
     // #######################################################################################
     // # Outputs                                                                             #
@@ -67,10 +70,7 @@ module dummy_instruction_cache #(
     assign ic_valid_o = fe_valid_i;
 
     // Lookup instruction in memory
-    if (MemoryFile == "")
-        assign ic_inst_o = '0;
-    else
-        assign ic_inst_o = fe_pc_i < MemorySize ? inst_memory[fe_pc_i] : '0;
+    assign ic_inst_o = fe_pc_i < MemorySize ? inst_memory[fe_pc_i] : '0;
 
     // Passthrough pc, act_mask and warp_id
     assign ic_pc_o       = fe_pc_i;

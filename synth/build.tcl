@@ -9,7 +9,7 @@ read_xdc dummy_constraints.xdc
 # Synthesize Design
 puts $top
 puts $device
-synth_design -top $top -part $device -retiming
+synth_design -top $top -part $device -verbose -debug_log
 #-flatten_hierarchy none 
 report_timing -nworst 1
 report_utilization -hierarchical -hierarchical_percentages

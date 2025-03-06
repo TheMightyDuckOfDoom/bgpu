@@ -1,4 +1,4 @@
-// Copyright Feb 2025 Tobias Senti
+// Copyright Feb-March 2025 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -27,9 +27,18 @@ module dummy_reconvergence_stack #(
     input logic clk_i,
     input logic rst_ni,
 
+    /// Set Ready status
+    input logic set_ready_i,
+
+    /// Which warps are still active or have stopped?
+    output logic [NumWarps-1:0] warp_active_o,
+    output logic [NumWarps-1:0] warp_stopped_o,
+
     /// From decode stage -> is the instruction a branch or update normally to next instruction?
     input logic instruction_decoded_i,
+    input logic decode_stop_warp_i,
     input wid_t decode_wid_i,
+    input pc_t  decode_next_pc_i,
 
     /// To/From Fetcher
     input  logic      [NumWarps-1:0] warp_selected_i,
@@ -43,8 +52,11 @@ module dummy_reconvergence_stack #(
 
     // Data per warp stored in the reconvergence stack
     typedef struct packed {
+        logic active;
+        logic stopped;
         logic ready;
         pc_t pc;
+        act_mask_t act_mask;
     } warp_data_t;
 
     // #######################################################################################
@@ -63,28 +75,48 @@ module dummy_reconvergence_stack #(
         // Default
         warp_data_d[NumWarps-1:0] = warp_data_q[NumWarps-1:0];
 
+        // Set ready status
+        if(set_ready_i) begin
+            for(int i = 0; i < NumWarps; i++) begin
+                warp_data_d[i].active   = 1'b1;
+                warp_data_d[i].ready    = 1'b1;
+                warp_data_d[i].act_mask = i+'d1;
+            end
+        end
+
         // Did we get an update from decode?
         if(instruction_decoded_i) begin : decode_update
-            assert(warp_data_q[decode_wid_i].ready == 1'b1)
+            `ifndef SYNTHESIS
+            assert(warp_data_q[decode_wid_i].active && !warp_data_q[decode_wid_i].ready && !warp_data_q[decode_wid_i].stopped)
             else $fatal("Warp was already ready, but got decoded");
-            // Increment the PC of the decoded warp
-            warp_data_d[decode_wid_i].pc = warp_data_q[decode_wid_i].pc + '1;
+            `endif
+            // Adjust the PC of the decoded warp
+            warp_data_d[decode_wid_i].pc = decode_next_pc_i;
             // Mark the warp as ready
             warp_data_d[decode_wid_i].ready = 1'b1;
+
+            // If the warp is finished -> mark if as stopped
+            if(decode_stop_warp_i) begin
+                warp_data_d[decode_wid_i].stopped = 1'b1;
+                warp_data_d[decode_wid_i].active = 1'b0;
+                warp_data_d[decode_wid_i].ready = 1'b0;
+            end
+
         end : decode_update
 
         for(int i = 0; i < NumWarps; i++) begin : select_update
-            assert(!instruction_decoded_i || (instruction_decoded_i && warp_selected_i[decode_wid_i] == 0))
-            else $fatal("Warp was selected for fetching, but got decoded");
+            `ifndef SYNTHESIS
+            assert(!instruction_decoded_i || (instruction_decoded_i && warp_selected_i[decode_wid_i] == 1'b0))
+            else $fatal("Warp was selected for fetching, but just got decoded");
+            `endif
 
-            // If the warp is selected for fetching, increment the PC
+            // If the warp is selected for fetching, mark it as not ready -> wait until decode stage
             if(warp_selected_i[i]) begin
-                assert(warp_data_q[i].ready == 1'b1)
+                `ifndef SYNTHESIS
+                assert(warp_data_q[i].active && warp_data_q[i].ready && !warp_data_q[i].stopped)
                 else $fatal("Warp was not ready, but got selected for fetching");
-                assert($onehot(warp_selected_i))
-                else $fatal("Multiple warps selected for fetching");
-                // Increment the PC of the selected warp
-                warp_data_d[i].pc = warp_data_q[i].pc + '1;
+                `endif
+                warp_data_d[i].ready = 1'b0;
             end
         end : select_update
     end : next_pc_ready_logic
@@ -102,9 +134,25 @@ module dummy_reconvergence_stack #(
     // #######################################################################################
 
     for(genvar i = 0; i < NumWarps; i++) begin : assign_outputs
-        assign warp_ready_o   [i] = warp_data_q[i].ready;
+        assign warp_active_o  [i] = warp_data_q[i].active;
+        assign warp_stopped_o [i] = warp_data_q[i].stopped;
+        assign warp_ready_o   [i] = warp_data_q[i].ready && warp_data_q[i].active && (|warp_data_q[i].act_mask);
         assign warp_pc_o      [i] = warp_data_q[i].pc;
-        assign warp_act_mask_o[i] = '1; // All warps are active
+        assign warp_act_mask_o[i] = warp_data_q[i].act_mask;
     end : assign_outputs
+
+    // #######################################################################################
+    // # Asserts                                                                             #
+    // #######################################################################################
+
+    // Check that a ready warp has at least one active thread -> otherwise we waste resources
+    `ifndef SYNTHESIS
+    always_comb begin : check_ready_active
+        for(int i = 0; i < NumWarps; i++) begin
+            assert(!warp_ready_o[i] || (warp_ready_o[i] && warp_act_mask_o[i] != '0 && !warp_stopped_o[i]))
+            else $fatal("Warp is marked as ready, but no thread is active");
+        end
+    end : check_ready_active
+    `endif
 
 endmodule : dummy_reconvergence_stack
