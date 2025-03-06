@@ -102,7 +102,7 @@ module fetcher #(
     ) i_rr_arb (
         .clk_i ( clk_i),
         .rst_ni( rst_ni),
-        
+
         .req_i  ( rr_warp_ready ),
         .gnt_o  ( arb_gnt       ),
         .data_i ( arb_in_data   ),
@@ -112,7 +112,7 @@ module fetcher #(
         .gnt_i ( ic_ready_i    ),
         .data_o( arb_sel_data  ),
         .idx_o ( fe_warp_id_o  ),
-        
+
         // Unused
         .flush_i( 1'b0 ),
         .rr_i   ( '0   )

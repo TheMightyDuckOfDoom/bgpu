@@ -13,9 +13,7 @@ module compute_unit #(
     /// Encoded instruction width
     parameter int EncInstWidth = 32,
 
-    parameter type dec_inst_t = struct packed {
-        logic [EncInstWidth-1:0] dummy;
-    }
+    parameter type dec_inst_t = logic [EncInstWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,

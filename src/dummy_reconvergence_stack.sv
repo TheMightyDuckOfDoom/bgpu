@@ -62,7 +62,7 @@ module dummy_reconvergence_stack #(
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
-    
+
     // Reconvergence stack data
     warp_data_t [NumWarps-1:0] warp_data_q, warp_data_d;
 
@@ -87,7 +87,8 @@ module dummy_reconvergence_stack #(
         // Did we get an update from decode?
         if(instruction_decoded_i) begin : decode_update
             `ifndef SYNTHESIS
-            assert(warp_data_q[decode_wid_i].active && !warp_data_q[decode_wid_i].ready && !warp_data_q[decode_wid_i].stopped)
+            assert(warp_data_q[decode_wid_i].active && !warp_data_q[decode_wid_i].ready
+                && !warp_data_q[decode_wid_i].stopped)
             else $fatal("Warp was already ready, but got decoded");
             `endif
             // Adjust the PC of the decoded warp
@@ -106,7 +107,8 @@ module dummy_reconvergence_stack #(
 
         for(int i = 0; i < NumWarps; i++) begin : select_update
             `ifndef SYNTHESIS
-            assert(!instruction_decoded_i || (instruction_decoded_i && warp_selected_i[decode_wid_i] == 1'b0))
+            assert(!instruction_decoded_i || (instruction_decoded_i
+                && warp_selected_i[decode_wid_i] == 1'b0))
             else $fatal("Warp was selected for fetching, but just got decoded");
             `endif
 
@@ -133,13 +135,14 @@ module dummy_reconvergence_stack #(
     // # Outputs                                                                             #
     // #######################################################################################
 
-    for(genvar i = 0; i < NumWarps; i++) begin : assign_outputs
+    for(genvar i = 0; i < NumWarps; i++) begin : gen_assign_outputs
         assign warp_active_o  [i] = warp_data_q[i].active;
         assign warp_stopped_o [i] = warp_data_q[i].stopped;
-        assign warp_ready_o   [i] = warp_data_q[i].ready && warp_data_q[i].active && (|warp_data_q[i].act_mask);
+        assign warp_ready_o   [i] = warp_data_q[i].ready && warp_data_q[i].active
+            && (|warp_data_q[i].act_mask);
         assign warp_pc_o      [i] = warp_data_q[i].pc;
         assign warp_act_mask_o[i] = warp_data_q[i].act_mask;
-    end : assign_outputs
+    end : gen_assign_outputs
 
     // #######################################################################################
     // # Asserts                                                                             #
@@ -149,7 +152,8 @@ module dummy_reconvergence_stack #(
     `ifndef SYNTHESIS
     always_comb begin : check_ready_active
         for(int i = 0; i < NumWarps; i++) begin
-            assert(!warp_ready_o[i] || (warp_ready_o[i] && warp_act_mask_o[i] != '0 && !warp_stopped_o[i]))
+            assert(!warp_ready_o[i] || (warp_ready_o[i] && warp_act_mask_o[i] != '0
+                && !warp_stopped_o[i]))
             else $fatal("Warp is marked as ready, but no thread is active");
         end
     end : check_ready_active

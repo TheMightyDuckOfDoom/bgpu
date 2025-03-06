@@ -27,8 +27,13 @@ verilator/verilator_tb.f: Bender.lock Bender.yml
 synth/vivado.f: Bender.lock Bender.yml
 	$(BENDER) script vivado > $@
 
-lint: verilator/verilator.f verilator/config.vlt
+lint: lint-verilator lint-verible
+
+lint-verilator: verilator/verilator.f verilator/config.vlt $(SRCS)
 	$(VERILATOR) -lint-only $(VERILATOR_FLAGS) -f $< --top $(TOP)
+
+lint-verible: $(SRCS)
+	verible-verilog-lint $(SRCS)
 
 sim: verilator/verilator_tb.f $(SRCS) $(TB_SRCS) verilator/config.vlt
 	$(VERILATOR) $(VERILATOR_FLAGS) -f $< --top $(TB_TOP) --binary -j 0 --timing --trace --trace-structs
