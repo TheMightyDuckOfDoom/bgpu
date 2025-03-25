@@ -49,7 +49,7 @@ verilator/verilator_tb.f: $(BENDER_DEPS)
 
 # Translate RTL to C++ using Verilator
 verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)
-	$(VERILATOR) $(VERILATOR_FLAGS) -f $< --top $* --binary -j 0 --timing --trace --trace-structs --Mdir verilator/obj_dir
+	$(VERILATOR) $(VERILATOR_FLAGS) -f $< --top $* --binary -j 0 --timing --assert --trace --trace-structs --Mdir verilator/obj_dir
 
 # Build the testbench
 verilator/obj_dir/V%: verilator/obj_dir/V%.mk

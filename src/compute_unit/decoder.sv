@@ -51,16 +51,18 @@ module decoder #(
     assign dec_warp_id_o  = ic_warp_id_i;
 
     // Instruction was decoded if a handshake between Decoder and Dispatcher happend
-    assign dec_decoded_o         = dec_valid_o && disp_ready_i;
+    assign dec_decoded_o         = ic_valid_i && dec_stop_warp_o || dec_valid_o && disp_ready_i;
     assign dec_decoded_warp_id_o = dec_warp_id_o;
     assign dec_decoded_next_pc_o = dec_pc_o + 'd1;
 
-    assign dec_stop_warp_o = &ic_inst_i;
+    assign dec_stop_warp_o = &ic_inst_i[7:0];
 
     // Decode instruction
     always_comb begin : decode
         // Default
-        dec_valid_o = ic_valid_i;
-        dec_inst_o  = ic_inst_i;
+        dec_valid_o = ic_valid_i && !dec_stop_warp_o;
+        dec_inst_o.dst = ic_inst_i[EncInstWidth-1-:8];
+        dec_inst_o.src[0] = ic_inst_i[EncInstWidth-9-:8];
+        dec_inst_o.src[1] = ic_inst_i[EncInstWidth-17-:8];
     end
 endmodule : decoder

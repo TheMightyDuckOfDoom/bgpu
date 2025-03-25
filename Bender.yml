@@ -7,10 +7,17 @@ dependencies:
     common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.37.0 }
 
 sources:
-    - src/dummy_reconvergence_stack.sv
-    - src/fetcher.sv
-    - src/dummy_instruction_cache.sv
-    - src/decoder.sv
+    - src/compute_unit/dummy_reconvergence_stack.sv
+    - src/compute_unit/fetcher.sv
+    - src/compute_unit/dummy_instruction_cache.sv
+    - src/compute_unit/decoder.sv
+    
+    - src/compute_unit/dispatcher/tag_queue.sv
+    - src/compute_unit/dispatcher/reg_table.sv
+    - src/compute_unit/dispatcher/wait_buffer.sv
+    - src/compute_unit/dispatcher.sv
+    - src/compute_unit/multi_warp_dispatcher.sv
+
     - src/compute_unit.sv
 
     - target: sim

@@ -7,16 +7,16 @@ module tb_compute_unit #(
     /// Width of the Program Counter
     parameter int PcWidth = 16,
     /// Number of warps
-    parameter int NumWarps = 8,
+    parameter int NumWarps = 2,
     /// Number of threads per warp
-    parameter int WarpWidth = 4,
+    parameter int WarpWidth = 2,
     /// Encoded instruction width
     parameter int EncInstWidth = 32,
 
-    parameter int MemorySize = 32,
+    parameter int MemorySize = 4,
 
     parameter time TclkPeriod = 10ns,
-    parameter int MaxSimCycles = 10000
+    parameter int MaxSimCycles = 100
 );
     localparam time TCLKHALF = TclkPeriod / 2;
 
@@ -50,25 +50,6 @@ module tb_compute_unit #(
         set_ready_status = 1'b0;
     end
 
-    logic[NumWarps-1:0] ib_space_available, new_ib_space_available;
-
-    always_comb begin
-        new_ib_space_available = {ib_space_available[NumWarps-2:0],
-                                    ib_space_available[NumWarps-1]};
-        new_ib_space_available = {new_ib_space_available[NumWarps-2:0],
-                                    new_ib_space_available[NumWarps-1]};
-        new_ib_space_available = {new_ib_space_available[NumWarps-2:0],
-                                    new_ib_space_available[NumWarps-1]};
-    end
-
-    always @(posedge clk) begin
-        if(!rst_n) begin
-            ib_space_available <= 'd1;
-        end else if(dec_valid) begin
-            ib_space_available <= new_ib_space_available;
-        end
-    end
-
     logic [NumWarps-1:0] warp_active, warp_stopped;
 
     logic ic_write;
@@ -96,8 +77,6 @@ module tb_compute_unit #(
         .ic_write_i(ic_write),
         .ic_write_pc_i(ic_write_pc),
         .ic_write_inst_i(ic_write_inst),
-        .ib_space_available_i(ib_space_available),
-        .disp_ready_i(1'b1),
         .dec_valid_o(dec_valid),
         .dec_pc_o(dec_pc),
         .dec_act_mask_o(dec_act_mask),
@@ -117,13 +96,12 @@ module tb_compute_unit #(
 
         $display("Initializing memory...");
 
+        @(posedge clk);
+
         ic_write = 1'b1;
         for(int i = 0; i < MemorySize; i++) begin
             ic_write_pc = i[PcWidth-1:0];
-            ic_write_inst = i;
-            if(i == MemorySize-1) begin
-                ic_write_inst = '1;
-            end
+            ic_write_inst = {i[7:0]+8'd1, i[7:0], i[7:0], i == MemorySize-1 ? 8'hFF : 8'd0};
             @(posedge clk);
         end
         ic_write = 1'b0;
