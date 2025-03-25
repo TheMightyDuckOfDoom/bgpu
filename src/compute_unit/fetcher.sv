@@ -85,7 +85,7 @@ module fetcher #(
         assign arb_in_data[i].act_mask = rs_warp_act_mask[i];
 
         always_comb assert(!rs_warp_ready[i] || (rs_warp_ready[i] && rs_warp_act_mask[i] != '0))
-        else $fatal("Warp is ready, but has no active threads");
+        else $error("Warp is ready, but has no active threads");
     end : gen_arb_data
 
     // Warp can be fetched if there is space in the instruction buffer and reconvergence stack is ready
@@ -100,15 +100,15 @@ module fetcher #(
         .LockIn   ( 1'b1     ),
         .FairArb  ( 1'b1     )
     ) i_rr_arb (
-        .clk_i ( clk_i),
-        .rst_ni( rst_ni),
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
 
         .req_i  ( rr_warp_ready ),
         .gnt_o  ( arb_gnt       ),
         .data_i ( arb_in_data   ),
 
         // Directly to instruction cache
-        .req_o ( fe_valid_o ),
+        .req_o ( fe_valid_o    ),
         .gnt_i ( ic_ready_i    ),
         .data_o( arb_sel_data  ),
         .idx_o ( fe_warp_id_o  ),

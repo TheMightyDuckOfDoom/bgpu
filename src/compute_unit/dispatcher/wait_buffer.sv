@@ -30,6 +30,9 @@ module wait_buffer #(
     /// From fetcher -> which warp gets fetched next
     input  logic fe_handshake_i,
 
+    /// To fetcher -> space for a new instruction?
+    output logic ib_space_available_o,
+
     /// From decoder
     output logic      wb_ready_o,
     input  logic      dec_valid_i,
@@ -41,8 +44,16 @@ module wait_buffer #(
     input  tag_t    [OperandsPerInst-1:0] dec_operand_tags_i,
     input  reg_idx_t[OperandsPerInst-1:0] dec_operands_i,
 
-    /// To fetcher -> space for a new instruction?
-    output logic ib_space_available_o
+    /// To Operand Collcector
+    input  logic     opc_ready_i,
+    output logic     disp_valid_o,
+    output tag_t     disp_tag_o,
+    output reg_idx_t disp_dst_o,
+    output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
+
+    /// From Execution Units
+    input  logic eu_valid_i,
+    input  tag_t eu_tag_i
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -61,12 +72,23 @@ module wait_buffer #(
         reg_idx_t [OperandsPerInst-1:0] operands;
     } wait_buffer_entry_t;
 
+    typedef struct packed {
+        tag_t tag;
+        reg_idx_t dst_reg;
+        reg_idx_t [OperandsPerInst-1:0] operands_reg;
+    } disp_data_t;
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
 
     logic [WaitBufferSizePerWarp-1:0] wait_buffer_valid_q, wait_buffer_valid_d;
     wait_buffer_entry_t [WaitBufferSizePerWarp-1:0] wait_buffer_q, wait_buffer_d;
+
+    logic [WaitBufferSizePerWarp-1:0] rr_inst_ready;
+    logic [WaitBufferSizePerWarp-1:0] arb_gnt;
+    disp_data_t [WaitBufferSizePerWarp-1:0] arb_in_data;
+    disp_data_t arb_sel_data;
 
     // #######################################################################################
     // # Combinatorial Logic                                                                 #
@@ -83,7 +105,7 @@ module wait_buffer #(
         .rst_ni( rst_ni ),
 
         .credit_take_i( fe_handshake_i ),
-        .credit_give_i( 1'b0 ),
+        .credit_give_i( |arb_gnt && disp_valid_o && opc_ready_i ),
         .credit_init_i( 1'b0 ),
 
         .credit_left_o( ib_space_available_o ),
@@ -105,7 +127,7 @@ module wait_buffer #(
         // Insert instruction into buffer
         if(dec_valid_i && wb_ready_o) begin : insert_instruction
             // Find first free entry
-            for(integer entry = 0; entry < WaitBufferSizePerWarp; entry++) begin
+            for(int entry = 0; entry < WaitBufferSizePerWarp; entry++) begin
                 if(!wait_buffer_valid_q[entry]) begin
                     wait_buffer_valid_d[entry]          = 1'b1;
                     wait_buffer_d[entry].pc             = dec_pc_i;
@@ -119,7 +141,68 @@ module wait_buffer #(
                 end
             end
         end : insert_instruction
+
+        // From Execution Units
+        if(eu_valid_i) begin : check_ready
+            for(int entry = 0; entry < WaitBufferSizePerWarp; entry++) begin
+                if(wait_buffer_valid_q[entry]) begin
+                    for(int operand = 0; operand < OperandsPerInst; operand++) begin
+                        if(!wait_buffer_q[entry].operands_ready[operand] && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i) begin
+                            wait_buffer_d[entry].operands_ready[operand] = 1'b1;
+                        end
+                    end
+                end
+            end 
+        end : check_ready
+
+        // Dispatch: Remove instruction from buffer
+        for(int entry = 0; entry < WaitBufferSizePerWarp; entry++) begin
+            if(arb_gnt[entry]) begin
+                assert(wait_buffer_valid_q[entry]) else $error("Wait buffer entry is not valid but selected for dispatch");
+                assert(&wait_buffer_q[entry].operands_ready) else $error("Wait buffer entry is not ready but selected for dispatch");
+                wait_buffer_valid_d[entry] = 1'b0;
+            end
+        end
     end : wait_buffer_logic
+
+    // Which instruction is ready to be dispatched?
+    for(genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_rr_inst_ready
+        assign rr_inst_ready[entry]            = wait_buffer_valid_q[entry] && &wait_buffer_q[entry].operands_ready;
+        assign arb_in_data[entry].tag          = wait_buffer_q[entry].tag;
+        assign arb_in_data[entry].dst_reg      = wait_buffer_q[entry].dst_reg;
+        assign arb_in_data[entry].operands_reg = wait_buffer_q[entry].operands;
+    end : gen_rr_inst_ready
+
+    // Round robin arbiter
+    rr_arb_tree #(
+        .DataType ( disp_data_t ),
+        .NumIn    ( WaitBufferSizePerWarp ),
+        .ExtPrio  ( 1'b0 ),
+        .AxiVldRdy( 1'b0 ),
+        .LockIn   ( 1'b0 ),
+        .FairArb  ( 1'b1 )
+    ) i_rr_arb (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .req_i  ( rr_inst_ready ),
+        .gnt_o  ( arb_gnt       ),
+        .data_i ( arb_in_data   ),
+
+        // Directly to Operand Collector
+        .req_o ( disp_valid_o ),
+        .gnt_i ( opc_ready_i  ),
+        .data_o( arb_sel_data ),
+
+        // Unused
+        .idx_o  (      ),
+        .flush_i( 1'b0 ),
+        .rr_i   ( '0   )
+    );
+
+    assign disp_tag_o      = arb_sel_data.tag;
+    assign disp_dst_o      = arb_sel_data.dst_reg;
+    assign disp_operands_o = arb_sel_data.operands_reg;
 
     // #######################################################################################
     // # Sequential Logic                                                                    #
@@ -138,6 +221,6 @@ module wait_buffer #(
     // It should always be ready, as otherwise the fetcher would not be informed that there is
     // space available
     assert property (@(posedge clk_i) disable iff(!rst_ni) dec_valid_i |-> wb_ready_o)
-    else $fatal("Instruction buffer is not ready");
+    else $error("Instruction buffer is not ready");
 
 endmodule : wait_buffer

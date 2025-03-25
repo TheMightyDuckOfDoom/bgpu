@@ -4,6 +4,8 @@
 
 /// Compute Unit
 module compute_unit #(
+    /// Number of inflight instructions per warp
+    parameter int NumTags = 8,
     /// Width of the Program Counter
     parameter int PcWidth = 16,
     /// Number of warps
@@ -18,7 +20,10 @@ module compute_unit #(
     parameter int RegIdxWidth = 8,
     parameter int OperandsPerInst = 2,
 
-    parameter type reg_idx_t = logic [RegIdxWidth-1:0]
+    parameter int TagWidth = $clog2(NumTags),
+    parameter int WidWidth = $clog2(NumWarps),
+    parameter type reg_idx_t = logic [RegIdxWidth-1:0],
+    parameter type iid_t = logic [WidWidth+TagWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -33,18 +38,15 @@ module compute_unit #(
     input  logic [PcWidth-1:0]      ic_write_pc_i,
     input  logic [EncInstWidth-1:0] ic_write_inst_i,
 
-    output logic dec_valid_o,
-    output logic [PcWidth-1:0] dec_pc_o,
-    output logic [WarpWidth-1:0] dec_act_mask_o,
-    output logic [$clog2(NumWarps)-1:0] dec_warp_id_o,
-    output logic [31:0] dec_inst_o
+    input  logic opc_ready_i,
+    output logic disp_valid_o,
+    output iid_t disp_tag_o,
+    output reg_idx_t disp_dst_o,
+    output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
+
+    input  logic eu_valid_i,
+    input  iid_t eu_tag_i
 );
-    // #######################################################################################
-    // # Localparams                                                                         #
-    // #######################################################################################
-
-    localparam int WidWidth = $clog2(NumWarps);
-
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
@@ -271,6 +273,7 @@ module compute_unit #(
     // #######################################################################################
 
     multi_warp_dispatcher #(
+        .NumTags              ( NumTags               ),
         .PcWidth              ( PcWidth               ),
         .NumWarps             ( NumWarps              ),
         .WarpWidth            ( WarpWidth             ),
@@ -285,6 +288,8 @@ module compute_unit #(
         .fe_handshake_i( fe_to_ic_valid_d && ic_to_fe_ready_q ),
         .fe_warp_id_i  ( fe_to_ic_data_d.warp_id              ),
 
+        .ib_space_available_o( ib_space_available ),
+
         .ib_ready_o    ( ib_to_dec_ready_d         ),
         .dec_valid_i   ( dec_to_ib_valid_q         ),
         .dec_pc_i      ( dec_to_ib_data_q.pc       ),
@@ -292,18 +297,14 @@ module compute_unit #(
         .dec_warp_id_i ( dec_to_ib_data_q.warp_id  ),
         .dec_inst_i    ( dec_to_ib_data_q.inst     ),
 
-        .ib_space_available_o( ib_space_available )
+        .opc_ready_i    ( opc_ready_i     ),
+        .disp_valid_o   ( disp_valid_o    ),
+        .disp_tag_o     ( disp_tag_o      ),
+        .disp_dst_o     ( disp_dst_o      ),
+        .disp_operands_o( disp_operands_o ),
+
+        .eu_valid_i( eu_valid_i ),
+        .eu_tag_i  ( eu_tag_i   )
     );
-
-    // #######################################################################################
-    // # Dummy Inputs / Outputs                                                              #
-    // #######################################################################################
-
-    assign dec_valid_o       = dec_to_ib_valid_q;
-    assign dec_pc_o          = dec_to_ib_data_q.pc;
-    assign dec_act_mask_o    = dec_to_ib_data_q.act_mask;
-    assign dec_warp_id_o     = dec_to_ib_data_q.warp_id;
-
-    assign dec_inst_o[$bits(dec_inst_t)-1:0] = dec_to_ib_data_q.inst;
 
 endmodule : compute_unit

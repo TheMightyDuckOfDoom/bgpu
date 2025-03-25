@@ -33,9 +33,10 @@ module dispatcher #(
 
     /// Dependent parameter, do **not** overwrite.
     parameter int TagWidth    = $clog2(NumTags),
-    parameter type tag_t      = logic [ TagWidth-1:0],
-    parameter type pc_t       = logic [  PcWidth-1:0],
-    parameter type act_mask_t = logic [WarpWidth-1:0]
+    parameter type tag_t      = logic [   TagWidth-1:0],
+    parameter type reg_idx_t  = logic [RegIdxWidth-1:0],
+    parameter type pc_t       = logic [    PcWidth-1:0],
+    parameter type act_mask_t = logic [  WarpWidth-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,
@@ -52,7 +53,18 @@ module dispatcher #(
     input  logic      dec_valid_i,
     input  pc_t       dec_pc_i,
     input  act_mask_t dec_act_mask_i,
-    input  dec_inst_t dec_inst_i
+    input  dec_inst_t dec_inst_i,
+
+    /// To Operand Collector
+    input  logic     opc_ready_i,
+    output logic     disp_valid_o,
+    output tag_t     disp_tag_o,
+    output reg_idx_t disp_dst_o,
+    output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
+
+    /// From Execution Units
+    input  logic eu_valid_i,
+    input  tag_t eu_tag_i
 );
 
     // #######################################################################################
@@ -65,6 +77,7 @@ module dispatcher #(
     // Tag Queue
     logic tag_available;
     tag_t dst_tag;
+    logic tag_queue_ready;
 
     // Register Table
     logic reg_table_space_available;
@@ -102,9 +115,9 @@ module dispatcher #(
         .rst_ni ( rst_ni ),
         .flush_i( 1'b0   ),
 
-        .tag_i  (),
-        .valid_i(),
-        .ready_o(),
+        .tag_i  ( eu_tag_i        ),
+        .valid_i( eu_valid_i      ),
+        .ready_o( tag_queue_ready ),
 
         .tag_o  ( dst_tag       ),
         .valid_o( tag_available ),
@@ -130,7 +143,10 @@ module dispatcher #(
         .operands_reg_i   ( dec_inst_i.src            ),
 
         .operands_ready_o( operands_ready ),
-        .operands_tag_o  ( operands_tag   )
+        .operands_tag_o  ( operands_tag   ),
+
+        .eu_valid_i( eu_valid_i ),
+        .eu_tag_i  ( eu_tag_i   )
     );
 
     // #######################################################################################
@@ -148,19 +164,27 @@ module dispatcher #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .fe_handshake_i( fe_handshake_i ),
+        .fe_handshake_i      ( fe_handshake_i       ),
+        .ib_space_available_o( ib_space_available_o ),
 
-        .wb_ready_o    ( wb_ready       ),
-        .dec_valid_i   ( insert         ),
-        .dec_pc_i      ( dec_pc_i       ),
-        .dec_act_mask_i( dec_act_mask_i ),
-        .dec_tag_i     ( dst_tag        ),
-        .dec_dst_reg_i ( dec_inst_i.dst ),
+        .wb_ready_o          ( wb_ready       ),
+        .dec_valid_i         ( insert         ),
+        .dec_pc_i            ( dec_pc_i       ),
+        .dec_act_mask_i      ( dec_act_mask_i ),
+        .dec_tag_i           ( dst_tag        ),
+        .dec_dst_reg_i       ( dec_inst_i.dst ),
         .dec_operands_ready_i( operands_ready ),
         .dec_operand_tags_i  ( operands_tag   ),
         .dec_operands_i      ( dec_inst_i.src ),
 
-        .ib_space_available_o( ib_space_available_o )
+        .opc_ready_i     ( opc_ready_i     ),
+        .disp_valid_o    ( disp_valid_o    ),
+        .disp_tag_o      ( disp_tag_o      ),
+        .disp_dst_o      ( disp_dst_o      ),
+        .disp_operands_o ( disp_operands_o ),
+
+        .eu_valid_i( eu_valid_i ),
+        .eu_tag_i  ( eu_tag_i   )
     );
 
     // #######################################################################################
@@ -169,7 +193,10 @@ module dispatcher #(
 
     `ifndef SYNTHESIS
         initial assert(NumTags > WaitBufferSizePerWarp)
-        else $fatal(1, "NumTags must be greater than WaitBufferSizePerWarp");
+        else $error(1, "NumTags must be greater than WaitBufferSizePerWarp");
+
+        assert property(@(posedge clk_i) disable iff(rst_ni) eu_valid_i |-> tag_queue_ready)
+        else $error(1, "Tag queue must be ready to receive execution unit tags");
     `endif
 
 endmodule : dispatcher

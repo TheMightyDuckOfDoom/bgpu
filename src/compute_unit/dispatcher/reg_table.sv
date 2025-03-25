@@ -27,7 +27,11 @@ module reg_table #(
 
     // To Wait Buffer
     output logic [OperandsPerInst-1:0] operands_ready_o,
-    output tag_t [OperandsPerInst-1:0] operands_tag_o
+    output tag_t [OperandsPerInst-1:0] operands_tag_o,
+
+    // From Execution Unit
+    input  logic eu_valid_i,
+    input  tag_t eu_tag_i
 );
 
     // ######################################################################
@@ -81,6 +85,11 @@ module reg_table #(
                         break;
                     end
                 end : check_entry
+
+                // Check if operand is produced by the EUs in the same cycle -> then it is ready
+                if(eu_valid_i && eu_tag_i == operands_tag_o[op]) begin
+                    operands_ready_o[op] = 1'b1;
+                end
             end : check_operand
 
             // Insert destination, first check if dst is already in table
@@ -105,6 +114,16 @@ module reg_table #(
                 end : find_free_entry
             end : use_free_entry
         end : insert_logic
+
+        // Clear logic
+        // -> if the EU is valid, clear all entries with the same producer tag, as result is in register file
+        if(eu_valid_i) begin : clear_entry
+            for(int entry = 0; entry < NumTags; entry++) begin
+                if(table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
+                    table_valid_d[entry] = 1'b0;
+                end
+            end
+        end : clear_entry
     end
 
     // ######################################################################
@@ -123,18 +142,18 @@ module reg_table #(
     `ifndef SYNTHESIS
         // Check that there is space available when inserting
         assert property (@(posedge clk_i) insert_i |-> space_available_o)
-        else $fatal("No space available in register table when inserting");
+        else $error("No space available in register table when inserting");
 
         // Check that there a no entries with matching destination register or tag
         for(genvar i = 0; i < NumTags; i++) begin : check_entries
             for(genvar j = 0; j < NumTags; j++) begin
                 // Check destination register
                 assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i] && table_valid_q[j] |-> i == j || table_q[i].dst != table_q[j].dst);
-                else $fatal("Destination register %d is in multiple entries: %d and %d", table_q[i].dst, i, j);
+                else $error("Destination register %d is in multiple entries: %d and %d", table_q[i].dst, i, j);
 
                 // Check producer tag
                 assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i] && table_valid_q[j] |-> i == j || table_q[i].producer != table_q[j].producer);
-                else $fatal("Producer tag %d is in multiple entries: %d and %d", table_q[i].producer, i, j);
+                else $error("Producer tag %d is in multiple entries: %d and %d", table_q[i].producer, i, j);
             end
         end : check_entries
     `endif

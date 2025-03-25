@@ -142,7 +142,7 @@ module tag_queue #(
                 if (valid_o && ready_i) begin
                     // Check that the tag is not already in the queue
                     if(inflight_queue[tag_o])
-                        $fatal("Tag %d already in inflight queue", tag_o);
+                        $error("Tag %d already in inflight queue", tag_o);
 
                     inflight_queue[tag_o] <= 1'b1;
                 end
@@ -151,7 +151,7 @@ module tag_queue #(
                 if (valid_i && ready_o) begin
                     // Make sure that tag is in the queue
                     if(!inflight_queue[tag_i])
-                        $fatal("Tag %d not in inflight queue", tag_i);
+                        $error("Tag %d not in inflight queue", tag_i);
                     inflight_queue[tag_i] <= 1'b0;
                 end
             end

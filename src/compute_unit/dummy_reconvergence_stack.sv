@@ -89,7 +89,7 @@ module dummy_reconvergence_stack #(
             `ifndef SYNTHESIS
             assert(warp_data_q[decode_wid_i].active && !warp_data_q[decode_wid_i].ready
                 && !warp_data_q[decode_wid_i].stopped)
-            else $fatal("Warp was already ready, but got decoded");
+            else $error("Warp was already ready, but got decoded");
             `endif
             // Adjust the PC of the decoded warp
             warp_data_d[decode_wid_i].pc = decode_next_pc_i;
@@ -109,14 +109,14 @@ module dummy_reconvergence_stack #(
             `ifndef SYNTHESIS
             assert(!instruction_decoded_i || (instruction_decoded_i
                 && warp_selected_i[decode_wid_i] == 1'b0))
-            else $fatal("Warp was selected for fetching, but just got decoded");
+            else $error("Warp was selected for fetching, but just got decoded");
             `endif
 
             // If the warp is selected for fetching, mark it as not ready -> wait until decode stage
             if(warp_selected_i[i]) begin
                 `ifndef SYNTHESIS
                 assert(warp_data_q[i].active && warp_data_q[i].ready && !warp_data_q[i].stopped)
-                else $fatal("Warp was not ready, but got selected for fetching");
+                else $error("Warp was not ready, but got selected for fetching");
                 `endif
                 warp_data_d[i].ready = 1'b0;
             end
@@ -154,7 +154,7 @@ module dummy_reconvergence_stack #(
         for(int i = 0; i < NumWarps; i++) begin
             assert(!warp_ready_o[i] || (warp_ready_o[i] && warp_act_mask_o[i] != '0
                 && !warp_stopped_o[i]))
-            else $fatal("Warp is marked as ready, but no thread is active");
+            else $error("Warp is marked as ready, but no thread is active");
         end
     end : check_ready_active
     `endif
