@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "common_cells/registers.svh"
+
 /// Wait Buffer
 module wait_buffer #(
     parameter int NumTags = 8,
@@ -55,6 +57,8 @@ module wait_buffer #(
     input  logic eu_valid_i,
     input  tag_t eu_tag_i
 );
+    localparam int WaitBufferIndexWidth = $clog2(WaitBufferSizePerWarp);
+
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
@@ -118,33 +122,31 @@ module wait_buffer #(
     // Wait buffer is ready if there is space available
     assign wb_ready_o = !(&wait_buffer_valid_q);
 
-    // Buffer logic
-    always_comb begin : wait_buffer_logic
-        // Default
-        wait_buffer_valid_d = wait_buffer_valid_q;
-        wait_buffer_d       = wait_buffer_q;
-
-        // Insert instruction into buffer
-        if(dec_valid_i && wb_ready_o) begin : insert_instruction
-            // Find first free entry
-            for(int entry = 0; entry < WaitBufferSizePerWarp; entry++) begin
-                if(!wait_buffer_valid_q[entry]) begin
-                    wait_buffer_valid_d[entry]          = 1'b1;
-                    wait_buffer_d[entry].pc             = dec_pc_i;
-                    wait_buffer_d[entry].act_mask       = dec_act_mask_i;
-                    wait_buffer_d[entry].operands_ready = dec_operands_ready_i;
-                    wait_buffer_d[entry].operands       = dec_operands_i;
-                    wait_buffer_d[entry].operand_tags   = dec_operand_tags_i;
-                    wait_buffer_d[entry].dst_reg        = dec_dst_reg_i;
-                    wait_buffer_d[entry].tag            = dec_tag_i;
-                    break;
-                end
+    logic [WaitBufferIndexWidth-1:0] insert_idx;
+    always_comb begin
+        insert_idx = '0;
+        for(int i = 0; i < WaitBufferSizePerWarp; i++) begin
+            if(!wait_buffer_valid_q[i]) begin
+                insert_idx = i[WaitBufferIndexWidth-1:0];
+                break;
             end
-        end : insert_instruction
+        end
+    end
 
-        // From Execution Units
-        if(eu_valid_i) begin : check_ready
-            for(int entry = 0; entry < WaitBufferSizePerWarp; entry++) begin
+    for(genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_insert_logic
+        always_comb begin
+            // Default
+            wait_buffer_d      [entry] = wait_buffer_q[entry];
+            wait_buffer_valid_d[entry] = wait_buffer_valid_q[entry];
+
+            // Dispatch: Remove instruction from buffer
+            if(arb_gnt[entry]) begin
+                assert(wait_buffer_valid_d[entry]) else $error("Wait buffer entry is not valid but selected for dispatch");
+                assert(&wait_buffer_d[entry].operands_ready) else $error("Wait buffer entry is not ready but selected for dispatch");
+                wait_buffer_valid_d[entry] = 1'b0;
+            end
+            // From Execution Units
+            if(eu_valid_i) begin : check_ready
                 if(wait_buffer_valid_q[entry]) begin
                     for(int operand = 0; operand < OperandsPerInst; operand++) begin
                         if(!wait_buffer_q[entry].operands_ready[operand] && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i) begin
@@ -152,18 +154,23 @@ module wait_buffer #(
                         end
                     end
                 end
-            end 
-        end : check_ready
+            end : check_ready
 
-        // Dispatch: Remove instruction from buffer
-        for(int entry = 0; entry < WaitBufferSizePerWarp; entry++) begin
-            if(arb_gnt[entry]) begin
-                assert(wait_buffer_valid_q[entry]) else $error("Wait buffer entry is not valid but selected for dispatch");
-                assert(&wait_buffer_q[entry].operands_ready) else $error("Wait buffer entry is not ready but selected for dispatch");
-                wait_buffer_valid_d[entry] = 1'b0;
+            // Insert instruction into buffer
+            if(dec_valid_i && wb_ready_o && insert_idx == entry) begin
+                assert(!wait_buffer_valid_q[entry]) else $error("Wait buffer entry is already valid");
+
+                wait_buffer_valid_d[entry]          = 1'b1;
+                wait_buffer_d[entry].pc             = dec_pc_i;
+                wait_buffer_d[entry].act_mask       = dec_act_mask_i;
+                wait_buffer_d[entry].operands_ready = dec_operands_ready_i;
+                wait_buffer_d[entry].operands       = dec_operands_i;
+                wait_buffer_d[entry].operand_tags   = dec_operand_tags_i;
+                wait_buffer_d[entry].dst_reg        = dec_dst_reg_i;
+                wait_buffer_d[entry].tag            = dec_tag_i;
             end
         end
-    end : wait_buffer_logic
+    end : gen_insert_logic
 
     // Which instruction is ready to be dispatched?
     for(genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_rr_inst_ready
@@ -208,8 +215,8 @@ module wait_buffer #(
     // # Sequential Logic                                                                    #
     // #######################################################################################
 
+    `FF(wait_buffer_valid_q, wait_buffer_valid_d, '0, clk_i, rst_ni);
     for(genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_buffer_ff
-        `FF(wait_buffer_valid_q[i], wait_buffer_valid_d[i], '0, clk_i, rst_ni);
         `FF(wait_buffer_q[i], wait_buffer_d[i], '0, clk_i, rst_ni);
     end : gen_buffer_ff
 
@@ -222,5 +229,9 @@ module wait_buffer #(
     // space available
     assert property (@(posedge clk_i) disable iff(!rst_ni) dec_valid_i |-> wb_ready_o)
     else $error("Instruction buffer is not ready");
+
+    // If we have a output handshake, then one instruction has to be selected for dispatch
+    assert property (@(posedge clk_i) disable iff(!rst_ni) disp_valid_o && opc_ready_i |-> |arb_gnt)
+    else $error("No instruction selected for dispatch");
 
 endmodule : wait_buffer

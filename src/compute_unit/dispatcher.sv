@@ -107,21 +107,17 @@ module dispatcher #(
     // #######################################################################################
 
     tag_queue #(
-        .Depth(NumTags),
-        .PrintInfo(1'b1),
-        .SameCycleRW(1'b0)
+        .NumTags(NumTags)
     ) i_tag_queue (
         .clk_i  ( clk_i  ),
         .rst_ni ( rst_ni ),
-        .flush_i( 1'b0   ),
 
-        .tag_i  ( eu_tag_i        ),
-        .valid_i( eu_valid_i      ),
-        .ready_o( tag_queue_ready ),
+        .free_i( eu_valid_i ), 
+        .tag_i ( eu_tag_i   ),
 
+        .get_i  ( insert        ),
         .tag_o  ( dst_tag       ),
-        .valid_o( tag_available ),
-        .ready_i( insert        )
+        .valid_o( tag_available )
     );
 
     // #######################################################################################

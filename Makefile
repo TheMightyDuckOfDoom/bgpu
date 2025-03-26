@@ -12,6 +12,7 @@ VIVADO_SETTINGS ?= /tools/Xilinx/Vivado/202?.?/settings64.sh
 VERIBLE_LINT    ?= verible-verilog-lint
 
 VERILATOR_FLAGS:= verilator/config.vlt
+VERILATOR_ARGS ?=
 
 BENDER_DEPS:= Bender.lock Bender.yml
 
@@ -49,7 +50,7 @@ verilator/verilator_tb.f: $(BENDER_DEPS)
 
 # Translate RTL to C++ using Verilator
 verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)
-	$(VERILATOR) $(VERILATOR_FLAGS) -f $< --top $* --binary -j 0 --timing --assert --trace --trace-structs --Mdir verilator/obj_dir
+	$(VERILATOR) $(VERILATOR_FLAGS) $(VERILATOR_ARGS) -f $< --top $* --binary -j 0 --timing --assert --trace --trace-structs --Mdir verilator/obj_dir
 
 # Build the testbench
 verilator/obj_dir/V%: verilator/obj_dir/V%.mk

@@ -1,6 +1,14 @@
 name: Simulate
 on: [push, pull_request, workflow_dispatch]
 jobs:
+  sweep:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Sweep Parameters in Testbench
+        run: make sweep
+
   tb_compute_unit:
     runs-on: self-hosted
     steps:
@@ -8,3 +16,4 @@ jobs:
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_compute_unit
+ 
