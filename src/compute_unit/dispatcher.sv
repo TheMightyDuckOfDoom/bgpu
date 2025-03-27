@@ -112,7 +112,7 @@ module dispatcher #(
         .clk_i  ( clk_i  ),
         .rst_ni ( rst_ni ),
 
-        .free_i( eu_valid_i ), 
+        .free_i( eu_valid_i ),
         .tag_i ( eu_tag_i   ),
 
         .get_i  ( insert        ),

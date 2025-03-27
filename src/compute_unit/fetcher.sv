@@ -84,8 +84,10 @@ module fetcher #(
         assign arb_in_data[i].pc       = rs_warp_pc[i];
         assign arb_in_data[i].act_mask = rs_warp_act_mask[i];
 
-        always_comb assert(!rs_warp_ready[i] || (rs_warp_ready[i] && rs_warp_act_mask[i] != '0))
-        else $error("Warp is ready, but has no active threads");
+        `ifndef SYNTHESIS
+            always_comb assert(!rs_warp_ready[i] || (rs_warp_ready[i] && rs_warp_act_mask[i] != '0))
+            else $error("Warp is ready, but has no active threads");
+        `endif
     end : gen_arb_data
 
     // Warp can be fetched if there is space in the instruction buffer and reconvergence stack is ready

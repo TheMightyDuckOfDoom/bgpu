@@ -75,7 +75,7 @@ module multi_warp_dispatcher #(
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
-    
+
     // Dispatcher per warp
     logic [NumWarps-1:0] dec_valid_warp, ib_ready_warp, fe_handshake_warp;
 
@@ -132,7 +132,7 @@ module multi_warp_dispatcher #(
             .dec_pc_i      ( dec_pc_i             ),
             .dec_act_mask_i( dec_act_mask_i       ),
             .dec_inst_i    ( dec_inst_i           ),
-        
+
             .opc_ready_i    ( arb_gnt      [warp]        ),
             .disp_valid_o   ( rr_inst_ready[warp]        ),
             .disp_tag_o     ( arb_in_data[warp].tag      ),

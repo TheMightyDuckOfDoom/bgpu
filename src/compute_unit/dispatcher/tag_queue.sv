@@ -34,8 +34,10 @@ module tag_queue #(
 
         // Free
         if(free_i) begin
-            assert(tags_used_q[tag_i])
-            else $error("Tag %d not in tag queue", tag_i);
+            `ifndef SYNTHESIS
+                assert(tags_used_q[tag_i])
+                else $error("Tag %d not in tag queue", tag_i);
+            `endif
 
             tags_used_d[tag_i] = 1'b0;
         end    

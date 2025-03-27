@@ -1,6 +1,6 @@
 #!/bin/bash
 source $1
-cd synth
+cd xilinx
 echo -n 'set top "' > run.tcl
 echo -n $3 >> run.tcl
 echo '"' >> run.tcl

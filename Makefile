@@ -1,7 +1,7 @@
 # Tobias Senti, Feb-March 2025
 
 # Source files
-SRCS = $(wildcard src/*.sv)
+SRCS = $(wildcard src/**/*.sv)
 TB_SRCS = $(wildcard test/*.sv)
 
 # Tools
@@ -19,7 +19,7 @@ BENDER_DEPS:= Bender.lock Bender.yml
 TOP ?= compute_unit
 TB_TOP ?= tb_$(TOP)
 
-@PHONY: lint synth clean
+@PHONY: lint xilinx clean
 
 ####################################################################################################
 # Linting
@@ -61,25 +61,26 @@ tb_%: verilator/obj_dir/Vtb_%
 	./$<
 
 ####################################################################################################
-# Synthesis
+# Xilinx Synthesis
 ####################################################################################################
 
 # Generate filelist for Vivado synthesis
-synth/vivado.f: $(BENDER_DEPS)
+xilinx/vivado.f: $(BENDER_DEPS)
 	$(BENDER) script vivado > $@
 
 # Run Vivado synthesis
-synth: synth/vivado.f $(SRCS) synth/build.tcl synth/dummy_constraints.xdc synth/run.sh
-	time ./synth/run.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
+xilinx: xilinx/vivado.f $(SRCS) xilinx/build.tcl xilinx/dummy_constraints.xdc xilinx/run.sh
+	time ./xilinx/run.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
 ####################################################################################################
 # Clean
 ####################################################################################################
 
 clean:
-	rm -f verilator/*.f
+	rm -f  verilator/*.f
 	rm -rf verilator/obj_dir
-	rm -f synth/*.f
-	rm -f synth/run.tcl
-	rm -rf synth/.Xil
-	rm -f synth/*.log synth/*.jou
+	rm -f  xilinx/*.f
+	rm -f  xilinx/run.tcl
+	rm -rf xilinx/.Xil
+	rm -f  xilinx/*.log
+	rm -f  xilinx/*.jou

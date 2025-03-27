@@ -104,7 +104,7 @@ module wait_buffer #(
     credit_counter #(
         .NumCredits     ( WaitBufferSizePerWarp ),
         .InitCreditEmpty( 1'b0                  )
-    ) cc (
+    ) i_credit_counter (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
@@ -141,8 +141,10 @@ module wait_buffer #(
 
             // Dispatch: Remove instruction from buffer
             if(arb_gnt[entry]) begin
-                assert(wait_buffer_valid_d[entry]) else $error("Wait buffer entry is not valid but selected for dispatch");
-                assert(&wait_buffer_d[entry].operands_ready) else $error("Wait buffer entry is not ready but selected for dispatch");
+                `ifndef SYNTHESIS
+                    assert(wait_buffer_valid_d[entry]) else $error("Wait buffer entry is not valid but selected for dispatch");
+                    assert(&wait_buffer_d[entry].operands_ready) else $error("Wait buffer entry is not ready but selected for dispatch");
+                `endif
                 wait_buffer_valid_d[entry] = 1'b0;
             end
             // From Execution Units
@@ -158,7 +160,9 @@ module wait_buffer #(
 
             // Insert instruction into buffer
             if(dec_valid_i && wb_ready_o && insert_idx == entry) begin
-                assert(!wait_buffer_valid_q[entry]) else $error("Wait buffer entry is already valid");
+                `ifndef SYNTHESIS
+                    assert(!wait_buffer_valid_q[entry]) else $error("Wait buffer entry is already valid");
+                `endif
 
                 wait_buffer_valid_d[entry]          = 1'b1;
                 wait_buffer_d[entry].pc             = dec_pc_i;
@@ -224,14 +228,16 @@ module wait_buffer #(
     // # Assertions                                                                         #
     // #######################################################################################
 
-    // Check if the instruction buffer is ready to accept new instructions
-    // It should always be ready, as otherwise the fetcher would not be informed that there is
-    // space available
-    assert property (@(posedge clk_i) disable iff(!rst_ni) dec_valid_i |-> wb_ready_o)
-    else $error("Instruction buffer is not ready");
+    `ifndef SYNTHESIS
+        // Check if the instruction buffer is ready to accept new instructions
+        // It should always be ready, as otherwise the fetcher would not be informed that there is
+        // space available
+        assert property (@(posedge clk_i) disable iff(!rst_ni) dec_valid_i |-> wb_ready_o)
+        else $error("Instruction buffer is not ready");
 
-    // If we have a output handshake, then one instruction has to be selected for dispatch
-    assert property (@(posedge clk_i) disable iff(!rst_ni) disp_valid_o && opc_ready_i |-> |arb_gnt)
-    else $error("No instruction selected for dispatch");
+        // If we have a output handshake, then one instruction has to be selected for dispatch
+        assert property (@(posedge clk_i) disable iff(!rst_ni) disp_valid_o && opc_ready_i |-> |arb_gnt)
+        else $error("No instruction selected for dispatch");
+    `endif
 
 endmodule : wait_buffer
