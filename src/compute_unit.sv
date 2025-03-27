@@ -170,7 +170,7 @@ module compute_unit #(
     // #######################################################################################
 
     dummy_instruction_cache #(
-        .MemorySize  ( 1024      ),
+        .MemorySize  ( 32        ),
         .PcWidth     ( PcWidth   ),
         .NumWarps    ( NumWarps  ),
         .WarpWidth   ( WarpWidth ),

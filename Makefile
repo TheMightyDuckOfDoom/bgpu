@@ -73,10 +73,26 @@ xilinx: xilinx/vivado.f $(SRCS) xilinx/build.tcl xilinx/dummy_constraints.xdc xi
 	time ./xilinx/run.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
 ####################################################################################################
+# Yosys Synthesis
+####################################################################################################
+
+# Generate filelist for Yosys synthesis
+yosys/yosys.f: $(BENDER_DEPS)
+	$(BENDER) script flist-plus -DSYNTHESIS > yosys/yosys.f
+
+# Yosys Makefile
+include yosys/yosys.mk
+
+####################################################################################################
 # Clean
 ####################################################################################################
 
 clean:
+	rm -f  yosys/*.f
+	rm -f  yosys/*.log
+	rm -rf yosys/out
+	rm -rf yosys/reports
+	rm -rf yosys/tmp
 	rm -f  verilator/*.f
 	rm -rf verilator/obj_dir
 	rm -f  xilinx/*.f

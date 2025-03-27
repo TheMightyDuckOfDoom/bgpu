@@ -55,8 +55,13 @@ module dummy_instruction_cache #(
     // #######################################################################################
 
     always_ff @(posedge clk_i) begin
-        if (mem_pc_i < MemorySize[PcWidth-1:0] && mem_write_i)
+        if (mem_write_i) begin
+            `ifndef SYNTHSIS
+                assert(mem_pc_i < MemorySize[PcWidth-1:0])
+                else $error("mem_pc_i larger than memory size!");
+            `endif
             inst_memory[mem_pc_i[$clog2(MemorySize)-1:0]] <= mem_inst_i;
+        end
     end
 
     // #######################################################################################

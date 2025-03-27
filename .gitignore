@@ -1,5 +1,5 @@
 .bender
 obj_dir
 **/old_*.sv
-*.f
+**/*.f
 *.vcd
