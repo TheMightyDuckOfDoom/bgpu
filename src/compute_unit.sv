@@ -23,7 +23,9 @@ module compute_unit #(
     parameter int TagWidth = $clog2(NumTags),
     parameter int WidWidth = $clog2(NumWarps),
     parameter type reg_idx_t = logic [RegIdxWidth-1:0],
-    parameter type iid_t = logic [WidWidth+TagWidth-1:0]
+    parameter type iid_t = logic [WidWidth+TagWidth-1:0],
+    parameter type pc_t = logic [PcWidth-1:0],
+    parameter type act_mask_t = logic [WarpWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -38,10 +40,12 @@ module compute_unit #(
     input  logic [PcWidth-1:0]      ic_write_pc_i,
     input  logic [EncInstWidth-1:0] ic_write_inst_i,
 
-    input  logic opc_ready_i,
-    output logic disp_valid_o,
-    output iid_t disp_tag_o,
-    output reg_idx_t disp_dst_o,
+    input  logic      opc_ready_i,
+    output logic      disp_valid_o,
+    output iid_t      disp_tag_o,
+    output pc_t       disp_pc_o,
+    output act_mask_t disp_act_mask_o,
+    output reg_idx_t  disp_dst_o,
     output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
 
     input  logic eu_valid_i,
@@ -53,8 +57,6 @@ module compute_unit #(
 
     // Typedefs
     typedef logic [    WidWidth-1:0] wid_t;
-    typedef logic [     PcWidth-1:0] pc_t;
-    typedef logic [   WarpWidth-1:0] act_mask_t;
     typedef logic [EncInstWidth-1:0] enc_inst_t;
 
     typedef struct packed {
@@ -300,6 +302,8 @@ module compute_unit #(
         .opc_ready_i    ( opc_ready_i     ),
         .disp_valid_o   ( disp_valid_o    ),
         .disp_tag_o     ( disp_tag_o      ),
+        .disp_pc_o      ( disp_pc_o       ),
+        .disp_act_mask_o( disp_act_mask_o ),
         .disp_dst_o     ( disp_dst_o      ),
         .disp_operands_o( disp_operands_o ),
 

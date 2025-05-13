@@ -21,7 +21,7 @@ TOP_DESIGN		?= compute_unit
 PERIOD_PS		?= 10000
 
 # file containing include dirs, defines and paths to all source files
-SV_FLIST    	:= $(realpath $(YOSYS_DIR))/yosys.f
+SV_FLIST    	:= yosys/yosys.f
 
 # path to the resulting netlists (debug preserves multibit signals)
 NETLIST			:= $(YOSYS_OUT)/$(TOP_DESIGN)_yosys.v

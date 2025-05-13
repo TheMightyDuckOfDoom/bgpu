@@ -47,10 +47,12 @@ module wait_buffer #(
     input  reg_idx_t[OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collcector
-    input  logic     opc_ready_i,
-    output logic     disp_valid_o,
-    output tag_t     disp_tag_o,
-    output reg_idx_t disp_dst_o,
+    input  logic      opc_ready_i,
+    output logic      disp_valid_o,
+    output tag_t      disp_tag_o,
+    output pc_t       disp_pc_o,
+    output act_mask_t disp_act_mask_o,
+    output reg_idx_t  disp_dst_o,
     output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
@@ -77,6 +79,8 @@ module wait_buffer #(
     } wait_buffer_entry_t;
 
     typedef struct packed {
+        pc_t pc;
+        act_mask_t act_mask;
         tag_t tag;
         reg_idx_t dst_reg;
         reg_idx_t [OperandsPerInst-1:0] operands_reg;
@@ -179,6 +183,8 @@ module wait_buffer #(
     // Which instruction is ready to be dispatched?
     for(genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_rr_inst_ready
         assign rr_inst_ready[entry]            = wait_buffer_valid_q[entry] && &wait_buffer_q[entry].operands_ready;
+        assign arb_in_data[entry].pc           = wait_buffer_q[entry].pc;
+        assign arb_in_data[entry].act_mask     = wait_buffer_q[entry].act_mask;
         assign arb_in_data[entry].tag          = wait_buffer_q[entry].tag;
         assign arb_in_data[entry].dst_reg      = wait_buffer_q[entry].dst_reg;
         assign arb_in_data[entry].operands_reg = wait_buffer_q[entry].operands;
@@ -211,6 +217,8 @@ module wait_buffer #(
         .rr_i   ( '0   )
     );
 
+    assign disp_pc_o       = arb_sel_data.pc;
+    assign disp_act_mask_o = arb_sel_data.act_mask;
     assign disp_tag_o      = arb_sel_data.tag;
     assign disp_dst_o      = arb_sel_data.dst_reg;
     assign disp_operands_o = arb_sel_data.operands_reg;

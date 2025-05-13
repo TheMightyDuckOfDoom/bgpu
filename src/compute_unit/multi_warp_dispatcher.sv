@@ -52,10 +52,12 @@ module multi_warp_dispatcher #(
     input  dec_inst_t dec_inst_i,
 
     /// To Operand Collector
-    input  logic     opc_ready_i,
-    output logic     disp_valid_o,
-    output iid_t     disp_tag_o,
-    output reg_idx_t disp_dst_o,
+    input  logic      opc_ready_i,
+    output logic      disp_valid_o,
+    output iid_t      disp_tag_o,
+    output pc_t       disp_pc_o,
+    output act_mask_t disp_act_mask_o,
+    output reg_idx_t  disp_dst_o,
     output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
@@ -67,8 +69,10 @@ module multi_warp_dispatcher #(
     // #######################################################################################
 
     typedef struct packed {
-        tag_t tag;
-        reg_idx_t dst_reg;
+        tag_t      tag;
+        pc_t       pc;
+        act_mask_t act_mask;
+        reg_idx_t  dst_reg;
         reg_idx_t [OperandsPerInst-1:0] operands;
     } disp_data_t;
 
@@ -93,24 +97,31 @@ module multi_warp_dispatcher #(
     // # Dispatcher per warp                                                                 #
     // #######################################################################################
 
+    // Decoder Valid Demultiplexer
     always_comb begin
         dec_valid_warp = '0;
         dec_valid_warp[dec_warp_id_i] = dec_valid_i;
+    end
 
+    // Instruction Buffer Ready Multiplexer
+    always_comb begin
         ib_ready_o  = '0;
         ib_ready_o = ib_ready_warp[dec_warp_id_i];
     end
 
+    // Fetcher Handshake Demultiplexer
     always_comb begin
         fe_handshake_warp = '0;
         fe_handshake_warp[fe_warp_id_i] = fe_handshake_i;
     end
 
+    // Execution Unit Valid Demultiplexer
     always_comb begin
         eu_valid = '0;
         eu_valid[eu_tag_i[WidWidth+TagWidth-1:TagWidth]] = eu_valid_i;
     end
 
+    // Dispatcher per Warp
     for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
         dispatcher #(
             .NumTags              ( NumTags               ),
@@ -135,6 +146,8 @@ module multi_warp_dispatcher #(
 
             .opc_ready_i    ( arb_gnt      [warp]        ),
             .disp_valid_o   ( rr_inst_ready[warp]        ),
+            .disp_pc_o      ( arb_in_data[warp].pc       ),
+            .disp_act_mask_o( arb_in_data[warp].act_mask ),
             .disp_tag_o     ( arb_in_data[warp].tag      ),
             .disp_dst_o     ( arb_in_data[warp].dst_reg  ),
             .disp_operands_o( arb_in_data[warp].operands ),
@@ -175,6 +188,8 @@ module multi_warp_dispatcher #(
     );
 
     assign disp_tag_o      = {arb_sel_wid, arb_sel_data.tag};
+    assign disp_pc_o       = arb_sel_data.pc;
+    assign disp_act_mask_o = arb_sel_data.act_mask;
     assign disp_dst_o      = arb_sel_data.dst_reg;
     assign disp_operands_o = arb_sel_data.operands;
 

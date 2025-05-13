@@ -56,10 +56,12 @@ module dispatcher #(
     input  dec_inst_t dec_inst_i,
 
     /// To Operand Collector
-    input  logic     opc_ready_i,
-    output logic     disp_valid_o,
-    output tag_t     disp_tag_o,
-    output reg_idx_t disp_dst_o,
+    input  logic      opc_ready_i,
+    output logic      disp_valid_o,
+    output tag_t      disp_tag_o,
+    output pc_t       disp_pc_o,
+    output act_mask_t disp_act_mask_o,
+    output reg_idx_t  disp_dst_o,
     output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
@@ -176,6 +178,8 @@ module dispatcher #(
         .opc_ready_i     ( opc_ready_i     ),
         .disp_valid_o    ( disp_valid_o    ),
         .disp_tag_o      ( disp_tag_o      ),
+        .disp_pc_o       ( disp_pc_o       ),
+        .disp_act_mask_o ( disp_act_mask_o ),
         .disp_dst_o      ( disp_dst_o      ),
         .disp_operands_o ( disp_operands_o ),
 

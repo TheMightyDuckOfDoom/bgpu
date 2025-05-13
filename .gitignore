@@ -3,3 +3,4 @@ obj_dir
 **/old_*.sv
 **/*.f
 *.vcd
+*.out
