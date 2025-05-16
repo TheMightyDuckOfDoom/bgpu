@@ -1,7 +1,7 @@
 # Tobias Senti, Feb-March 2025
 
 # Source files
-SRCS = $(wildcard src/**/*.sv)
+SRCS = $(wildcard rtl/**/*.sv)
 TB_SRCS = $(wildcard test/*.sv)
 
 # Tools
