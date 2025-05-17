@@ -1,4 +1,6 @@
-# Tobias Senti, Feb-March 2025
+# Copyright 2025 Tobias Senti
+# Solderpad Hardware License, Version 0.51, see LICENSE for details.
+# SPDX-License-Identifier: SHL-0.51
 
 # Source files
 SRCS = $(wildcard rtl/**/*.sv)
