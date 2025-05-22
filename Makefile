@@ -48,7 +48,7 @@ lint-verible: $(SRCS) $(TB_SRCS)
 
 # Generate filelist for Verilator simulation
 verilator/verilator_tb.f: $(BENDER_DEPS)
-	$(BENDER) script verilator -t sim > $@
+	$(BENDER) script verilator -t verilator > $@
 
 # Translate RTL to C++ using Verilator
 verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)

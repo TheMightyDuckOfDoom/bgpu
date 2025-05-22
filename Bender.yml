@@ -21,9 +21,13 @@ sources:
     - rtl/compute_unit/dispatcher/wait_buffer.sv
     - rtl/compute_unit/dispatcher.sv
     - rtl/compute_unit/multi_warp_dispatcher.sv
+    - rtl/compute_unit/register_file_bank.sv
 
     - rtl/compute_unit.sv
 
-    - target: sim
+    - target: verilator
       files:
+          - test/rand_stream_mst.sv
+
           - test/tb_compute_unit.sv
+          - test/tb_register_file_bank.sv

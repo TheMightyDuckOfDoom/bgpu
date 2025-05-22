@@ -36,6 +36,7 @@ jobs:
           exclude_paths: |
             .github/*
             .vscode/*
+            test/rand_stream_mst.sv
             verilator/*
             xilinx/*
             yosys/*
