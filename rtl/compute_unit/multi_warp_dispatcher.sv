@@ -6,31 +6,31 @@
 /// Contains a dispatcher per warp
 module multi_warp_dispatcher #(
     /// Number of inflight instructions per warp
-    parameter int NumTags = 8,
+    parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
-    parameter int PcWidth = 32,
+    parameter int unsigned PcWidth = 32,
     /// Number of warps per compute unit
-    parameter int NumWarps = 8,
+    parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
-    parameter int WarpWidth = 32,
+    parameter int unsigned WarpWidth = 32,
     /// How many instructions that wait on previous results can be buffered per warp
-    parameter int WaitBufferSizePerWarp = 4,
+    parameter int unsigned WaitBufferSizePerWarp = 4,
     /// How many registers can each warp access as operand or destination
-    parameter int RegIdxWidth = 6,
+    parameter int unsigned RegIdxWidth = 6,
     /// How many operands each instruction can have
-    parameter int OperandsPerInst = 2,
+    parameter int unsigned OperandsPerInst = 2,
 
     parameter type dec_inst_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int  TagWidth   = $clog2(NumTags),
-    parameter int  WidWidth   = $clog2(NumWarps),
-    parameter type wid_t      = logic [   WidWidth-1:0],
-    parameter type reg_idx_t  = logic [RegIdxWidth-1:0],
-    parameter type pc_t       = logic [    PcWidth-1:0],
-    parameter type act_mask_t = logic [  WarpWidth-1:0],
-    parameter type tag_t      = logic [   TagWidth-1:0],
-    parameter type iid_t      = logic [TagWidth+WidWidth-1:0]
+    parameter int unsigned TagWidth   = $clog2(NumTags),
+    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter type         wid_t      = logic [   WidWidth-1:0],
+    parameter type         reg_idx_t  = logic [RegIdxWidth-1:0],
+    parameter type         pc_t       = logic [    PcWidth-1:0],
+    parameter type         act_mask_t = logic [  WarpWidth-1:0],
+    parameter type         tag_t      = logic [   TagWidth-1:0],
+    parameter type         iid_t      = logic [TagWidth+WidWidth-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,

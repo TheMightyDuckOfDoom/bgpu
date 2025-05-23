@@ -11,7 +11,7 @@ module register_file_bank #(
     /// Number of registers
     parameter int unsigned NumRegisters = 32,
     /// Should the memory be a dual port memory?
-    parameter bit          DualPort     = 1'b0,
+    parameter bit DualPort = 1'b0,
 
     /// Dependent parameter, do **not** overwrite.
     parameter type addr_t = logic [$clog2(NumRegisters)-1:0],
@@ -147,6 +147,10 @@ module register_file_bank #(
         .be_i   ( '1        ),
         .rdata_o( mem_rdata )
     );
+
+    // #######################################################################################
+    // # Assertions                                                                          #
+    // #######################################################################################
 
     initial assert(NumPorts == 1 || NumPorts == 2)
         else $fatal("Number of ports must be 1 or 2!");

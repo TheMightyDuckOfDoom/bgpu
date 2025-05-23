@@ -5,22 +5,22 @@
 /// Decoder
 module decoder #(
     /// Width of the Program Counter
-    parameter int PcWidth = 32,
+    parameter int unsigned PcWidth = 32,
     /// Number of warps per compute unit
-    parameter int NumWarps = 8,
+    parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
-    parameter int WarpWidth = 32,
+    parameter int unsigned WarpWidth = 32,
     /// Encoded instruction width
-    parameter int EncInstWidth = 32,
+    parameter int unsigned EncInstWidth = 32,
 
     parameter type dec_inst_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int  WidWidth   = $clog2(NumWarps),
-    parameter type wid_t      = logic [    WidWidth-1:0],
-    parameter type pc_t       = logic [     PcWidth-1:0],
-    parameter type act_mask_t = logic [   WarpWidth-1:0],
-    parameter type enc_inst_t = logic [EncInstWidth-1:0]
+    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter type         wid_t      = logic [    WidWidth-1:0],
+    parameter type         pc_t       = logic [     PcWidth-1:0],
+    parameter type         act_mask_t = logic [   WarpWidth-1:0],
+    parameter type         enc_inst_t = logic [EncInstWidth-1:0]
 ) (
     // From Instruction Cache
     output logic      dec_ready_o,

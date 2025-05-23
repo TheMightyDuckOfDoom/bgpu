@@ -5,23 +5,23 @@
 /// Compute Unit
 module compute_unit #(
     /// Number of inflight instructions per warp
-    parameter int NumTags = 8,
+    parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
-    parameter int PcWidth = 16,
+    parameter int unsigned PcWidth = 16,
     /// Number of warps
-    parameter int NumWarps = 8,
+    parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
-    parameter int WarpWidth = 4,
+    parameter int unsigned WarpWidth = 4,
     /// Encoded instruction width
-    parameter int EncInstWidth = 32,
+    parameter int unsigned EncInstWidth = 32,
 
-    parameter int WaitBufferSizePerWarp = 4,
+    parameter int unsigned WaitBufferSizePerWarp = 4,
 
-    parameter int RegIdxWidth = 8,
-    parameter int OperandsPerInst = 2,
+    parameter int unsigned RegIdxWidth = 8,
+    parameter int unsigned OperandsPerInst = 2,
 
-    parameter int TagWidth = $clog2(NumTags),
-    parameter int WidWidth = $clog2(NumWarps),
+    parameter int unsigned TagWidth = $clog2(NumTags),
+    parameter int unsigned WidWidth = $clog2(NumWarps),
     parameter type reg_idx_t = logic [RegIdxWidth-1:0],
     parameter type iid_t = logic [WidWidth+TagWidth-1:0],
     parameter type pc_t = logic [PcWidth-1:0],

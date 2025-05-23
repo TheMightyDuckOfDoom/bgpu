@@ -7,13 +7,13 @@
 /// Register Table
 // Maps a register to a tag that produces the most recent value
 module reg_table #(
-    parameter int NumTags         = 8,
-    parameter int RegIdxWidth     = 6,
-    parameter int OperandsPerInst = 2,
+    parameter int unsigned NumTags         = 8,
+    parameter int unsigned RegIdxWidth     = 6,
+    parameter int unsigned OperandsPerInst = 2,
 
-    parameter int TagWidth        = $clog2(NumTags),
-    parameter type tag_t          = logic [   TagWidth-1:0],
-    parameter type reg_idx_t      = logic [RegIdxWidth-1:0]
+    parameter int unsigned TagWidth  = $clog2(NumTags),
+    parameter type         tag_t     = logic [   TagWidth-1:0],
+    parameter type         reg_idx_t = logic [RegIdxWidth-1:0]
 ) (
     input logic clk_i,
     input logic rst_ni,

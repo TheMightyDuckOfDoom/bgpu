@@ -11,17 +11,17 @@
 
 module dummy_reconvergence_stack #(
     /// Width of the Program Counter
-    parameter int PcWidth = 32,
+    parameter int unsigned PcWidth = 32,
     /// Number of warps per compute unit
-    parameter int NumWarps = 32,
+    parameter int unsigned NumWarps = 32,
     /// Number of threads per warp
-    parameter int WarpWidth = 32,
+    parameter int unsigned WarpWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int  WidWidth   = $clog2(NumWarps),
-    parameter type wid_t      = logic [ WidWidth-1:0],
-    parameter type pc_t       = logic [  PcWidth-1:0],
-    parameter type act_mask_t = logic [WarpWidth-1:0]
+    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter type         wid_t      = logic [ WidWidth-1:0],
+    parameter type         pc_t       = logic [  PcWidth-1:0],
+    parameter type         act_mask_t = logic [WarpWidth-1:0]
 ) (
     /// Clock and reset
     input logic clk_i,

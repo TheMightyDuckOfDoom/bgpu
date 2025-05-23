@@ -5,11 +5,11 @@
 `include "common_cells/registers.svh"
 
 module tag_queue #(
-    parameter int NumTags = 8,
+    parameter int unsigned NumTags = 8,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int TagWidth = $clog2(NumTags),
-    parameter type tag_t   = logic [TagWidth-1:0]
+    parameter int unsigned TagWidth = $clog2(NumTags),
+    parameter type         tag_t    = logic [TagWidth-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,

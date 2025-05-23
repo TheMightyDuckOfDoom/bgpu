@@ -5,25 +5,25 @@
 /// Testbench for Compute Unit
 module tb_compute_unit #(
     /// Number of inflight instructions per warp
-    parameter int InflightInstrPerWarp = 4,
+    parameter int unsigned InflightInstrPerWarp = 4,
     /// Width of the Program Counter
-    parameter int PcWidth = 16,
+    parameter int unsigned PcWidth = 16,
     /// Number of warps
-    parameter int NumWarps = 4,
+    parameter int unsigned NumWarps = 4,
     /// Number of threads per warp
-    parameter int WarpWidth = 2,
+    parameter int unsigned WarpWidth = 2,
     /// Encoded instruction width
-    parameter int EncInstWidth = 32,
+    parameter int unsigned EncInstWidth = 32,
     /// Wait buffer size per warp
-    parameter int WaitBufferSizePerWarp = 2,
+    parameter int unsigned WaitBufferSizePerWarp = 2,
 
-    parameter int OperandsPerInst = 2,
-    parameter int RegIdxWidth = 8,
+    parameter int unsigned OperandsPerInst = 2,
+    parameter int unsigned RegIdxWidth     = 8,
 
-    parameter int MemorySize = 32,
+    parameter int unsigned MemorySize = 32,
 
-    parameter time TclkPeriod = 10ns,
-    parameter int MaxSimCycles = 1000
+    parameter time         TclkPeriod   = 10ns,
+    parameter int unsigned MaxSimCycles = 1000
 );
     localparam time TCLKHALF = TclkPeriod / 2;
     localparam int WidWidth = $clog2(NumWarps);

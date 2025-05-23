@@ -12,9 +12,9 @@
 module rand_stream_mst #(
   parameter type  data_t = logic,
   // Minimum number of clock cycles to wait between applying two consecutive values.
-  parameter int   MinWaitCycles = -1,
+  parameter int unsigned MinWaitCycles = 0,
   // Maximum number of clock cycles to wait between applying two consecutive values.
-  parameter int   MaxWaitCycles = -1,
+  parameter int unsigned MaxWaitCycles = 0,
   // Application delay: time delay before output changes after an active clock edge.
   parameter time  ApplDelay = 0ps,
   // Acquisition delay: time delay before ready input is read after an active clock edge.
@@ -86,10 +86,6 @@ module rand_stream_mst #(
 
   // Validate parameters.
   initial begin: validate_params
-    assert (MinWaitCycles >= 0)
-      else $fatal("The minimum number of wait cycles must be at least 0!");
-    assert (MaxWaitCycles >= 0)
-      else $fatal("The maximum number of wait cycles must be at least 0!");
     assert (MaxWaitCycles >= MinWaitCycles)
       else $fatal("The maximum number of wait cycles must be at least the minimum number of wait",
         " cycles!");
