@@ -12,6 +12,8 @@ module register_file_bank #(
     parameter int unsigned NumRegisters = 32,
     /// Should the memory be a dual port memory?
     parameter bit DualPort = 1'b0,
+    /// Tag that identifies a read request
+    parameter type tag_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
     parameter type addr_t = logic [$clog2(NumRegisters)-1:0],
@@ -31,10 +33,11 @@ module register_file_bank #(
     input  logic  read_valid_i,
     output logic  read_ready_o,
     input  addr_t read_addr_i,
+    input  tag_t  read_tag_i,
 
     /// Read output
     output logic  read_valid_o,
-    output addr_t read_addr_o,
+    output tag_t  read_tag_o,
     output data_t read_data_o
 );
     localparam int unsigned NumPorts = DualPort ? 2 : 1;
@@ -119,9 +122,9 @@ module register_file_bank #(
     // # Sequential logic                                                                    #
     // #######################################################################################
 
-    // Delay read valid and tag/addr by one cycle
+    // Delay read valid and tag by one cycle
     `FF(read_valid_o, read_valid_d, '0, clk_i, rst_ni);
-    `FF(read_addr_o,  read_addr_i,  '0, clk_i, rst_ni);
+    `FF(read_tag_o,   read_tag_i,   '0, clk_i, rst_ni);
 
     // #######################################################################################
     // # Memory                                                                              #

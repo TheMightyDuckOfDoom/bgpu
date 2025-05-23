@@ -17,12 +17,19 @@ module tb_register_file_bank #(
     // Register file configuration
     parameter int unsigned NumRegisters = 256,
     parameter int unsigned DataWidth    = 32 - $clog2(NumRegisters),
+    parameter int unsigned TagWidth     = 32 - $clog2(NumRegisters),
     parameter bit          DualPort     = 1'b0
 ) ();
+    // #######################################################################################
+    // # Type definitions                                                                    #
+    // #######################################################################################
+
     typedef logic [$clog2(NumRegisters)-1:0] addr_t;
-    typedef logic [DataWidth-1:0] data_t;
+    typedef logic [           DataWidth-1:0] data_t;
+    typedef logic [            TagWidth-1:0] tag_t;
 
     typedef logic [$bits(addr_t)+$bits(data_t)-1:0] write_req_t;
+    typedef logic [$bits(addr_t)+$bits(tag_t) -1:0] read_req_t;
 
     // #######################################################################################
     // # Signals                                                                           #
@@ -39,7 +46,9 @@ module tb_register_file_bank #(
 
     // Read port
     logic read_valid, read_ready, read_out_valid;
-    addr_t read_addr, read_out_addr;
+    read_req_t read_req;
+    addr_t read_addr;
+    tag_t read_tag, read_out_tag;
     data_t read_out_data;
 
     // #######################################################################################
@@ -47,9 +56,10 @@ module tb_register_file_bank #(
     // #######################################################################################
 
     register_file_bank #(
-        .DataWidth(DataWidth),
-        .NumRegisters(NumRegisters),
-        .DualPort(DualPort)
+        .DataWidth   ( DataWidth    ),
+        .NumRegisters( NumRegisters ),
+        .DualPort    ( DualPort     ),
+        .tag_t       ( tag_t        )
     ) dut (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
@@ -62,9 +72,10 @@ module tb_register_file_bank #(
         .read_valid_i( read_valid ),
         .read_ready_o( read_ready ),
         .read_addr_i ( read_addr  ),
+        .read_tag_i  ( read_tag   ),
 
         .read_valid_o( read_out_valid ),
-        .read_addr_o ( read_out_addr  ),
+        .read_tag_o  ( read_out_tag   ),
         .read_data_o ( read_out_data  )
     );
 
@@ -104,18 +115,21 @@ module tb_register_file_bank #(
 
     // Read port
     rand_stream_mst #(
-        .data_t       ( addr_t           ),
+        .data_t       ( read_req_t       ),
         .ApplDelay    ( ApplDelay        ),
         .AcqDelay     ( AcqDelay         ),
         .MinWaitCycles( 0                ),
         .MaxWaitCycles( MaxMstWaitCycles )
     ) i_read_port (
-        .clk_i  ( clk         ),
-        .rst_ni ( rst_n       ),
-        .data_o ( read_addr   ),
-        .valid_o( read_valid  ),
-        .ready_i( read_ready  )
+        .clk_i  ( clk        ),
+        .rst_ni ( rst_n      ),
+        .data_o ( read_req   ),
+        .valid_o( read_valid ),
+        .ready_i( read_ready )
     );
+
+    assign read_addr = read_req[$bits(addr_t)-1:0];
+    assign read_tag  = read_req[$bits(addr_t)+$bits(tag_t)-1:$bits(addr_t)];
 
     // Prevent write port from writing to the same address as the read port
     always_comb begin
@@ -139,6 +153,7 @@ module tb_register_file_bank #(
     logic  golden_read_valid;
     addr_t golden_read_addr;
     data_t golden_read_data;
+    tag_t  golden_read_tag;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -155,6 +170,7 @@ module tb_register_file_bank #(
                 golden_read_valid <= 1'b1;
                 golden_read_addr  <= read_addr;
                 golden_read_data  <= golden_mem[read_addr];
+                golden_read_tag   <= read_tag;
             end else begin
                 golden_read_valid <= 1'b0;
             end
@@ -202,9 +218,15 @@ module tb_register_file_bank #(
     assert property (@(posedge clk) disable iff (!rst_n)
          (read_out_valid || golden_read_valid) -> (read_out_valid == golden_read_valid)
          && (read_out_data == golden_read_data)
-         && (read_out_addr == golden_read_addr)
-    ) else $error("Read mismatch: DUT read data %h addr %h, golden read data %h addr %h",
-        read_out_data, read_out_addr, golden_read_data, golden_read_addr);
+         && (read_out_tag  == golden_read_tag)
+    ) else begin
+        $display("Read data mismatch: ");
+        $display("  DUT:   valid %b addr %0d data %0d tag %0d",
+            read_out_valid, read_addr, read_out_data, read_out_tag);
+        $display("  Golden: valid %b addr %0d data %0d tag %0d",
+            golden_read_valid, golden_read_addr, golden_read_data, golden_read_tag);
+        $fatal("Read data mismatch");
+    end
 
     // ########################################################################################
     // # Simulation timeout                                                                  #
