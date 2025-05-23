@@ -40,7 +40,7 @@ module tag_queue #(
             `endif
 
             tags_used_d[tag_i] = 1'b0;
-        end    
+        end
 
         // Get
         if(get_i && valid_o) begin

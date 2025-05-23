@@ -2,10 +2,6 @@
 # Solderpad Hardware License, Version 0.51, see LICENSE for details.
 # SPDX-License-Identifier: SHL-0.51
 
-# Source files
-SRCS = $(wildcard rtl/**/*.sv)
-TB_SRCS = $(wildcard test/*.sv)
-
 # Tools
 BENDER          ?= bender
 VERILATOR       ?= verilator
@@ -16,10 +12,17 @@ VERIBLE_LINT    ?= verible-verilog-lint
 VERILATOR_FLAGS:= verilator/config.vlt
 VERILATOR_ARGS ?=
 
-BENDER_DEPS:= Bender.lock Bender.yml
+# Bender Targets
+BENDER_TARGET_LINT ?= verilator
+BENDER_TARGET_SIM  ?= verilator
 
-TOP ?= compute_unit
-TB_TOP ?= tb_$(TOP)
+TOP                ?= compute_unit
+TB_TOP             ?= tb_$(TOP)
+
+# Source files
+SRCS = $(wildcard rtl/**/*.sv)
+TB_SRCS = $($(BENDER) scripts flist -n )
+BENDER_DEPS:= Bender.lock Bender.yml
 
 @PHONY: lint xilinx clean
 
@@ -31,16 +34,22 @@ TB_TOP ?= tb_$(TOP)
 lint: lint-verilator lint-verible
 
 # Generate filelist for Verilator linting
-verilator/verilator.f: $(BENDER_DEPS)
-	$(BENDER) script verilator > $@
+verilator/verilator_lint.f: $(BENDER_DEPS)
+	$(BENDER) script verilator -t $(BENDER_TARGET_LINT) > $@
 
 # Lint using Verilator
-lint-verilator: verilator/verilator.f verilator/config.vlt $(SRCS) $(TB_SRCS)
+lint-verilator: verilator/verilator_lint.f verilator/config.vlt $(SRCS) $(TB_SRCS)
 	$(VERILATOR) -lint-only $(VERILATOR_FLAGS) -f $< --top $(TOP)
 
+# Generate filelist for Verilator linting
+verilator/verible_lint.f: $(BENDER_DEPS)
+	$(BENDER) script flist -n -t $(BENDER_TARGET_LINT) > $@
+	tr "\n" " " < $@ > $@.tmp
+	mv $@.tmp $@
+
 # Lint using Verible
-lint-verible: $(SRCS) $(TB_SRCS)
-	$(VERIBLE_LINT) $(SRCS) $(TB_SRCS)
+lint-verible: verilator/verible_lint.f $(SRCS) $(TB_SRCS)
+	$(VERIBLE_LINT) $(file < verilator/verible_lint.f)
 
 ####################################################################################################
 # Verilator simulation
@@ -48,7 +57,7 @@ lint-verible: $(SRCS) $(TB_SRCS)
 
 # Generate filelist for Verilator simulation
 verilator/verilator_tb.f: $(BENDER_DEPS)
-	$(BENDER) script verilator -t verilator > $@
+	$(BENDER) script verilator -t $(BENDER_TARGET_LINT) > $@
 
 # Translate RTL to C++ using Verilator
 verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)

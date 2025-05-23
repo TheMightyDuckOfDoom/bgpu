@@ -20,7 +20,7 @@ module wait_buffer #(
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter type         tag_t      = logic [   TagWidth-1:0],  
+    parameter type         tag_t      = logic [   TagWidth-1:0],
     parameter type         pc_t       = logic [    PcWidth-1:0],
     parameter type         act_mask_t = logic [  WarpWidth-1:0],
     parameter type         reg_idx_t  = logic [RegIdxWidth-1:0]
@@ -146,8 +146,10 @@ module wait_buffer #(
             // Dispatch: Remove instruction from buffer
             if(arb_gnt[entry]) begin
                 `ifndef SYNTHESIS
-                    assert(wait_buffer_valid_d[entry]) else $error("Wait buffer entry is not valid but selected for dispatch");
-                    assert(&wait_buffer_d[entry].operands_ready) else $error("Wait buffer entry is not ready but selected for dispatch");
+                    assert(wait_buffer_valid_d[entry])
+                    else $error("Wait buffer entry is not valid but selected for dispatch");
+                    assert(&wait_buffer_d[entry].operands_ready)
+                    else $error("Wait buffer entry is not ready but selected for dispatch");
                 `endif
                 wait_buffer_valid_d[entry] = 1'b0;
             end
@@ -155,7 +157,8 @@ module wait_buffer #(
             if(eu_valid_i) begin : check_ready
                 if(wait_buffer_valid_q[entry]) begin
                     for(int operand = 0; operand < OperandsPerInst; operand++) begin
-                        if(!wait_buffer_q[entry].operands_ready[operand] && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i) begin
+                        if(!wait_buffer_q[entry].operands_ready[operand]
+                          && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i) begin
                             wait_buffer_d[entry].operands_ready[operand] = 1'b1;
                         end
                     end
@@ -165,7 +168,8 @@ module wait_buffer #(
             // Insert instruction into buffer
             if(dec_valid_i && wb_ready_o && insert_idx == entry) begin
                 `ifndef SYNTHESIS
-                    assert(!wait_buffer_valid_q[entry]) else $error("Wait buffer entry is already valid");
+                    assert(!wait_buffer_valid_q[entry])
+                    else $error("Wait buffer entry is already valid");
                 `endif
 
                 wait_buffer_valid_d[entry]          = 1'b1;
@@ -182,7 +186,8 @@ module wait_buffer #(
 
     // Which instruction is ready to be dispatched?
     for(genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_rr_inst_ready
-        assign rr_inst_ready[entry]            = wait_buffer_valid_q[entry] && &wait_buffer_q[entry].operands_ready;
+        assign rr_inst_ready[entry]            = wait_buffer_valid_q[entry]
+                                                    && &wait_buffer_q[entry].operands_ready;
         assign arb_in_data[entry].pc           = wait_buffer_q[entry].pc;
         assign arb_in_data[entry].act_mask     = wait_buffer_q[entry].act_mask;
         assign arb_in_data[entry].tag          = wait_buffer_q[entry].tag;
@@ -244,7 +249,8 @@ module wait_buffer #(
         else $error("Instruction buffer is not ready");
 
         // If we have a output handshake, then one instruction has to be selected for dispatch
-        assert property (@(posedge clk_i) disable iff(!rst_ni) disp_valid_o && opc_ready_i |-> |arb_gnt)
+        assert property (@(posedge clk_i) disable iff(!rst_ni) disp_valid_o && opc_ready_i
+            |-> |arb_gnt)
         else $error("No instruction selected for dispatch");
     `endif
 

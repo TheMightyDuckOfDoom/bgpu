@@ -74,7 +74,7 @@ module reg_table #(
 
         // Insert logic
         if(insert_i && space_available_o) begin : insert_logic
-            // First check operands 
+            // First check operands
             for(int op = 0; op < OperandsPerInst; op++) begin : check_operand
                 operands_ready_o[op] = 1'b1;
                 // Check all entries, if valid and the destination is the same as the operand -> not ready
@@ -130,7 +130,7 @@ module reg_table #(
     // # Sequential Logic                                                   #
     // ######################################################################
 
-    for(genvar i = 0; i < NumTags; i++) begin : INIT_TABLE
+    for(genvar i = 0; i < NumTags; i++) begin : gen_ffs
         `FF(table_valid_q[i], table_valid_d[i], '0, clk_i, rst_ni);
         `FF(table_q[i], table_d[i], '0, clk_i, rst_ni);
     end
@@ -145,17 +145,21 @@ module reg_table #(
         else $error("No space available in register table when inserting");
 
         // Check that there a no entries with matching destination register or tag
-        for(genvar i = 0; i < NumTags; i++) begin : check_entries
-            for(genvar j = 0; j < NumTags; j++) begin
+        for(genvar i = 0; i < NumTags; i++) begin : gen_check_entries
+            for(genvar j = 0; j < NumTags; j++) begin : gen_check_entries_inner
                 // Check destination register
-                assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i] && table_valid_q[j] |-> i == j || table_q[i].dst != table_q[j].dst)
-                else $error("Destination register %d is in multiple entries: %d and %d", table_q[i].dst, i, j);
+                assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i]
+                    && table_valid_q[j] |-> i == j || table_q[i].dst != table_q[j].dst)
+                else $error("Destination register %d is in multiple entries: %d and %d",
+                    table_q[i].dst, i, j);
 
                 // Check producer tag
-                assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i] && table_valid_q[j] |-> i == j || table_q[i].producer != table_q[j].producer)
-                else $error("Producer tag %d is in multiple entries: %d and %d", table_q[i].producer, i, j);
-            end
-        end : check_entries
+                assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i]
+                    && table_valid_q[j] |-> i == j || table_q[i].producer != table_q[j].producer)
+                else $error("Producer tag %d is in multiple entries: %d and %d",
+                    table_q[i].producer, i, j);
+            end : gen_check_entries_inner
+        end : gen_check_entries
     `endif
 
 endmodule : reg_table
