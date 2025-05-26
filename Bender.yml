@@ -23,6 +23,7 @@ sources:
     - rtl/compute_unit/multi_warp_dispatcher.sv
     - rtl/compute_unit/register_file_bank.sv
     - rtl/compute_unit/operand_collector.sv
+    - rtl/compute_unit/register_opc_stage.sv
 
     - rtl/compute_unit.sv
 

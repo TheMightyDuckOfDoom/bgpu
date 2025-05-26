@@ -22,13 +22,13 @@ module tb_operand_collector #(
     /// Number of warps per compute unit
     parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
-    parameter int unsigned WarpWidth = 32,
+    parameter int unsigned WarpWidth = 8,
     /// How many registers can each warp access as operand or destination
     parameter int unsigned RegIdxWidth = 6,
     /// How many operands each instruction can have
     parameter int unsigned OperandsPerInst = 3,
     /// Width of a singled register
-    parameter int unsigned RegWidth = 32
+    parameter int unsigned RegWidth = 4
 ) ();
 
     // ########################################################################################
@@ -42,12 +42,12 @@ module tb_operand_collector #(
     // # Type Definitions                                                                     #
     // ########################################################################################
 
-    typedef logic [TagWidth+WidWidth-1:0] iid_t;
-    typedef logic [RegWidth-1:0] data_t;
-    typedef logic [PcWidth-1:0] pc_t;
-    typedef logic [WarpWidth-1:0] act_mask_t;
-    typedef logic [RegIdxWidth-1:0] reg_idx_t;
-    typedef logic [WidWidth-1:0] wid_t;
+    typedef logic [   TagWidth+WidWidth-1:0] iid_t;
+    typedef logic [RegWidth * WarpWidth-1:0] data_t;
+    typedef logic [             PcWidth-1:0] pc_t;
+    typedef logic [           WarpWidth-1:0] act_mask_t;
+    typedef logic [         RegIdxWidth-1:0] reg_idx_t;
+    typedef logic [            WidWidth-1:0] wid_t;
 
     typedef struct packed {
         iid_t      tag;

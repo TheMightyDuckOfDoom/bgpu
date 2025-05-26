@@ -24,12 +24,12 @@ module operand_collector #(
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth   = $clog2(NumTags),
     parameter int unsigned WidWidth   = $clog2(NumWarps),
-    parameter type         wid_t      = logic [         WidWidth-1:0],
-    parameter type         reg_idx_t  = logic [      RegIdxWidth-1:0],
-    parameter type         pc_t       = logic [          PcWidth-1:0],
-    parameter type         act_mask_t = logic [        WarpWidth-1:0],
-    parameter type         data_t     = logic [         RegWidth-1:0],
-    parameter type         iid_t      = logic [TagWidth+WidWidth-1:0]
+    parameter type         wid_t      = logic [            WidWidth-1:0],
+    parameter type         reg_idx_t  = logic [         RegIdxWidth-1:0],
+    parameter type         pc_t       = logic [             PcWidth-1:0],
+    parameter type         act_mask_t = logic [           WarpWidth-1:0],
+    parameter type         data_t     = logic [RegWidth * WarpWidth-1:0],
+    parameter type         iid_t      = logic [   TagWidth+WidWidth-1:0]
 ) (
     // Clock and Reset
     input  logic clk_i,
