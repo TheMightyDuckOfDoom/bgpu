@@ -133,7 +133,7 @@ module register_file_bank #(
     tc_sram #(
         .NumWords   ( NumRegisters         ),
         .DataWidth  ( DataWidth            ),
-        .ByteWidth  ( 8                    ),
+        .ByteWidth  ( DataWidth            ),
         .NumPorts   ( NumPorts             ),
         .Latency    ( 1                    ),
         .SimInit    ( "ones"               ),
@@ -156,6 +156,9 @@ module register_file_bank #(
     // #######################################################################################
 
     initial assert(NumPorts == 1 || NumPorts == 2)
-        else $fatal("Number of ports must be 1 or 2!");
+        else $error("Number of ports must be 1 or 2!");
+
+    initial assert(DataWidth > 1)
+        else $error("Data width must be atleast one bit!");
 
 endmodule : register_file_bank

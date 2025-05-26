@@ -22,12 +22,16 @@ sources:
     - rtl/compute_unit/dispatcher.sv
     - rtl/compute_unit/multi_warp_dispatcher.sv
     - rtl/compute_unit/register_file_bank.sv
+    - rtl/compute_unit/operand_collector.sv
 
     - rtl/compute_unit.sv
 
     - target: verilator
       files:
           - test/rand_stream_mst.sv
+          - test/rand_synch_holdable_driver.sv
+          - test/rand_stream_slv.sv
 
-          - test/tb_compute_unit.sv
           - test/tb_register_file_bank.sv
+          - test/tb_operand_collector.sv
+          - test/tb_compute_unit.sv

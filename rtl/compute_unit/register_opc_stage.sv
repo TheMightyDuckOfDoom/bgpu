@@ -41,18 +41,26 @@ module register_opc_stage #(
     input  logic rst_ni,
 
     /// From Multi Warp Dispatcher
-    output logic       opc_ready_o,
-    input  logic       disp_valid_i,
-    input  iid_t       disp_tag_i,
-    input  pc_t        disp_pc_i,
-    input  act_mask_t  disp_act_mask_i,
-    input  reg_idx_t   disp_dst_i,
+    output logic      opc_ready_o,
+    input  logic      disp_valid_i,
+    input  iid_t      disp_tag_i,
+    input  pc_t       disp_pc_i,
+    input  act_mask_t disp_act_mask_i,
+    input  reg_idx_t  disp_dst_i,
     input  reg_idx_t  [OperandsPerInst-1:0] disp_src_i
 );
+    // #######################################################################################
+    // # Local Parameters                                                                    #
+    // #######################################################################################
+
     localparam int unsigned TotalNumRegisters  = (NumWarps * WarpWidth * 2**RegIdxWidth);
     localparam int unsigned RegistersPerBank   = TotalNumRegisters / NumBanks;
     localparam int unsigned BankRegAddrWidth   = $clog2(RegistersPerBank);
     localparam int unsigned NumOPCRequestPorts = NumOperandCollectors * OperandsPerInst;
+
+    // #######################################################################################
+    // # Typedefs                                                                            #
+    // #######################################################################################
 
     typedef logic [$clog2(NumOPCRequestPorts)-1:0] opc_tag_t;
     typedef logic [          $clog2(NumBanks)-1:0] bank_sel_t;
@@ -117,8 +125,8 @@ module register_opc_stage #(
         .ready_o( opc_read_req_ready    ),
 
         // Grant ports -> to Register Banks Read Ports
-        .data_o ( banks_read_req_addr ),
-        .idx_o  ( banks_read_req_tag  ),
+        .data_o ( banks_read_req_addr  ),
+        .idx_o  ( banks_read_req_tag   ),
         .valid_o( banks_read_req_valid ),
         .ready_i( banks_read_req_ready ),
         
@@ -161,9 +169,9 @@ module register_opc_stage #(
         .idx_o  ( /* UNUSED */ ),
     );
 
-    // ###################################################################################
-    // # Register Banks                                                        #
-    // ###################################################################################
+    // #######################################################################################
+    // # Register File Banks                                                                 #
+    // #######################################################################################
 
     // Register Banks are each RegWidth wide -> store a register for a full warp
     for(int i = 0; i < NumBanks; i++) begin : gen_register_banks
@@ -192,6 +200,7 @@ module register_opc_stage #(
             .read_data_o ( banks_read_rsp_data [i] )
         );
     end : gen_register_banks
+
     // #######################################################################################
     // # Assertions                                                                          #
     // #######################################################################################

@@ -18,7 +18,9 @@ module rand_stream_mst #(
   // Application delay: time delay before output changes after an active clock edge.
   parameter time  ApplDelay = 0ps,
   // Acquisition delay: time delay before ready input is read after an active clock edge.
-  parameter time  AcqDelay = 0ps
+  parameter time  AcqDelay = 0ps,
+
+  parameter int unsigned DataWidth = $bits(data_t)
 ) (
   input  logic    clk_i,
   input  logic    rst_ni,
@@ -27,13 +29,27 @@ module rand_stream_mst #(
   output logic    valid_o,
   input  logic    ready_i
 );
-
   int unsigned rand_wait_cycles;
 
   function static void randomize_data();
     int unsigned rand_data;
-    rand_data = $urandom;
-    data_o = rand_data[$bits(data_o)-1:0];
+    if (DataWidth <= 32) begin
+      // If the data width is less than or equal to 32 bits, randomize the entire data_o.
+      rand_data = $urandom;
+      /* verilator lint_off SELRANGE */
+      data_o = rand_data[DataWidth - 1:0];
+      /* verilator lint_on SELRANGE */
+      return;
+    end else begin
+        /* verilator lint_off UNSIGNED */
+        for (int i = 0; i <= (DataWidth + DataWidth / 2) / 32; i++) begin
+        /* verilator lint_on UNSIGNED */
+            rand_data = $urandom;
+            /* verilator lint_off SELRANGE */
+            data_o[i*32+:32] = rand_data;
+            /* verilator lint_on SELRANGE */
+        end
+    end
   endfunction
 
   function static void randomize_wait_cycles();
@@ -87,14 +103,14 @@ module rand_stream_mst #(
   // Validate parameters.
   initial begin: validate_params
     assert (MaxWaitCycles >= MinWaitCycles)
-      else $fatal("The maximum number of wait cycles must be at least the minimum number of wait",
+      else $error("The maximum number of wait cycles must be at least the minimum number of wait",
         " cycles!");
     assert (ApplDelay > 0ps)
-      else $fatal("The application delay must be greater than 0!");
+      else $error("The application delay must be greater than 0!");
     assert (AcqDelay > 0ps)
-      else $fatal("The acquisition delay must be greater than 0!");
+      else $error("The acquisition delay must be greater than 0!");
     assert (AcqDelay > ApplDelay)
-      else $fatal("The acquisition delay must be greater than the application delay!");
+      else $error("The acquisition delay must be greater than the application delay!");
   end
 
 endmodule

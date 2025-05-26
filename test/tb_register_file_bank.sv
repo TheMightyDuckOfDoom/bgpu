@@ -16,8 +16,8 @@ module tb_register_file_bank #(
 
     // Register file configuration
     parameter int unsigned NumRegisters = 256,
-    parameter int unsigned DataWidth    = 32 - $clog2(NumRegisters),
-    parameter int unsigned TagWidth     = 32 - $clog2(NumRegisters),
+    parameter int unsigned DataWidth    = 32,
+    parameter int unsigned TagWidth     = 8,
     parameter bit          DualPort     = 1'b0
 ) ();
     // #######################################################################################
@@ -110,8 +110,8 @@ module tb_register_file_bank #(
         .ready_i( write_ready_mst )
     );
 
-    assign write_addr = write_req[$bits(addr_t)-1:0];
-    assign write_data = write_req[$bits(addr_t)+$bits(data_t)-1:$bits(addr_t)];
+    assign write_addr = write_req[$bits(addr_t)+$bits(data_t)-1:$bits(data_t)];
+    assign write_data = write_req[$bits(data_t)-1:0];
 
     // Read port
     rand_stream_mst #(
@@ -229,17 +229,19 @@ module tb_register_file_bank #(
     end
 
     // ########################################################################################
-    // # Simulation timeout                                                                  #
+    // # Simulation timeout                                                                   #
     // ########################################################################################
 
     initial begin : simulation_timeout
         int unsigned cycles;
         int unsigned num_reads;
         int unsigned num_writes;
+        int unsigned num_write_data_non_zero;
 
         cycles = 0;
         num_reads = 0;
         num_writes = 0;
+        num_write_data_non_zero = 0;
 
         $display("Testbench for Register File Bank");
         $display(" with %0d ports, %0d registers, %0d bits per register", DualPort ? 2 : 1,
@@ -255,14 +257,18 @@ module tb_register_file_bank #(
             end
             if (write_valid_sub && write_ready_sub) begin
                 num_writes++;
+                if (write_data != '0) begin
+                    num_write_data_non_zero++;
+                end
             end
         end
 
         $display("Number of reads: %0d", num_reads);
         $display("Number of writes: %0d", num_writes);
 
-        assert (num_reads > 0) else $fatal("No read transactions were performed");
-        assert (num_writes > 0) else $fatal("No write transactions were performed");
+        assert (num_reads > 0) else $error("No read transactions were performed");
+        assert (num_writes > 0) else $error("No write transactions were performed");
+        assert (num_write_data_non_zero > 0) else $error("No non-zero write data was written");
 
         $display("Simulation ended after %0d cycles", cycles);
         $finish;
