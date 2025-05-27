@@ -44,17 +44,20 @@ module rand_stream_slv #(
     end
   end
 
-    assign ready_o = 1'b1;
-//   rand_synch_holdable_driver #(
-//     .MinWaitCycles  (MinWaitCycles),
-//     .MaxWaitCycles  (MaxWaitCycles),
-//     .ApplDelay      (ApplDelay)
-//   ) i_ready_driver (
-//     .clk_i  (clk_i),
-//     .rst_ni (rst_ni),
-//     .hold_i (1'b0),
-//     .data_o (ready_o)
-//   );
+  logic ready;
+
+  rand_synch_holdable_driver #(
+    .MinWaitCycles  (MinWaitCycles),
+    .MaxWaitCycles  (MaxWaitCycles),
+    .ApplDelay      (ApplDelay)
+  ) i_ready_driver (
+    .clk_i  (clk_i),
+    .rst_ni (rst_ni),
+    .hold_i (1'b0),
+    .data_o (ready)
+  );
+
+  assign ready_o = ready || MaxWaitCycles == 0;
 
   initial begin: validate_params
     assert (AcqDelay > 0ps)

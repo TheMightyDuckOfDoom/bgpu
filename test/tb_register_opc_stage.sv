@@ -7,8 +7,9 @@ module tb_register_opc_stage #(
     // Simulation parameters
     parameter int unsigned MaxSimCycles     = 100000,
     parameter int unsigned WatchdogTimeout  = 1000,
-    parameter int unsigned MaxMstWaitCycles = 0,
     parameter int unsigned InstsToComplete  = 1000,
+    parameter int unsigned MaxMstWaitCycles = 0,
+    parameter int unsigned MaxSubWaitCycles = 0,
 
     // Simulation time parameters
     parameter time ClkPeriod = 10ns,
@@ -142,8 +143,8 @@ module tb_register_opc_stage #(
         .data_t       ( eu_req_t         ),
         .ApplDelay    ( ApplDelay        ),
         .AcqDelay     ( AcqDelay         ),
-        .MinWaitCycles( 0                ),
-        .MaxWaitCycles( MaxMstWaitCycles ),
+        .MinWaitCycles( 1                ),
+        .MaxWaitCycles( MaxSubWaitCycles ),
         .Enqueue      ( 1'b0             )
     ) i_eu_sub (
         .clk_i  ( clk       ),
@@ -183,13 +184,13 @@ module tb_register_opc_stage #(
         .rst_ni( rst_n ),
 
         // Dispatcher interface
-        .opc_ready_o    ( opc_ready                ),
-        .disp_valid_i   ( disp_valid & initialized ),
-        .disp_tag_i     ( disp_req.tag             ),
-        .disp_pc_i      ( disp_req.pc              ),
-        .disp_act_mask_i( disp_req.active_mask     ),
-        .disp_dst_i     ( disp_req.dst             ),
-        .disp_src_i     ( disp_req.srcs            ),
+        .opc_ready_o    ( opc_ready                 ),
+        .disp_valid_i   ( disp_valid && initialized ),
+        .disp_tag_i     ( disp_req.tag              ),
+        .disp_pc_i      ( disp_req.pc               ),
+        .disp_act_mask_i( disp_req.active_mask      ),
+        .disp_dst_i     ( disp_req.dst              ),
+        .disp_src_i     ( disp_req.srcs             ),
 
         // To Execution units
         .opc_valid_o       ( opc_valid          ),
@@ -413,9 +414,6 @@ module tb_register_opc_stage #(
         assert (insts_sent_to_eu > 0)
         else $error("No instructions were sent to the Execution Units during the simulation!");
 
-        assert (insts_sent_to_eu >= dispatched_insts - NumOperandCollectors)
-        else $error("Not all dispatched instructions were sent to the Execution Units!");
-
         dispatched_insts_sum = 0;
         insts_completed_insts_sum = 0;
         read_stalls_sum = 0;
@@ -447,6 +445,9 @@ module tb_register_opc_stage #(
         $display("Dispatched %0d instructions", dispatched_insts);
         $display("Sent %0d instructions to Execution Units", insts_sent_to_eu);
         $display("Total read stalls across all Operand Collectors: %0d", read_stalls_sum);
+
+        assert (insts_sent_to_eu >= dispatched_insts - NumOperandCollectors)
+        else $error("Not all dispatched instructions were sent to the Execution Units!");
 
         assert (cycles < MaxSimCycles)
         else $error("Simulation exceeded maximum cycle count of %0d!", MaxSimCycles);
