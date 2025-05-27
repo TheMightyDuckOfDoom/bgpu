@@ -11,9 +11,9 @@ module tb_operand_collector #(
     parameter int unsigned MaxMstWaitCycles = 100,
 
     // Simulation time parameters
-    parameter time         ClkPeriod = 10ns,
-    parameter time         ApplDelay = 1ns,
-    parameter time         AcqDelay  = 9ns,
+    parameter time ClkPeriod = 10ns,
+    parameter time ApplDelay = 1ns,
+    parameter time AcqDelay  = 9ns,
 
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,

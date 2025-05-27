@@ -10,7 +10,7 @@ VIVADO_SETTINGS ?= /tools/Xilinx/Vivado/202?.?/settings64.sh
 VERIBLE_LINT    ?= verible-verilog-lint
 
 VERILATOR_FLAGS:= verilator/config.vlt
-VERILATOR_ARGS ?=
+VERILATOR_ARGS ?= -Wno-UNOPTFLAT
 
 # Bender Targets
 BENDER_TARGET_LINT ?= verilator

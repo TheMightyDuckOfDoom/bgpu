@@ -9,7 +9,7 @@ module register_opc_stage #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 32,
     /// Number of warps per compute unit
-    parameter int unsigned NumWarps = 16,
+    parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// How many registers can each warp access as operand or destination
@@ -23,7 +23,7 @@ module register_opc_stage #(
     /// Should the register file banks be dual port?
     parameter bit DualPortRegisterBanks = 1'b0,
     /// Number of operand collectors
-    parameter int unsigned NumOperandCollectors = 2,
+    parameter int unsigned NumOperandCollectors = 6,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth   = $clog2(NumTags),
@@ -32,7 +32,6 @@ module register_opc_stage #(
     parameter type         reg_idx_t  = logic [         RegIdxWidth-1:0],
     parameter type         pc_t       = logic [             PcWidth-1:0],
     parameter type         act_mask_t = logic [           WarpWidth-1:0],
-    parameter type         tag_t      = logic [            TagWidth-1:0],
     parameter type         data_t     = logic [RegWidth * WarpWidth-1:0],
     parameter type         iid_t      = logic [   TagWidth+WidWidth-1:0]
 ) (
@@ -56,7 +55,14 @@ module register_opc_stage #(
     output pc_t       opc_pc_o,
     output act_mask_t opc_act_mask_o,
     output reg_idx_t  opc_dst_o,
-    output data_t     [OperandsPerInst-1:0] opc_operand_data_o
+    output data_t     [OperandsPerInst-1:0] opc_operand_data_o,
+
+    /// From Execution Units
+    output logic     opc_to_eu_ready_o,
+    input  logic     eu_valid_i,
+    input  iid_t     eu_tag_i,
+    input  reg_idx_t eu_dst_i,
+    input  data_t    eu_data_i
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -84,6 +90,11 @@ module register_opc_stage #(
         data_t     [OperandsPerInst-1:0] operands; // Operands Data
     } opc_inst_t;
 
+    typedef struct packed {
+        bank_reg_addr_t addr; // Address in the bank
+        data_t          data; // Data to write
+    } bank_write_req_t;
+
     // #######################################################################################
     // # Signals                                                                            #
     // #######################################################################################
@@ -98,9 +109,13 @@ module register_opc_stage #(
     wid_t           [NumOPCRequestPorts-1:0] opc_read_req_wid;
     reg_idx_t       [NumOPCRequestPorts-1:0] opc_read_req_reg_idx;
 
-    // Generated from req_wid and req_reg_idx
+    // Read WID+REG_IDX to Bank Selection and Register Address
     bank_sel_t      [NumOPCRequestPorts-1:0] opc_read_req_bank_sel;
     bank_reg_addr_t [NumOPCRequestPorts-1:0] opc_read_req_addr;
+
+    // Write WID+REG_IDX to Bank Selection and Register Address
+    bank_sel_t       eu_write_req_bank_sel;
+    bank_write_req_t eu_write_req;
 
     // Read Response
     logic  [NumOPCRequestPorts-1:0] opc_read_rsp_valid;
@@ -113,10 +128,9 @@ module register_opc_stage #(
 
     /// Register File Banks
     // Write port
-    logic           [NumBanks-1:0] banks_write_req_valid;
-    logic           [NumBanks-1:0] banks_write_req_ready;
-    bank_reg_addr_t [NumBanks-1:0] banks_write_req_addr;
-    data_t          [NumBanks-1:0] banks_write_req_data;
+    logic            [NumBanks-1:0] banks_write_req_valid;
+    logic            [NumBanks-1:0] banks_write_req_ready;
+    bank_write_req_t [NumBanks-1:0] banks_write_req;
 
     // Read Request Interconnect to Register Banks Read Ports
     logic           [NumBanks-1:0] banks_read_req_valid;
@@ -133,6 +147,23 @@ module register_opc_stage #(
     // #######################################################################################
     // # Read Request Interconnect between Operand Collectors and Register Banks             #
     // #######################################################################################
+
+    for(genvar i = 0; i < NumOPCRequestPorts; i++) begin : gen_read_indexer
+        register_indexer #(
+            .NumWarps        ( NumWarps         ),
+            .RegIdxWidth     ( RegIdxWidth      ),
+            .NumBanks        ( NumBanks         ),
+            .RegistersPerBank( RegistersPerBank )
+        ) i_read_request_indexer (
+            // Inputs
+            .wid_i    ( opc_read_req_wid    [i] ),
+            .reg_idx_i( opc_read_req_reg_idx[i] ),
+
+            // Outputs
+            .bank_sel_o     ( opc_read_req_bank_sel[i] ),
+            .bank_reg_addr_o( opc_read_req_addr    [i] )
+        );
+    end : gen_read_indexer
 
     // Each Operand Collector has OperandsPerInst request ports
     stream_xbar #(
@@ -200,6 +231,57 @@ module register_opc_stage #(
     );
 
     // #######################################################################################
+    // # Write Request Interconnect between Execution Units and Register Banks               #
+    // #######################################################################################
+
+    register_indexer #(
+        .NumWarps        ( NumWarps         ),
+        .RegIdxWidth     ( RegIdxWidth      ),
+        .NumBanks        ( NumBanks         ),
+        .RegistersPerBank( RegistersPerBank )
+    ) i_write_request_indexer (
+        // Inputs
+        .wid_i     ( eu_tag_i[WidWidth-1:0] ),
+        .reg_idx_i ( eu_dst_i               ),
+
+        // Outputs
+        .bank_sel_o     ( eu_write_req_bank_sel  ),
+        .bank_reg_addr_o( eu_write_req.addr      )
+    );
+
+    assign eu_write_req.data = eu_data_i;
+
+    stream_xbar #(
+        .NumInp     ( 1                ),
+        .NumOut     ( NumBanks         ),
+        .payload_t  ( bank_write_req_t ),
+        .OutSpillReg( 1'b0             ),
+        .ExtPrio    ( 1'b0             ),
+        .AxiVldRdy  ( 1'b0             ),
+        .LockIn     ( 1'b0             ),
+        .AxiVldMask ( '1               )
+    ) i_write_request_interconnect (
+        .clk_i  ( clk_i  ),
+        .rst_ni ( rst_ni ),
+
+        // Request ports -> from Execution Units
+        .data_i ( eu_write_req          ),
+        .sel_i  ( eu_write_req_bank_sel ),
+        .valid_i( eu_valid_i            ),
+        .ready_o( opc_to_eu_ready_o     ),
+
+        // Grant ports -> to Register Banks Write Ports
+        .data_o ( banks_write_req       ),
+        .valid_o( banks_write_req_valid ),
+        .ready_i( banks_write_req_ready ),
+
+        // Tie-Offs
+        .flush_i( 1'b0         ),
+        .rr_i   ( '0           ),
+        .idx_o  ( /* UNUSED */ )
+    );
+
+    // #######################################################################################
     // # Register File Banks                                                                 #
     // #######################################################################################
 
@@ -215,10 +297,10 @@ module register_opc_stage #(
             .rst_ni( rst_ni ),
 
             // Write port
-            .write_valid_i( banks_write_req_valid[i] ),
-            .write_addr_i ( banks_write_req_addr [i] ),
-            .write_data_i ( banks_write_req_data [i] ),
-            .write_ready_o( banks_write_req_ready[i] ),
+            .write_valid_i( banks_write_req_valid[i]      ),
+            .write_addr_i ( banks_write_req      [i].addr ),
+            .write_data_i ( banks_write_req      [i].data ),
+            .write_ready_o( banks_write_req_ready[i]      ),
 
             // Read port
             .read_valid_i( banks_read_req_valid[i] ),
@@ -295,19 +377,6 @@ module register_opc_stage #(
         );
     end : gen_operand_collectors
 
-    typedef logic [$clog2(TotalNumRegisters)-1:0] reg_addr_t;
-    reg_addr_t [NumOPCRequestPorts-1:0] opc_read_req_hash;
-    for(genvar i = 0; i < NumOPCRequestPorts; i++) begin : gen_read_req
-        // Generate the bank selection and register address for each request port
-        assign opc_read_req_hash[i] = {
-            opc_read_req_wid[i],
-            opc_read_req_reg_idx[i]
-        };
-        assign opc_read_req_addr    [i] = opc_read_req_hash[i][BankRegAddrWidth-1:0];
-        assign opc_read_req_bank_sel[i]
-            = opc_read_req_hash[i][$clog2(TotalNumRegisters)-1:BankRegAddrWidth];
-    end : gen_read_req
-
     // #######################################################################################
     // # Operand Collector to Execution Unit Selection                                       #
     // #######################################################################################
@@ -341,12 +410,12 @@ module register_opc_stage #(
 
     // Check that the number of registers is divisible by the number of banks
     initial assert (TotalNumRegisters % NumBanks == 0) else
-        $error("TotalNumRegisters % NumBanks != 0. This is not supported.");
+        $error("TotalNumRegisters %% NumBanks != 0. This is not supported.");
 
     // Read Response Interconnect always has to be ready
     for(genvar i = 0; i < NumBanks; i++) begin : gen_read_response_interconnect_assertions
         assert property (@(posedge clk_i) disable iff (~rst_ni)
-            (banks_read_req_valid[i] -> banks_read_req_ready[i])) else
+            (banks_read_rsp_valid[i] -> banks_read_rsp_ready[i])) else
             $error("Read Response Interconnect is not ready for bank %0d", i);
     end : gen_read_response_interconnect_assertions
 
