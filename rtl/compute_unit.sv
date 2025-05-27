@@ -14,18 +14,29 @@ module compute_unit #(
     parameter int unsigned WarpWidth = 4,
     /// Encoded instruction width
     parameter int unsigned EncInstWidth = 32,
-
+    /// How many instructions that wait on previous results can be buffered per warp
     parameter int unsigned WaitBufferSizePerWarp = 4,
-
+    /// How many registers can each warp access as operand or destination
     parameter int unsigned RegIdxWidth = 8,
+    /// How many operands each instruction can have
     parameter int unsigned OperandsPerInst = 2,
+    /// How many register banks are available
+    parameter int unsigned NumBanks = 4,
+    /// How many operand collectors are available
+    parameter int unsigned NumOperandCollectors = 6,
+    /// Should the register banks be dual ported?
+    parameter bit          DualPortRegisterBanks = 1'b0,
+    /// Width of the registers
+    parameter int unsigned RegWidth = 32,
 
+    /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth = $clog2(NumTags),
     parameter int unsigned WidWidth = $clog2(NumWarps),
     parameter type reg_idx_t = logic [RegIdxWidth-1:0],
     parameter type iid_t = logic [WidWidth+TagWidth-1:0],
     parameter type pc_t = logic [PcWidth-1:0],
-    parameter type act_mask_t = logic [WarpWidth-1:0]
+    parameter type act_mask_t = logic [WarpWidth-1:0],
+    parameter type reg_data_t = logic [RegWidth * WarpWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -87,6 +98,31 @@ module compute_unit #(
         dec_inst_t inst;
     } dec_to_ib_data_t;
 
+    // Multi Warp Dispatcher to Register Operand Collector Stage type
+    typedef struct packed {
+        iid_t tag;
+        pc_t pc;
+        act_mask_t act_mask;
+        reg_idx_t dst;
+        reg_idx_t [OperandsPerInst-1:0] operands;
+    } disp_to_opc_data_t;
+
+    // Register Operand Collector Stage to Execution Units type
+    typedef struct packed {
+        iid_t tag;
+        pc_t pc;
+        act_mask_t act_mask;
+        reg_idx_t dst;
+        reg_data_t [OperandsPerInst-1:0] operands;
+    } opc_to_eu_data_t;
+
+    // Execution Units to Register Operand Collector Stage type
+    typedef struct packed {
+        iid_t tag;
+        reg_idx_t dst;
+        reg_data_t data;
+    } eu_to_opc_data_t;
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
@@ -115,6 +151,18 @@ module compute_unit #(
 
     // Instruction Buffer to Fetcher
     logic [NumWarps-1:0] ib_space_available; // Which warp has space for a new instruction?
+
+    // Multi Warp Dispatcher to Register Operand Collector Stage
+    logic disp_to_opc_valid, opc_to_disp_ready;
+    disp_to_opc_data_t disp_to_opc_data;
+
+    // Register Operand Collector Stage to Execution Units
+    logic opc_to_eu_valid, opc_to_eu_ready;
+    opc_to_eu_data_t opc_to_eu_data;
+
+    // Execution Units to Register Operand Collector Stage
+    logic eu_to_opc_valid, eu_to_opc_ready;
+    eu_to_opc_data_t eu_to_opc_data;
 
     // #######################################################################################
     // # Fetcher                                                                             #
@@ -299,16 +347,58 @@ module compute_unit #(
         .dec_warp_id_i ( dec_to_ib_data_q.warp_id  ),
         .dec_inst_i    ( dec_to_ib_data_q.inst     ),
 
-        .opc_ready_i    ( opc_ready_i     ),
-        .disp_valid_o   ( disp_valid_o    ),
-        .disp_tag_o     ( disp_tag_o      ),
-        .disp_pc_o      ( disp_pc_o       ),
-        .disp_act_mask_o( disp_act_mask_o ),
-        .disp_dst_o     ( disp_dst_o      ),
-        .disp_operands_o( disp_operands_o ),
+        .opc_ready_i    ( opc_to_disp_ready         ),
+        .disp_valid_o   ( disp_to_opc_valid         ),
+        .disp_tag_o     ( disp_to_opc_data.tag      ),
+        .disp_pc_o      ( disp_to_opc_data.pc       ),
+        .disp_act_mask_o( disp_to_opc_data.act_mask ),
+        .disp_dst_o     ( disp_to_opc_data.dst      ),
+        .disp_operands_o( disp_to_opc_data.operands ),
 
-        .eu_valid_i( eu_valid_i ),
-        .eu_tag_i  ( eu_tag_i   )
+        .eu_valid_i( eu_to_opc_valid && opc_to_eu_ready ),
+        .eu_tag_i  ( eu_to_opc_data.tag                 )
+    );
+
+    // #######################################################################################
+    // # Register Operand Collector Stage                                                    #
+    // #######################################################################################
+
+    register_opc_stage #(
+        .NumTags              ( NumTags               ),
+        .PcWidth              ( PcWidth               ),
+        .NumWarps             ( NumWarps              ),
+        .WarpWidth            ( WarpWidth             ),
+        .RegIdxWidth          ( RegIdxWidth           ),
+        .OperandsPerInst      ( OperandsPerInst       ),
+        .NumBanks             ( NumBanks              ),
+        .RegWidth             ( RegWidth              ),
+        .DualPortRegisterBanks( DualPortRegisterBanks ),
+        .NumOperandCollectors ( NumOperandCollectors  )
+    ) i_register_opc_stage (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .opc_ready_o    ( opc_to_disp_ready         ),
+        .disp_valid_i   ( disp_to_opc_valid         ),
+        .disp_tag_i     ( disp_to_opc_data.tag      ),
+        .disp_pc_i      ( disp_to_opc_data.pc       ),
+        .disp_act_mask_i( disp_to_opc_data.act_mask ),
+        .disp_dst_i     ( disp_to_opc_data.dst      ),
+        .disp_src_i     ( disp_to_opc_data.operands ),
+
+        .eu_ready_i        ( eu_to_opc_ready         ),
+        .opc_valid_o       ( opc_to_eu_valid         ),
+        .opc_tag_o         ( opc_to_eu_data.tag      ),
+        .opc_pc_o          ( opc_to_eu_data.pc       ),
+        .opc_act_mask_o    ( opc_to_eu_data.act_mask ),
+        .opc_dst_o         ( opc_to_eu_data.dst      ),
+        .opc_operand_data_o( opc_to_eu_data.operands ),
+
+        .opc_to_eu_ready_o( opc_to_eu_ready     ),
+        .eu_valid_i       ( eu_to_opc_valid     ),
+        .eu_tag_i         ( eu_to_opc_data.tag  ),
+        .eu_dst_i         ( eu_to_opc_data.dst  ),
+        .eu_data_i        ( eu_to_opc_data.data )
     );
 
 endmodule : compute_unit
