@@ -24,7 +24,7 @@ SRCS = $(wildcard rtl/**/*.sv)
 TB_SRCS = $($(BENDER) scripts flist -n )
 BENDER_DEPS:= Bender.lock Bender.yml
 
-@PHONY: lint xilinx clean
+.PHONY: lint xilinx clean tb_%
 
 ####################################################################################################
 # Linting

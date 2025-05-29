@@ -22,14 +22,14 @@ module operand_collector #(
     parameter int unsigned RegWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type         wid_t      = logic [            WidWidth-1:0],
-    parameter type         reg_idx_t  = logic [         RegIdxWidth-1:0],
-    parameter type         pc_t       = logic [             PcWidth-1:0],
-    parameter type         act_mask_t = logic [           WarpWidth-1:0],
-    parameter type         data_t     = logic [RegWidth * WarpWidth-1:0],
-    parameter type         iid_t      = logic [   TagWidth+WidWidth-1:0]
+    parameter int unsigned TagWidth    = $clog2(NumTags),
+    parameter int unsigned WidWidth    = NumWarps > 1 ? $clog2(NumWarps) : 1,
+    parameter type         wid_t       = logic [            WidWidth-1:0],
+    parameter type         reg_idx_t   = logic [         RegIdxWidth-1:0],
+    parameter type         pc_t        = logic [             PcWidth-1:0],
+    parameter type         act_mask_t  = logic [           WarpWidth-1:0],
+    parameter type         warp_data_t = logic [RegWidth * WarpWidth-1:0],
+    parameter type         iid_t       = logic [   TagWidth+WidWidth-1:0]
 ) (
     // Clock and Reset
     input  logic clk_i,
@@ -51,18 +51,18 @@ module operand_collector #(
     input  logic     [OperandsPerInst-1:0] opc_read_req_ready_i,
 
     /// From Register File
-    input  logic  [OperandsPerInst-1:0] opc_read_rsp_valid_i,
-    input  data_t [OperandsPerInst-1:0] opc_read_rsp_data_i,
+    input  logic       [OperandsPerInst-1:0] opc_read_rsp_valid_i,
+    input  warp_data_t [OperandsPerInst-1:0] opc_read_rsp_data_i,
 
 
     /// To Execution Units
-    input  logic      eu_ready_i,
-    output logic      opc_valid_o,
-    output iid_t      opc_tag_o,
-    output pc_t       opc_pc_o,
-    output act_mask_t opc_act_mask_o,
-    output reg_idx_t  opc_dst_o,
-    output data_t     [OperandsPerInst-1:0] opc_operand_data_o
+    input  logic       eu_ready_i,
+    output logic       opc_valid_o,
+    output iid_t       opc_tag_o,
+    output pc_t        opc_pc_o,
+    output act_mask_t  opc_act_mask_o,
+    output reg_idx_t   opc_dst_o,
+    output warp_data_t [OperandsPerInst-1:0] opc_operand_data_o
 );
     // #######################################################################################
     // # Signals                                                                             #
@@ -85,7 +85,7 @@ module operand_collector #(
     // Operands Register Indecies
     reg_idx_t [OperandsPerInst-1:0] operand_reg_idx_q, operand_reg_idx_d;
     // Operands Data
-    data_t [OperandsPerInst-1:0] operand_data_q, operand_data_d;
+    warp_data_t [OperandsPerInst-1:0] operand_data_q, operand_data_d;
 
     // ########################################################################################
     // # Sequential Logic                                                                    #

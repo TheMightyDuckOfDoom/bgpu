@@ -36,7 +36,7 @@ module compute_unit #(
     parameter type iid_t = logic [WidWidth+TagWidth-1:0],
     parameter type pc_t = logic [PcWidth-1:0],
     parameter type act_mask_t = logic [WarpWidth-1:0],
-    parameter type reg_data_t = logic [RegWidth * WarpWidth-1:0]
+    parameter type warp_data_t = logic [RegWidth * WarpWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -51,16 +51,19 @@ module compute_unit #(
     input  logic [PcWidth-1:0]      ic_write_pc_i,
     input  logic [EncInstWidth-1:0] ic_write_inst_i,
 
-    input  logic      opc_ready_i,
-    output logic      disp_valid_o,
-    output iid_t      disp_tag_o,
-    output pc_t       disp_pc_o,
-    output act_mask_t disp_act_mask_o,
-    output reg_idx_t  disp_dst_o,
-    output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
+    output logic       eu_to_opc_ready_o,
+    output logic       opc_to_eu_valid_o,
+    output iid_t       opc_to_eu_tag_o,
+    output pc_t        opc_to_eu_pc_o,
+    output act_mask_t  opc_to_eu_act_mask_o,
+    output reg_idx_t   opc_to_eu_dst_o,
+    output warp_data_t [OperandsPerInst-1:0] opc_to_eu_operands_o,
 
-    input  logic eu_valid_i,
-    input  iid_t eu_tag_i
+    output logic       opc_to_eu_ready_o,
+    output logic       eu_to_opc_valid_o,
+    output iid_t       eu_to_opc_tag_o,
+    output reg_idx_t   eu_to_opc_dst_o,
+    output warp_data_t eu_to_opc_data_o
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -113,14 +116,14 @@ module compute_unit #(
         pc_t pc;
         act_mask_t act_mask;
         reg_idx_t dst;
-        reg_data_t [OperandsPerInst-1:0] operands;
+        warp_data_t [OperandsPerInst-1:0] operands;
     } opc_to_eu_data_t;
 
     // Execution Units to Register Operand Collector Stage type
     typedef struct packed {
         iid_t tag;
         reg_idx_t dst;
-        reg_data_t data;
+        warp_data_t data;
     } eu_to_opc_data_t;
 
     // #######################################################################################
@@ -400,5 +403,51 @@ module compute_unit #(
         .eu_dst_i         ( eu_to_opc_data.dst  ),
         .eu_data_i        ( eu_to_opc_data.data )
     );
+
+    // #######################################################################################
+    // # Execution Units                                                                     #
+    // #######################################################################################
+
+    // Integer Unit
+    integer_unit #(
+        .RegWidth       ( RegWidth        ),
+        .WarpWidth      ( WarpWidth       ),
+        .OperandsPerInst( OperandsPerInst ),
+        .iid_t          ( iid_t           ),
+        .reg_idx_t      ( reg_idx_t       )
+    ) i_integer_unit (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .eu_to_opc_ready_o   ( eu_to_opc_ready         ),
+        .opc_to_eu_valid_i   ( opc_to_eu_valid         ),
+        .opc_to_eu_tag_i     ( opc_to_eu_data.tag      ),
+        .opc_to_eu_dst_i     ( opc_to_eu_data.dst      ),
+        .opc_to_eu_operands_i( opc_to_eu_data.operands ),
+
+        .rc_to_eu_ready_i( opc_to_eu_ready     ),
+        .eu_to_rc_valid_o( eu_to_opc_valid     ),
+        .eu_to_rc_tag_o  ( eu_to_opc_data.tag  ),
+        .eu_to_rc_dst_o  ( eu_to_opc_data.dst  ),
+        .eu_to_rc_data_o ( eu_to_opc_data.data )
+    );
+
+    // #######################################################################################
+    // # Dummy Outputs                                                                       #
+    // #######################################################################################
+
+    assign eu_to_opc_ready_o    = eu_to_opc_ready;
+    assign opc_to_eu_valid_o    = opc_to_eu_valid;
+    assign opc_to_eu_tag_o      = opc_to_eu_data.tag;
+    assign opc_to_eu_pc_o       = opc_to_eu_data.pc;
+    assign opc_to_eu_act_mask_o = opc_to_eu_data.act_mask;
+    assign opc_to_eu_dst_o      = opc_to_eu_data.dst;
+    assign opc_to_eu_operands_o = opc_to_eu_data.operands;
+
+    assign opc_to_eu_ready_o = opc_to_eu_ready;
+    assign eu_to_opc_valid_o = eu_to_opc_valid;
+    assign eu_to_opc_tag_o   = eu_to_opc_data.tag;
+    assign eu_to_opc_dst_o   = eu_to_opc_data.dst;
+    assign eu_to_opc_data_o  = eu_to_opc_data.data;
 
 endmodule : compute_unit

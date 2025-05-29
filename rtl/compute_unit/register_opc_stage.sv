@@ -26,14 +26,14 @@ module register_opc_stage #(
     parameter int unsigned NumOperandCollectors = 6,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type         wid_t      = logic [            WidWidth-1:0],
-    parameter type         reg_idx_t  = logic [         RegIdxWidth-1:0],
-    parameter type         pc_t       = logic [             PcWidth-1:0],
-    parameter type         act_mask_t = logic [           WarpWidth-1:0],
-    parameter type         data_t     = logic [RegWidth * WarpWidth-1:0],
-    parameter type         iid_t      = logic [   TagWidth+WidWidth-1:0]
+    parameter int unsigned TagWidth    = $clog2(NumTags),
+    parameter int unsigned WidWidth    = NumWarps > 1 ? $clog2(NumWarps) : 1,
+    parameter type         wid_t       = logic [            WidWidth-1:0],
+    parameter type         reg_idx_t   = logic [         RegIdxWidth-1:0],
+    parameter type         pc_t        = logic [             PcWidth-1:0],
+    parameter type         act_mask_t  = logic [           WarpWidth-1:0],
+    parameter type         warp_data_t = logic [RegWidth * WarpWidth-1:0],
+    parameter type         iid_t       = logic [   TagWidth+WidWidth-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,
@@ -49,20 +49,20 @@ module register_opc_stage #(
     input  reg_idx_t  [OperandsPerInst-1:0] disp_src_i,
 
     /// To Execution Units
-    output logic      opc_valid_o,
-    input  logic      eu_ready_i,
-    output iid_t      opc_tag_o,
-    output pc_t       opc_pc_o,
-    output act_mask_t opc_act_mask_o,
-    output reg_idx_t  opc_dst_o,
-    output data_t     [OperandsPerInst-1:0] opc_operand_data_o,
+    output logic       opc_valid_o,
+    input  logic       eu_ready_i,
+    output iid_t       opc_tag_o,
+    output pc_t        opc_pc_o,
+    output act_mask_t  opc_act_mask_o,
+    output reg_idx_t   opc_dst_o,
+    output warp_data_t [OperandsPerInst-1:0] opc_operand_data_o,
 
     /// From Execution Units
-    output logic     opc_to_eu_ready_o,
-    input  logic     eu_valid_i,
-    input  iid_t     eu_tag_i,
-    input  reg_idx_t eu_dst_i,
-    input  data_t    eu_data_i
+    output logic       opc_to_eu_ready_o,
+    input  logic       eu_valid_i,
+    input  iid_t       eu_tag_i,
+    input  reg_idx_t   eu_dst_i,
+    input  warp_data_t eu_data_i
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -91,12 +91,12 @@ module register_opc_stage #(
         pc_t       pc;           // Program Counter
         act_mask_t act_mask;     // Activation Mask
         reg_idx_t  dst;          // Destination Register Index
-        data_t     [OperandsPerInst-1:0] operands; // Operands Data
+        warp_data_t     [OperandsPerInst-1:0] operands; // Operands Data
     } opc_inst_t;
 
     typedef struct packed {
         bank_reg_addr_t addr; // Address in the bank
-        data_t          data; // Data to write
+        warp_data_t          data; // Data to write
     } bank_write_req_t;
 
     // #######################################################################################
@@ -122,8 +122,8 @@ module register_opc_stage #(
     bank_write_req_t eu_write_req;
 
     // Read Response
-    logic  [NumOPCRequestPorts-1:0] opc_read_rsp_valid;
-    data_t [NumOPCRequestPorts-1:0] opc_read_rsp_data;
+    logic       [NumOPCRequestPorts-1:0] opc_read_rsp_valid;
+    warp_data_t [NumOPCRequestPorts-1:0] opc_read_rsp_data;
 
     // Read Response to Execution Units
     logic      [NumOperandCollectors-1:0] opc_eu_valid, opc_eu_ready;
@@ -146,7 +146,7 @@ module register_opc_stage #(
     logic           [NumBanks-1:0] banks_read_rsp_valid;
     logic           [NumBanks-1:0] banks_read_rsp_ready;
     opc_tag_t       [NumBanks-1:0] banks_read_rsp_tag;
-    data_t          [NumBanks-1:0] banks_read_rsp_data;
+    warp_data_t          [NumBanks-1:0] banks_read_rsp_data;
 
     // #######################################################################################
     // # Read Request Interconnect between Operand Collectors and Register Banks             #
@@ -207,7 +207,7 @@ module register_opc_stage #(
     stream_xbar #(
         .NumInp     ( NumBanks           ),
         .NumOut     ( NumOPCRequestPorts ),
-        .payload_t  ( data_t             ),
+        .payload_t  ( warp_data_t             ),
         .OutSpillReg( 1'b0               ),
         .ExtPrio    ( 1'b0               ),
         .AxiVldRdy  ( 1'b0               ),
@@ -387,9 +387,9 @@ module register_opc_stage #(
 
     // Arbitrate the output of the Operand Collectors to a single output stream
     stream_arbiter #(
-        .DATA_T   ( opc_inst_t ),
+        .DATA_T   ( opc_inst_t           ),
         .N_INP    ( NumOperandCollectors ),
-        .ARBITER  ( "rr" )
+        .ARBITER  ( "rr"                 )
     ) i_opc_to_eu_arbiter (
         .clk_i        ( clk_i             ),
         .rst_ni       ( rst_ni            ),

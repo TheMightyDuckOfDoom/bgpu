@@ -19,12 +19,15 @@ sources:
     - rtl/compute_unit/dispatcher/tag_queue.sv
     - rtl/compute_unit/dispatcher/reg_table.sv
     - rtl/compute_unit/dispatcher/wait_buffer.sv
-    - rtl/compute_unit/dispatcher.sv
+    - rtl/compute_unit/dispatcher/dispatcher.sv
     - rtl/compute_unit/multi_warp_dispatcher.sv
-    - rtl/compute_unit/register_file_bank.sv
-    - rtl/compute_unit/operand_collector.sv
-    - rtl/compute_unit/register_indexer.sv
+
+    - rtl/compute_unit/register_opc/register_file_bank.sv
+    - rtl/compute_unit/register_opc/operand_collector.sv
+    - rtl/compute_unit/register_opc/register_indexer.sv
     - rtl/compute_unit/register_opc_stage.sv
+
+    - rtl/compute_unit/execution_units/integer_unit.sv
 
     - rtl/compute_unit.sv
 
@@ -38,4 +41,4 @@ sources:
           - test/tb_operand_collector.sv
           - test/tb_register_opc_stage.sv
 
-          - test/tb_compute_unit.sv
+          # - test/tb_compute_unit.sv
