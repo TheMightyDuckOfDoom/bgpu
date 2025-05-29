@@ -24,7 +24,7 @@ module multi_warp_dispatcher #(
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type         wid_t      = logic [   WidWidth-1:0],
     parameter type         reg_idx_t  = logic [RegIdxWidth-1:0],
     parameter type         pc_t       = logic [    PcWidth-1:0],
@@ -36,11 +36,11 @@ module multi_warp_dispatcher #(
     input  logic clk_i,
     input  logic rst_ni,
 
-    /// From fetcher -> which warp gets fetched next
+    /// From fetcher |-> which warp gets fetched next
     input  logic fe_handshake_i,
     input  wid_t fe_warp_id_i,
 
-    /// To fetcher -> which warps have space for a new instruction?
+    /// To fetcher |-> which warps have space for a new instruction?
     output logic [NumWarps-1:0] ib_space_available_o,
 
     /// From decoder

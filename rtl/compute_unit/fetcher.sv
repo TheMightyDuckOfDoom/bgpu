@@ -19,7 +19,7 @@ module fetcher #(
     parameter int unsigned WarpWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type         wid_t      = logic [ WidWidth-1:0],
     parameter type         pc_t       = logic [  PcWidth-1:0],
     parameter type         act_mask_t = logic [WarpWidth-1:0]
@@ -32,7 +32,7 @@ module fetcher #(
     output logic [NumWarps-1:0] warp_active_o,
     output logic [NumWarps-1:0] warp_stopped_o,
 
-    /// From instruction buffer -> which warp has space for a new instruction?
+    /// From instruction buffer |-> which warp has space for a new instruction?
     input  logic [NumWarps-1:0] ib_space_available_i,
 
     /// To/From instruction cache
@@ -84,10 +84,6 @@ module fetcher #(
         assign arb_in_data[i].pc       = rs_warp_pc[i];
         assign arb_in_data[i].act_mask = rs_warp_act_mask[i];
 
-        `ifndef SYNTHESIS
-            always_comb assert(!rs_warp_ready[i] || (rs_warp_ready[i] && rs_warp_act_mask[i] != '0))
-            else $error("Warp is ready, but has no active threads");
-        `endif
     end : gen_arb_data
 
     // Warp can be fetched if there is space in the instruction buffer and reconvergence stack is ready
@@ -139,12 +135,12 @@ module fetcher #(
         .decode_wid_i         ( dec_decoded_warp_id_i ),
         .decode_next_pc_i     ( dec_decoded_next_pc_i ),
 
-        .warp_selected_i    ( arb_gnt             ),
-        .warp_ready_o       ( rs_warp_ready       ),
-        .warp_active_o      ( warp_active_o       ),
-        .warp_stopped_o     ( warp_stopped_o      ),
-        .warp_pc_o          ( rs_warp_pc          ),
-        .warp_act_mask_o    ( rs_warp_act_mask    )
+        .warp_selected_i    ( arb_gnt & rr_warp_ready ),
+        .warp_ready_o       ( rs_warp_ready           ),
+        .warp_active_o      ( warp_active_o           ),
+        .warp_stopped_o     ( warp_stopped_o          ),
+        .warp_pc_o          ( rs_warp_pc              ),
+        .warp_act_mask_o    ( rs_warp_act_mask        )
     );
 
     // #######################################################################################
@@ -154,5 +150,17 @@ module fetcher #(
     // To instruction cache
     assign fe_pc_o       = arb_sel_data.pc;
     assign fe_act_mask_o = arb_sel_data.act_mask;
+
+    // ########################################################################################
+    // # Assertions                                                                           #
+    // ########################################################################################
+
+    `ifndef SYNTHESIS
+        for (genvar i = 0; i < NumWarps; i++) begin : gen_asserts
+            assert property (@(posedge clk_i) disable iff (!rst_ni)
+                (rs_warp_ready[i] |-> rs_warp_act_mask[i] != '0))
+            else $error("Warp is ready, but has no active threads");
+        end : gen_asserts
+    `endif
 
 endmodule : fetcher

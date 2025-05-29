@@ -5,20 +5,23 @@
 /// Testbench for Compute Unit
 module tb_compute_unit #(
     /// Number of inflight instructions per warp
-    parameter int unsigned InflightInstrPerWarp = 4,
+    parameter int unsigned InflightInstrPerWarp = 2,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
-    parameter int unsigned NumWarps = 4,
+    parameter int unsigned NumWarps = 1,
     /// Number of threads per warp
-    parameter int unsigned WarpWidth = 2,
+    parameter int unsigned WarpWidth = 1,
     /// Encoded instruction width
     parameter int unsigned EncInstWidth = 32,
     /// Wait buffer size per warp
-    parameter int unsigned WaitBufferSizePerWarp = 2,
+    parameter int unsigned WaitBufferSizePerWarp = 1,
 
+    parameter int unsigned NumBanks = 1,
+    parameter int unsigned NumOperandCollectors = 1,
     parameter int unsigned OperandsPerInst = 2,
     parameter int unsigned RegIdxWidth     = 8,
+    parameter int unsigned RegWidth       = 32,
 
     parameter int unsigned MemorySize = 32,
 
@@ -26,7 +29,7 @@ module tb_compute_unit #(
     parameter int unsigned MaxSimCycles = 1000
 );
     localparam time TCLKHALF = TclkPeriod / 2;
-    localparam int WidWidth = $clog2(NumWarps);
+    localparam int WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
     localparam int TagWidth = $clog2(InflightInstrPerWarp);
 
     typedef logic [     PcWidth-1:0] pc_t;
@@ -86,7 +89,11 @@ module tb_compute_unit #(
         .WarpWidth(WarpWidth),
         .EncInstWidth(EncInstWidth),
         .WaitBufferSizePerWarp(WaitBufferSizePerWarp),
-        .RegIdxWidth(RegIdxWidth)
+        .RegIdxWidth(RegIdxWidth),
+        .OperandsPerInst(OperandsPerInst),
+        .NumBanks(NumBanks),
+        .NumOperandCollectors(NumOperandCollectors),
+        .RegWidth(RegWidth)
     ) i_cu (
         .clk_i(clk),
         .rst_ni(rst_n),

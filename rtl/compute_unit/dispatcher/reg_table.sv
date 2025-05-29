@@ -58,7 +58,7 @@ module reg_table #(
     // ######################################################################
 
     // Space available if not all entries are valid
-    // -> in theory we could even accept a new one if an existing dst is overwritten/updated
+    // |-> in theory we could even accept a new one if an existing dst is overwritten/updated
     assign space_available_o = !(&table_valid_q);
 
     // Insert logic
@@ -77,7 +77,7 @@ module reg_table #(
             // First check operands
             for(int op = 0; op < OperandsPerInst; op++) begin : check_operand
                 operands_ready_o[op] = 1'b1;
-                // Check all entries, if valid and the destination is the same as the operand -> not ready
+                // Check all entries, if valid and the destination is the same as the operand |-> not ready
                 for(int entry = 0; entry < NumTags; entry++) begin : check_entry
                     if(table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]) begin
                         operands_ready_o[op] = 1'b0;
@@ -86,7 +86,7 @@ module reg_table #(
                     end
                 end : check_entry
 
-                // Check if operand is produced by the EUs in the same cycle -> then it is ready
+                // Check if operand is produced by the EUs in the same cycle |-> then it is ready
                 if(eu_valid_i && eu_tag_i == operands_tag_o[op]) begin
                     operands_ready_o[op] = 1'b1;
                 end
@@ -116,7 +116,7 @@ module reg_table #(
         end : insert_logic
 
         // Clear logic
-        // -> if the EU is valid, clear all entries with the same producer tag, as result is in register file
+        // |-> if the EU is valid, clear all entries with the same producer tag, as result is in register file
         if(eu_valid_i) begin : clear_entry
             for(int entry = 0; entry < NumTags; entry++) begin
                 if(table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin

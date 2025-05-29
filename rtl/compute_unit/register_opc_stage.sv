@@ -27,7 +27,7 @@ module register_opc_stage #(
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type         wid_t      = logic [            WidWidth-1:0],
     parameter type         reg_idx_t  = logic [         RegIdxWidth-1:0],
     parameter type         pc_t       = logic [             PcWidth-1:0],
@@ -70,16 +70,20 @@ module register_opc_stage #(
 
     localparam int unsigned TotalNumRegisters  = (NumWarps * 2**RegIdxWidth);
     localparam int unsigned RegistersPerBank   = TotalNumRegisters / NumBanks;
-    localparam int unsigned BankRegAddrWidth   = $clog2(RegistersPerBank);
+    localparam int unsigned BankRegAddrWidth   = RegistersPerBank > 1
+                                                    ? $clog2(RegistersPerBank) : 1;
     localparam int unsigned NumOPCRequestPorts = NumOperandCollectors * OperandsPerInst;
+    localparam int unsigned OpcTagWidth        = NumOPCRequestPorts > 1
+                                                    ? $clog2(NumOPCRequestPorts) : 1;
+    localparam int unsigned BankSelWidth       = NumBanks > 1 ? $clog2(NumBanks) : 1;
 
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
 
-    typedef logic [$clog2(NumOPCRequestPorts)-1:0] opc_tag_t;
-    typedef logic [          $clog2(NumBanks)-1:0] bank_sel_t;
-    typedef logic [          BankRegAddrWidth-1:0] bank_reg_addr_t;
+    typedef logic [     OpcTagWidth-1:0] opc_tag_t;
+    typedef logic [    BankSelWidth-1:0] bank_sel_t;
+    typedef logic [BankRegAddrWidth-1:0] bank_reg_addr_t;
 
     // Ready instruction from Operand Collector to Execution Unit
     typedef struct packed {
@@ -179,13 +183,13 @@ module register_opc_stage #(
         .clk_i  ( clk_i  ),
         .rst_ni ( rst_ni ),
 
-        // Request ports -> from Operand Collectors Read Request ports
+        // Request ports |-> from Operand Collectors Read Request ports
         .data_i ( opc_read_req_addr     ),
         .sel_i  ( opc_read_req_bank_sel ),
         .valid_i( opc_read_req_valid    ),
         .ready_o( opc_read_req_ready    ),
 
-        // Grant ports -> to Register Banks Read Ports
+        // Grant ports |-> to Register Banks Read Ports
         .data_o ( banks_read_req_addr  ),
         .idx_o  ( banks_read_req_tag   ),
         .valid_o( banks_read_req_valid ),
@@ -213,13 +217,13 @@ module register_opc_stage #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        // Request ports -> from Register Banks Read Ports
+        // Request ports |-> from Register Banks Read Ports
         .data_i ( banks_read_rsp_data  ),
         .sel_i  ( banks_read_rsp_tag   ),
         .valid_i( banks_read_rsp_valid ),
         .ready_o( banks_read_rsp_ready ),
 
-        // Grant ports -> to Operand Collectors
+        // Grant ports |-> to Operand Collectors
         .data_o ( opc_read_rsp_data  ),
         .valid_o( opc_read_rsp_valid ),
 
@@ -264,13 +268,13 @@ module register_opc_stage #(
         .clk_i  ( clk_i  ),
         .rst_ni ( rst_ni ),
 
-        // Request ports -> from Execution Units
+        // Request ports |-> from Execution Units
         .data_i ( eu_write_req          ),
         .sel_i  ( eu_write_req_bank_sel ),
         .valid_i( eu_valid_i            ),
         .ready_o( opc_to_eu_ready_o     ),
 
-        // Grant ports -> to Register Banks Write Ports
+        // Grant ports |-> to Register Banks Write Ports
         .data_o ( banks_write_req       ),
         .valid_o( banks_write_req_valid ),
         .ready_i( banks_write_req_ready ),
@@ -285,7 +289,7 @@ module register_opc_stage #(
     // # Register File Banks                                                                 #
     // #######################################################################################
 
-    // Register Banks are each RegWidth wide -> store a register for a full warp
+    // Register Banks are each RegWidth wide |-> store a register for a full warp
     for(genvar i = 0; i < NumBanks; i++) begin : gen_register_banks
         register_file_bank #(
             .DataWidth   ( RegWidth * WarpWidth  ),
@@ -408,15 +412,21 @@ module register_opc_stage #(
     // # Assertions                                                                          #
     // #######################################################################################
 
-    // Check that the number of registers is divisible by the number of banks
-    initial assert (TotalNumRegisters % NumBanks == 0) else
-        $error("TotalNumRegisters %% NumBanks != 0. This is not supported.");
+    `ifndef SYNTHESIS
+        // Check that the number of registers is divisible by the number of banks
+        initial assert (TotalNumRegisters % NumBanks == 0) else
+            $error("TotalNumRegisters %% NumBanks != 0. This is not supported.");
 
-    // Read Response Interconnect always has to be ready
-    for(genvar i = 0; i < NumBanks; i++) begin : gen_read_response_interconnect_assertions
-        assert property (@(posedge clk_i) disable iff (~rst_ni)
-            (banks_read_rsp_valid[i] -> banks_read_rsp_ready[i])) else
-            $error("Read Response Interconnect is not ready for bank %0d", i);
-    end : gen_read_response_interconnect_assertions
+        // Check that each bank has at least one register
+        initial assert (TotalNumRegisters >= NumBanks) else
+            $error("NumBanks is greater than the total number of registers.");
+
+        // Read Response Interconnect always has to be ready
+        for(genvar i = 0; i < NumBanks; i++) begin : gen_read_response_interconnect_assertions
+            assert property (@(posedge clk_i) disable iff (~rst_ni)
+                (banks_read_rsp_valid[i] |-> banks_read_rsp_ready[i])) else
+                $error("Read Response Interconnect is not ready for bank %0d", i);
+        end : gen_read_response_interconnect_assertions
+    `endif
 
 endmodule : register_opc_stage

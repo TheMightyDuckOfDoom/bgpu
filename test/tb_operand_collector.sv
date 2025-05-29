@@ -36,7 +36,7 @@ module tb_operand_collector #(
     // ########################################################################################
 
     localparam int unsigned TagWidth = $clog2(NumTags);
-    localparam int unsigned WidWidth = $clog2(NumWarps);
+    localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
 
     // ########################################################################################
     // # Type Definitions                                                                     #

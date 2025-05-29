@@ -31,7 +31,7 @@ module compute_unit #(
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth = $clog2(NumTags),
-    parameter int unsigned WidWidth = $clog2(NumWarps),
+    parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type reg_idx_t = logic [RegIdxWidth-1:0],
     parameter type iid_t = logic [WidWidth+TagWidth-1:0],
     parameter type pc_t = logic [PcWidth-1:0],

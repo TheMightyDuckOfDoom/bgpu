@@ -21,7 +21,7 @@ jobs:
       - name: Simulate
         run: make tb_compute_unit
 
-  # Testbenches for individual components
+  # Register File Bank Testbenches
   tb_register_file_bank_singleport:
     runs-on: self-hosted
     steps:
@@ -38,6 +38,7 @@ jobs:
       - name: Simulate
         run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b1"
 
+  # Operand Collector Testbench
   tb_operand_collector:
     runs-on: self-hosted
     steps:
@@ -46,6 +47,7 @@ jobs:
       - name: Simulate
         run: make tb_operand_collector
 
+  # Register Operand Collector Stage Testbenches
   tb_register_opc_stage:
     runs-on: self-hosted
     needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
@@ -55,4 +57,30 @@ jobs:
       - name: Simulate
         run: make tb_register_opc_stage
 
+  tb_register_opc_stage_single_bank:
+    runs-on: self-hosted
+    needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_register_opc_stage VERILATOR_ARGS="-GNumBanks=1"
+
+  tb_register_opc_stage_single_warp:
+    runs-on: self-hosted
+    needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_register_opc_stage VERILATOR_ARGS="-GNumWarps=1"
+
+  tb_register_opc_stage_single_warp_single_bank:
+    runs-on: self-hosted
+    needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_register_opc_stage VERILATOR_ARGS="-GNumWarps=1 -GNumBanks=1"
  

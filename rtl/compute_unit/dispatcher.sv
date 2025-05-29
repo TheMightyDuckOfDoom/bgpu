@@ -7,13 +7,13 @@
 // When a new instruction is decoded:
 // 1. Get a new tag from the tag_queue
 // 2. Check Register Table if operands are still in flight i.e a tag is assigned to them othwise is ready
-// 3. Mark the dst register as in flight -> being written by this instruction
+// 3. Mark the dst register as in flight |-> being written by this instruction
 
 // When all operands are ready:
 // 1. Remove from wait buffer
 
 // When instruction is done:
-// 1. Check wait buffer if any instruction is waiting on this result -> tag matches, mark as ready
+// 1. Check wait buffer if any instruction is waiting on this result |-> tag matches, mark as ready
 // 2. Update Register Table, clear tag for dst register
 module dispatcher #(
     /// Number of inflight instructions
@@ -42,10 +42,10 @@ module dispatcher #(
     input  logic clk_i,
     input  logic rst_ni,
 
-    /// From fetcher -> which warp gets fetched next
+    /// From fetcher |-> which warp gets fetched next
     input  logic fe_handshake_i,
 
-    /// To fetcher -> which warps have space for a new instruction?
+    /// To fetcher |-> which warps have space for a new instruction?
     output logic ib_space_available_o,
 
     /// From decoder
@@ -101,7 +101,7 @@ module dispatcher #(
 
     assign disp_ready_o = tag_available && wb_ready && reg_table_space_available;
 
-    // Insert new element -> if handshake happens
+    // Insert new element |-> if handshake happens
     assign insert = dec_valid_i && disp_ready_o;
 
     // #######################################################################################

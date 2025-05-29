@@ -16,7 +16,7 @@ module decoder #(
     parameter type dec_inst_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type         wid_t      = logic [    WidWidth-1:0],
     parameter type         pc_t       = logic [     PcWidth-1:0],
     parameter type         act_mask_t = logic [   WarpWidth-1:0],
@@ -38,7 +38,7 @@ module decoder #(
     output wid_t      dec_warp_id_o,
     output dec_inst_t dec_inst_o,
 
-    // To Fetcher -> tells it what the next PC is
+    // To Fetcher |-> tells it what the next PC is
     output logic dec_decoded_o,
     output logic dec_stop_warp_o,
     output wid_t dec_decoded_warp_id_o,

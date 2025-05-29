@@ -18,7 +18,7 @@ module dummy_reconvergence_stack #(
     parameter int unsigned WarpWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type         wid_t      = logic [ WidWidth-1:0],
     parameter type         pc_t       = logic [  PcWidth-1:0],
     parameter type         act_mask_t = logic [WarpWidth-1:0]
@@ -34,7 +34,7 @@ module dummy_reconvergence_stack #(
     output logic [NumWarps-1:0] warp_active_o,
     output logic [NumWarps-1:0] warp_stopped_o,
 
-    /// From decode stage -> is the instruction a branch or update normally to next instruction?
+    /// From decode stage |-> is the instruction a branch or update normally to next instruction?
     input logic instruction_decoded_i,
     input logic decode_stop_warp_i,
     input wid_t decode_wid_i,
@@ -80,23 +80,19 @@ module dummy_reconvergence_stack #(
             for(int i = 0; i < NumWarps; i++) begin
                 warp_data_d[i].active   = 1'b1;
                 warp_data_d[i].ready    = 1'b1;
-                warp_data_d[i].act_mask = i[WarpWidth-2:0]+'d1;
+                warp_data_d[i].act_mask = 1 << i;
             end
         end
 
         // Did we get an update from decode?
         if(instruction_decoded_i) begin : decode_update
-            `ifndef SYNTHESIS
-            assert(warp_data_q[decode_wid_i].active && !warp_data_q[decode_wid_i].ready
-                && !warp_data_q[decode_wid_i].stopped)
-            else $error("Warp was already ready, but got decoded");
-            `endif
+
             // Adjust the PC of the decoded warp
             warp_data_d[decode_wid_i].pc = decode_next_pc_i;
             // Mark the warp as ready
             warp_data_d[decode_wid_i].ready = 1'b1;
 
-            // If the warp is finished -> mark if as stopped
+            // If the warp is finished |-> mark if as stopped
             if(decode_stop_warp_i) begin
                 warp_data_d[decode_wid_i].stopped = 1'b1;
                 warp_data_d[decode_wid_i].active = 1'b0;
@@ -106,20 +102,10 @@ module dummy_reconvergence_stack #(
         end : decode_update
 
         for(int i = 0; i < NumWarps; i++) begin : select_update
-            `ifndef SYNTHESIS
-            assert(!instruction_decoded_i || (instruction_decoded_i
-                && warp_selected_i[decode_wid_i] == 1'b0))
-            else $error("Warp was selected for fetching, but just got decoded");
-            `endif
-
-            // If the warp is selected for fetching, mark it as not ready -> wait until decode stage
-            if(warp_selected_i[i]) begin
-                `ifndef SYNTHESIS
-                assert(warp_data_q[i].active && warp_data_q[i].ready && !warp_data_q[i].stopped)
-                else $error("Warp was not ready, but got selected for fetching");
-                `endif
+            // If the warp is selected for fetching, mark it as not ready |-> wait until decode stage
+            if(warp_selected_i[i])
                 warp_data_d[i].ready = 1'b0;
-            end
+
         end : select_update
     end : next_pc_ready_logic
 
@@ -148,15 +134,53 @@ module dummy_reconvergence_stack #(
     // # Asserts                                                                             #
     // #######################################################################################
 
-    // Check that a ready warp has at least one active thread -> otherwise we waste resources
     `ifndef SYNTHESIS
-    always_comb begin : check_ready_active
-        for(int i = 0; i < NumWarps; i++) begin
-            assert(!warp_ready_o[i] || (warp_ready_o[i] && warp_act_mask_o[i] != '0
-                && !warp_stopped_o[i]))
+        for (genvar i = 0; i < NumWarps; i++) begin : gen_asserts
+            // Check that a ready warp has at least one active thread |-> otherwise we waste resources
+            assert property (@(posedge clk_i) disable iff (!rst_ni)
+                (!warp_ready_o[i] || (warp_ready_o[i] && warp_act_mask_o[i] != '0
+                && !warp_stopped_o[i])))
             else $error("Warp is marked as ready, but no thread is active");
-        end
-    end : check_ready_active
+
+            assert property (@(posedge clk_i) disable iff (!rst_ni)
+                (warp_selected_i[i] |-> warp_data_q[i].active))
+            else $error("Warp was selected for fetching, but is not active: %0d", i);
+
+            assert property (@(posedge clk_i) disable iff (!rst_ni)
+                (warp_selected_i[i] |-> warp_data_q[i].ready && !warp_data_q[i].stopped
+                && (|warp_data_q[i].act_mask)))
+            else $error("Warp was selected for fetching, but is not ready: %0d", i);
+
+            assert property (@(posedge clk_i) disable iff (!rst_ni)
+                (warp_selected_i[i] |-> !warp_data_q[i].stopped && (|warp_data_q[i].act_mask)))
+            else $error("Warp was selected for fetching, but is stopped: %0d", i);
+
+            assert property (@(posedge clk_i) disable iff (!rst_ni)
+                (warp_selected_i[i] |-> |warp_data_q[i].act_mask))
+            else $error("Warp was selected for fetching, but active mask is zero: %0d", i);
+
+        end : gen_asserts
+
+        // A warp cannot be selected and be decoded at the same time
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            (instruction_decoded_i |-> !warp_selected_i[decode_wid_i]))
+        else $error("Warp was selected for fetching, but got decoded at the same time: %0d",
+            decode_wid_i);
+
+        // Check that a warp that was decoded is active
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            instruction_decoded_i |-> warp_data_q[decode_wid_i].active)
+        else $error("Warp was decoded, but is not active: %0d", decode_wid_i);
+
+        // Check that a warp that was decoded is not ready
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            instruction_decoded_i |-> !warp_data_q[decode_wid_i].ready)
+        else $error("Warp was decoded, but is ready: %0d", decode_wid_i);
+
+        // Check that a warp that was decoded is not stopped
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            instruction_decoded_i |-> !warp_data_q[decode_wid_i].stopped)
+        else $error("Warp was decoded, but is stopped: %0d", decode_wid_i);
     `endif
 
 endmodule : dummy_reconvergence_stack

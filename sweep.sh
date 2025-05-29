@@ -3,8 +3,8 @@
 # Solderpad Hardware License, Version 0.51, see LICENSE for details.
 # SPDX-License-Identifier: SHL-0.51
 
-NumWarps_range=(2 4 8 16)
-WaitBufferSizePerWarp_range=(2 4 8)
+NumWarps_range=(1 2 4 8 16)
+WaitBufferSizePerWarp_range=(1 2 4 8)
 
 for NumWarp in ${NumWarps_range[@]}
 do

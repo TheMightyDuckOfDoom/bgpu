@@ -29,10 +29,10 @@ module wait_buffer #(
     input  logic clk_i,
     input  logic rst_ni,
 
-    /// From fetcher -> which warp gets fetched next
+    /// From fetcher |-> which warp gets fetched next
     input  logic fe_handshake_i,
 
-    /// To fetcher -> space for a new instruction?
+    /// To fetcher |-> space for a new instruction?
     output logic ib_space_available_o,
 
     /// From decoder
@@ -46,7 +46,7 @@ module wait_buffer #(
     input  tag_t    [OperandsPerInst-1:0] dec_operand_tags_i,
     input  reg_idx_t[OperandsPerInst-1:0] dec_operands_i,
 
-    /// To Operand Collcector
+    /// To Operand Collector
     input  logic      opc_ready_i,
     output logic      disp_valid_o,
     output tag_t      disp_tag_o,
@@ -59,7 +59,8 @@ module wait_buffer #(
     input  logic eu_valid_i,
     input  tag_t eu_tag_i
 );
-    localparam int WaitBufferIndexWidth = $clog2(WaitBufferSizePerWarp);
+    localparam int WaitBufferIndexWidth
+        = WaitBufferSizePerWarp > 1 ? $clog2(WaitBufferSizePerWarp) : 1;
 
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -144,13 +145,7 @@ module wait_buffer #(
             wait_buffer_valid_d[entry] = wait_buffer_valid_q[entry];
 
             // Dispatch: Remove instruction from buffer
-            if(arb_gnt[entry]) begin
-                `ifndef SYNTHESIS
-                    assert(wait_buffer_valid_d[entry])
-                    else $error("Wait buffer entry is not valid but selected for dispatch");
-                    assert(&wait_buffer_d[entry].operands_ready)
-                    else $error("Wait buffer entry is not ready but selected for dispatch");
-                `endif
+            if(arb_gnt[entry] && rr_inst_ready[entry]) begin
                 wait_buffer_valid_d[entry] = 1'b0;
             end
             // From Execution Units
@@ -167,11 +162,6 @@ module wait_buffer #(
 
             // Insert instruction into buffer
             if(dec_valid_i && wb_ready_o && insert_idx == entry) begin
-                `ifndef SYNTHESIS
-                    assert(!wait_buffer_valid_q[entry])
-                    else $error("Wait buffer entry is already valid");
-                `endif
-
                 wait_buffer_valid_d[entry]          = 1'b1;
                 wait_buffer_d[entry].pc             = dec_pc_i;
                 wait_buffer_d[entry].act_mask       = dec_act_mask_i;
@@ -252,6 +242,24 @@ module wait_buffer #(
         assert property (@(posedge clk_i) disable iff(!rst_ni) disp_valid_o && opc_ready_i
             |-> |arb_gnt)
         else $error("No instruction selected for dispatch");
+
+        // Generate assertions for each wait buffer entry
+        for (genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_asserts
+            // Assert that the arbiter only grants valid instructions
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                arb_gnt[i] && rr_inst_ready[i] |-> wait_buffer_valid_q[i])
+            else $error("Arbiter granted an instruction that is not valid in the wait buffer");
+
+            // Operands have to be ready when the arbiter grants the instruction
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                arb_gnt[i] && rr_inst_ready[i] |-> &wait_buffer_q[i].operands_ready)
+            else $error("Arbiter granted an instruction that is not ready in the wait buffer");
+
+            // Assert that the wait buffer at the index is empty when the fetcher tries to insert an instruction
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                dec_valid_i && wb_ready_o |-> !wait_buffer_valid_q[insert_idx])
+            else $error("Insert index is already valid in the wait buffer");
+        end : gen_asserts
     `endif
 
 endmodule : wait_buffer

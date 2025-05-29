@@ -36,7 +36,7 @@ $(NETLIST) $(NETLIST_DEBUG):  $(SV_FLIST)
 	@mkdir -p $(YOSYS_TMP)
 	@mkdir -p $(YOSYS_REPORTS)
 	cd $(YOSYS_DIR) && \
-	SV_FLIST="$(SV_FLIST)" \
+	SV_FLIST="yosys.f" \
 	TOP_DESIGN="$(TOP_DESIGN)" \
 	PERIOD_PS="$(PERIOD_PS)" \
 	TMP="$(YOSYS_TMP)" \

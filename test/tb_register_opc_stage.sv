@@ -31,7 +31,7 @@ module tb_register_opc_stage #(
     /// How many Banks are in the register file
     parameter int unsigned NumBanks = 4,
     /// Width of a singled register
-    parameter int unsigned RegWidth = 32,
+    parameter int unsigned RegWidth = 32 / WarpWidth,
     /// Should the register file banks be dual port?
     parameter bit          DualPortRegisterBanks = 1'b0,
     /// Number of operand collectors
@@ -43,7 +43,8 @@ module tb_register_opc_stage #(
     // #######################################################################################
 
     localparam int unsigned TagWidth = $clog2(NumTags);
-    localparam int unsigned WidWidth = $clog2(NumWarps);
+    localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
+    localparam int unsigned NumRegistersPerWarp = 1 << RegIdxWidth;
 
     // #######################################################################################
     // # Type Definitions                                                                    #
@@ -55,6 +56,9 @@ module tb_register_opc_stage #(
     typedef logic [           WarpWidth-1:0] act_mask_t;
     typedef logic [RegWidth * WarpWidth-1:0] reg_data_t;
     typedef logic [   TagWidth+WidWidth-1:0] iid_t;
+
+    typedef reg_data_t [NumRegistersPerWarp-1:0] reg_per_warp_t;
+    typedef reg_per_warp_t [NumWarps-1:0] reg_file_t;
 
     typedef struct packed {
         iid_t      tag;
@@ -95,6 +99,9 @@ module tb_register_opc_stage #(
     // From Execution units
     logic opc_to_eu_ready, eu_valid;
     eu_rsp_t eu_rsp;
+
+    // Register file contents
+    reg_file_t reg_file;
 
     // #######################################################################################
     // # Clock generation                                                                    #
@@ -231,14 +238,18 @@ module tb_register_opc_stage #(
                 continue;
             end
 
-            if (opc_ready && disp_valid) begin
+            if (opc_ready && disp_valid && initialized) begin
                 // Add dispatch request to the queue
                 disp_requests.push_back(disp_req);
+                $display("Dispatch request added: Tag %0h, PC %0h, Active Mask %b, Dst %0d",
+                    disp_req.tag, disp_req.pc, disp_req.active_mask, disp_req.dst);
             end
 
-            if (opc_to_eu_ready && eu_valid) begin
+            if (opc_valid && eu_ready) begin
                 // Add to EU requests
                 eu_requests.push_back(eu_req);
+                $display("Execution Unit request added: Tag %0h, PC %0h, Active Mask %b, Dst %0d",
+                    eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.dst);
             end
 
             if (disp_requests.size() == 0 || eu_requests.size() == 0) begin
@@ -247,7 +258,6 @@ module tb_register_opc_stage #(
 
             // Get newest eu request
             eu   = eu_requests.pop_front();
-
 
             // Search for matching dispatch request
             found = 1'b0;
@@ -265,12 +275,14 @@ module tb_register_opc_stage #(
                         wid[WidWidth-1:0] = eu.tag[WidWidth-1:0];
                         reg_idx[RegIdxWidth-1:0] = disp.srcs[i];
 
-                        assert (eu.src_data[i][31:0] == reg_idx)
-                        else $error("Source data %0d for tag %0d does not match expected %0d!",
-                            eu.src_data[i][63:32], eu.tag, reg_idx);
-                        assert (eu.src_data[i][63:32] == wid)
-                        else $error("Source data %0d for tag %0d does not match expected %0d!",
-                            eu.src_data[i][31:0], eu.tag, wid);
+                        if (eu.src_data[i] != reg_file[wid][reg_idx]) begin
+                            $display("Mismatch in source data for operand %0d", i);
+                            $error("Expected: %0d, Got: %0d",
+                                reg_file[wid][reg_idx], eu.src_data[i]);
+                        end else begin
+                            $display("Source data for operand %0d: %0d == %0d", i,
+                                eu.src_data[i], reg_file[wid][reg_idx]);
+                        end
                     end
 
                     disp_requests.delete(i);
@@ -280,7 +292,7 @@ module tb_register_opc_stage #(
             end
 
             assert (found)
-            else $error("No matching dispatch request found for Execution Unit request tag %0d!",
+            else $error("No matching dispatch request found for Execution Unit request tag %0h!",
                 eu.tag);
         end
     end : check_disp_req_match
@@ -328,16 +340,17 @@ module tb_register_opc_stage #(
                 eu_valid = 1'b1;
                 eu_rsp.tag[WidWidth-1:0] = wid[WidWidth-1:0];
                 eu_rsp.dst               = reg_idx[RegIdxWidth-1:0];
-                eu_rsp.data[31:0]        = reg_idx;
-                eu_rsp.data[63:32]       = wid;
+
+                reg_file[wid][reg_idx]   = $urandom();
+                eu_rsp.data              = reg_file[wid][reg_idx];
                 @(posedge clk);
                 while(!opc_to_eu_ready) begin
                     @(posedge clk);
                 end
             end
         end
+        #ApplDelay;
         eu_valid    = 1'b0;
-        initialized = 1'b1;
         @(posedge clk);
 
         $display("Starting simulation!");
@@ -345,7 +358,9 @@ module tb_register_opc_stage #(
         while(cycles < MaxSimCycles && insts_sent_to_eu < InstsToComplete) begin
             // Wait for clock edge
             @(posedge clk);
-            #AcqDelay;
+            #ApplDelay;
+            initialized = 1'b1;
+            #(AcqDelay-ApplDelay);
             cycles++;
 
             // Instruction dispatch
@@ -397,8 +412,7 @@ module tb_register_opc_stage #(
                 $display("\tActive Mask: %b", eu_req.active_mask);
                 $display("\tDst reg: %0d", eu_req.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
-                    $display("\tSrc[%0d] data: %0d %0d", i, eu_req.src_data[i][63:32],
-                        eu_req.src_data[i][31:0]);
+                    $display("\tSrc[%0d] data: %0d", i, eu_req.src_data[i]);
                 end
             end
         end

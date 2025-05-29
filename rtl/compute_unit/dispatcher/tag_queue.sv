@@ -34,10 +34,6 @@ module tag_queue #(
 
         // Free
         if(free_i) begin
-            `ifndef SYNTHESIS
-                assert(tags_used_q[tag_i])
-                else $error("Tag %d not in tag queue", tag_i);
-            `endif
 
             tags_used_d[tag_i] = 1'b0;
         end
@@ -57,6 +53,9 @@ module tag_queue #(
     `FF(tags_used_q, tags_used_d, '0, clk_i, rst_ni);
 
     `ifndef SYNTHESIS
+        assert property (@(posedge clk_i) disable iff (!rst_ni) free_i |-> tags_used_q[tag_i])
+        else $error("Tag %d not in tag queue", tag_i);
+
         // Tags in flight queue
         logic [NumTags-1:0] inflight_queue_d, inflight_queue_q;
 
@@ -71,7 +70,7 @@ module tag_queue #(
         always_comb begin
             inflight_queue_d = inflight_queue_q;
 
-            // Read from queue -> add to inflight queue
+            // Read from queue |-> add to inflight queue
             if (get_i && valid_o) begin
                 // Check that the tag is not already in the queue
                 if(inflight_queue_q[tag_o])
@@ -80,7 +79,7 @@ module tag_queue #(
                 inflight_queue_d[tag_o] = 1'b1;
             end
 
-            // Write to queue -> remove from inflight queue
+            // Write to queue |-> remove from inflight queue
             if (free_i) begin
                 // Make sure that tag is in the queue
                 if(!inflight_queue_q[tag_i])

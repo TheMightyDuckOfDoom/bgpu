@@ -53,7 +53,7 @@ module register_file_bank #(
     data_t [NumPorts-1:0] mem_wdata;
     data_t [NumPorts-1:0] mem_rdata;
 
-    // Do we have a valid read -> output in next cycle?
+    // Do we have a valid read |-> output in next cycle?
     logic read_valid_d;
 
     // #######################################################################################
@@ -155,10 +155,12 @@ module register_file_bank #(
     // # Assertions                                                                          #
     // #######################################################################################
 
-    initial assert(NumPorts == 1 || NumPorts == 2)
-        else $error("Number of ports must be 1 or 2!");
+    `ifndef SYNTHESIS
+        initial assert(NumPorts == 1 || NumPorts == 2)
+            else $error("Number of ports must be 1 or 2!");
 
-    initial assert(DataWidth > 1)
-        else $error("Data width must be atleast one bit!");
+        initial assert(DataWidth > 0)
+            else $error("Data width must be atleast one bit!");
+    `endif
 
 endmodule : register_file_bank

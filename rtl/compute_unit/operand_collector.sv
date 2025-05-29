@@ -23,7 +23,7 @@ module operand_collector #(
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type         wid_t      = logic [            WidWidth-1:0],
     parameter type         reg_idx_t  = logic [         RegIdxWidth-1:0],
     parameter type         pc_t       = logic [             PcWidth-1:0],
@@ -100,7 +100,7 @@ module operand_collector #(
             operand_reg_idx_d  [i] = operand_reg_idx_q[i];
             operand_data_d     [i] = operand_data_q[i];
 
-            // Default Outputs -> make request
+            // Default Outputs |-> make request
             opc_read_req_valid_o  [i] = !operand_requested_q[i] && occupied_q;
             opc_read_req_wid_o    [i] = tag_q[WidWidth-1:0];
             opc_read_req_reg_idx_o[i] = operand_reg_idx_q[i];
@@ -118,7 +118,7 @@ module operand_collector #(
                 operand_data_d [i] = opc_read_rsp_data_i[i];
             end : receive_operand_data
 
-            // Insert new instruction -> Handshake
+            // Insert new instruction |-> Handshake
             if (disp_valid_i && opc_ready_o) begin : new_instruction
                 operand_requested_d[i] = 1'b0;
                 operand_ready_d    [i] = 1'b0;
@@ -136,7 +136,7 @@ module operand_collector #(
         act_mask_d = act_mask_q;
         dst_d      = dst_q;
 
-        // Insert new instruction -> Handshake
+        // Insert new instruction |-> Handshake
         if (disp_valid_i && opc_ready_o) begin : new_instruction
             occupied_d = 1'b1;
             tag_d      = disp_tag_i;
@@ -187,16 +187,17 @@ module operand_collector #(
     // ########################################################################################
 
     // Operands
-    for (genvar i = 0; i < OperandsPerInst; i++) begin : gen_operand_assertions
-        // Assert that we do not request an operand if we are not occupied
-        assert property (@(posedge clk_i) !occupied_q -> !opc_read_req_valid_o[i])
-            else $error("Operand %0d requested while not occupied", i);
+    `ifndef SYNTHESIS
+        for (genvar i = 0; i < OperandsPerInst; i++) begin : gen_operand_assertions
+            // Assert that we do not request an operand if we are not occupied
+            assert property (@(posedge clk_i) !occupied_q |-> !opc_read_req_valid_o[i])
+                else $error("Operand %0d requested while not occupied", i);
 
-        // Assert that we do not receive an operand if we are not occupied or have not requested it or are already ready
-        assert property (@(posedge clk_i) !occupied_q || !operand_requested_q[i]
-                                        || operand_ready_q[i] -> !opc_read_rsp_valid_i[i])
-            else $error("Operand %0d received while not occupied or not requested or ready", i);
-
-    end : gen_operand_assertions
+            // Assert that we do not receive an operand if we are not occupied or have not requested it or are already ready
+            assert property (@(posedge clk_i) !occupied_q || !operand_requested_q[i]
+                                            || operand_ready_q[i] |-> !opc_read_rsp_valid_i[i])
+                else $error("Operand %0d received while not occupied or not requested or ready", i);
+        end : gen_operand_assertions
+    `endif
 
 endmodule : operand_collector

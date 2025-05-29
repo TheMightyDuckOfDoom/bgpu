@@ -17,7 +17,7 @@ module dummy_instruction_cache #(
     parameter int unsigned EncInstWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned WidWidth   = $clog2(NumWarps),
+    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type         wid_t      = logic [    WidWidth-1:0],
     parameter type         pc_t       = logic [     PcWidth-1:0],
     parameter type         act_mask_t = logic [   WarpWidth-1:0],
@@ -56,13 +56,14 @@ module dummy_instruction_cache #(
 
     always_ff @(posedge clk_i) begin
         if (mem_write_i) begin
-            `ifndef SYNTHSIS
-                assert(mem_pc_i < MemorySize[PcWidth-1:0])
-                else $error("mem_pc_i larger than memory size!");
-            `endif
             inst_memory[mem_pc_i[$clog2(MemorySize)-1:0]] <= mem_inst_i;
         end
     end
+
+    `ifndef SYNTHESIS
+        assert property (@(posedge clk_i) mem_write_i |-> mem_pc_i < MemorySize[PcWidth-1:0])
+        else $error("mem_pc_i larger than memory size!");
+    `endif
 
     // #######################################################################################
     // # Outputs                                                                             #
