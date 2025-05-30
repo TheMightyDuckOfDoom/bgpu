@@ -15,7 +15,7 @@
 
 3. **Open-Source**: BGPU should run with open-source tools (simulator, assembler/compiler, synthesis/implementation).
 
-3. **FPGA Implementation**: BGPU should be able to run on a reasonably sized FPGAs with acceptable performance.
+3. **FPGA Implementation**: BGPU should be able to run on reasonably sized FPGAs with acceptable performance.
 
 ## Architecture
 

@@ -21,15 +21,14 @@ TOP_DESIGN		?= compute_unit
 PERIOD_PS		?= 10000
 
 # file containing include dirs, defines and paths to all source files
-SV_FLIST    	:= yosys/yosys.f
+SV_FLIST    	:= asic/yosys.f
 
 # path to the resulting netlists (debug preserves multibit signals)
 NETLIST			:= $(YOSYS_OUT)/$(TOP_DESIGN)_yosys.v
 NETLIST_DEBUG	:= $(YOSYS_OUT)/$(TOP_DESIGN)_debug_yosys.v
 
-
 ## Synthesize netlist using Yosys
-yosys: $(NETLIST)
+asic: $(NETLIST)
 
 $(NETLIST) $(NETLIST_DEBUG):  $(SV_FLIST)
 	@mkdir -p $(YOSYS_OUT)
@@ -46,12 +45,13 @@ $(NETLIST) $(NETLIST_DEBUG):  $(SV_FLIST)
 		2>&1 | TZ=UTC gawk '{ print strftime("[%Y-%m-%d %H:%M %Z]"), $$0 }' \
 		     | tee "$(YOSYS_DIR)/$(TOP_DESIGN).log" \
 		     | gawk -f $(YOSYS_DIR)/scripts/filter_output.awk;
-		
+	tail -n 128 $(YOSYS_REPORTS)/$(TOP_DESIGN)_area.rpt
 
-ys_clean:
+asic_clean:
 	rm -rf $(YOSYS_OUT)
 	rm -rf $(YOSYS_TMP)
 	rm -rf $(YOSYS_REPORTS) 
 	rm -f $(YOSYS_DIR)/$(TOP_DESIGN).log
+	rm -rf $(SV_FLIST)
 
-.PHONY: ys_clean yosys
+.PHONY: asic_clean asic

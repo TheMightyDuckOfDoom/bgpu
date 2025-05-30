@@ -2,5 +2,6 @@
     "editor.detectIndentation": false,
     "editor.insertSpaces": true,
     "editor.tabSize": 4,
-    "makefile.configureOnOpen": false
+    "makefile.configureOnOpen": false,
+    "systemverilog.excludeIndexing": ".bender/*"
 }

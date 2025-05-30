@@ -69,7 +69,7 @@ yosys write_verilog -norename -noexpr -attr2comment ${tmp_dir}/${top_design}_yos
 yosys memory_map
 yosys opt -fast
 
-yosys opt_dff -sat -nodffe -nosdff
+yosys opt_dff -nodffe -nosdff -sat
 yosys share
 yosys opt -full
 yosys clean -purge

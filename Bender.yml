@@ -47,3 +47,11 @@ sources:
           - test/tb_register_opc_stage.sv
 
           - test/tb_compute_unit.sv
+
+    - target: asic
+      files:
+          - asic/tc_sram.sv
+
+    - target: gowin
+      files:
+          - gowin/tc_sram.sv

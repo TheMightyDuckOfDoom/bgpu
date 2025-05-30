@@ -24,7 +24,7 @@ SRCS = $(wildcard rtl/**/*.sv)
 TB_SRCS = $($(BENDER) scripts flist -n )
 BENDER_DEPS:= Bender.lock Bender.yml
 
-.PHONY: lint xilinx clean tb_%
+.PHONY: lint asic xilinx gowin clean tb_%
 
 ####################################################################################################
 # Linting
@@ -77,33 +77,40 @@ tb_%: verilator/obj_dir/Vtb_%
 
 # Generate filelist for Vivado synthesis
 xilinx/vivado.f: $(BENDER_DEPS)
-	$(BENDER) script vivado > $@
+	$(BENDER) script vivado -t fpga -D SYNTHESIS > $@
 
 # Run Vivado synthesis
 xilinx: xilinx/vivado.f $(SRCS) xilinx/build.tcl xilinx/dummy_constraints.xdc xilinx/run.sh
 	time ./xilinx/run.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
 ####################################################################################################
-# Yosys Synthesis
+# ASIC Synthesis
 ####################################################################################################
 
 # Generate filelist for Yosys synthesis
-yosys/yosys.f: $(BENDER_DEPS)
-	$(BENDER) script flist-plus -DSYNTHESIS > yosys/yosys.f
+asic/yosys.f: $(BENDER_DEPS)
+	$(BENDER) script flist-plus -t asic -D SYNTHESIS > $@
 
 # Yosys Makefile
-include yosys/yosys.mk
+include asic/asic.mk
+
+####################################################################################################
+# Gowin Synthesis
+####################################################################################################
+
+gowin/gowin.f: $(BENDER_DEPS)
+	$(BENDER) script flist-plus -t gowin -D SYNTHESIS -t tech_cells_generic_exclude_tc_sram > $@
+
+gowin: gowin/gowin.f $(SRCS) gowin/build.tcl
+	echo "set top_design $(TOP)"  >  gowin/run.tcl
+	echo "source gowin/build.tcl" >> gowin/run.tcl
+	yosys -c gowin/run.tcl
 
 ####################################################################################################
 # Clean
 ####################################################################################################
 
-clean:
-	rm -f  yosys/*.f
-	rm -f  yosys/*.log
-	rm -rf yosys/out
-	rm -rf yosys/reports
-	rm -rf yosys/tmp
+clean: asic_clean
 	rm -f  verilator/*.f
 	rm -rf verilator/obj_dir
 	rm -f  xilinx/*.f
@@ -111,3 +118,5 @@ clean:
 	rm -rf xilinx/.Xil
 	rm -f  xilinx/*.log
 	rm -f  xilinx/*.jou
+	rm -f  gowin/*.f
+	rm -f  gowin/run.tcl
