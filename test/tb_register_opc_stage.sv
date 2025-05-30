@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu/instructions.svh"
+
 /// Testbench for Register Operand Collector Stage
 module tb_register_opc_stage #(
     // Simulation parameters
@@ -61,19 +63,21 @@ module tb_register_opc_stage #(
     typedef reg_per_warp_t [NumWarps-1:0] reg_file_t;
 
     typedef struct packed {
-        iid_t      tag;
-        pc_t       pc;
-        act_mask_t active_mask;
-        reg_idx_t  dst;
-        reg_idx_t [OperandsPerInst-1:0] srcs;
+        iid_t       tag;
+        pc_t        pc;
+        act_mask_t  active_mask;
+        bgpu_inst_t inst;
+        reg_idx_t   dst;
+        reg_idx_t   [OperandsPerInst-1:0] srcs;
     } disp_req_t;
 
     typedef struct packed {
-        iid_t      tag;
-        pc_t       pc;
-        act_mask_t active_mask;
-        reg_idx_t  dst;
-        reg_data_t [OperandsPerInst-1:0] src_data;
+        iid_t       tag;
+        pc_t        pc;
+        act_mask_t  active_mask;
+        bgpu_inst_t inst;
+        reg_idx_t   dst;
+        reg_data_t  [OperandsPerInst-1:0] src_data;
     } eu_req_t;
 
     typedef struct packed {
@@ -196,6 +200,7 @@ module tb_register_opc_stage #(
         .disp_tag_i     ( disp_req.tag              ),
         .disp_pc_i      ( disp_req.pc               ),
         .disp_act_mask_i( disp_req.active_mask      ),
+        .disp_inst_i    ( disp_req.inst             ),
         .disp_dst_i     ( disp_req.dst              ),
         .disp_src_i     ( disp_req.srcs             ),
 
@@ -205,6 +210,7 @@ module tb_register_opc_stage #(
         .opc_tag_o         ( eu_req.tag         ),
         .opc_pc_o          ( eu_req.pc          ),
         .opc_act_mask_o    ( eu_req.active_mask ),
+        .opc_inst_o        ( eu_req.inst        ),
         .opc_dst_o         ( eu_req.dst         ),
         .opc_operand_data_o( eu_req.src_data    ),
 
@@ -241,15 +247,15 @@ module tb_register_opc_stage #(
             if (opc_ready && disp_valid && initialized) begin
                 // Add dispatch request to the queue
                 disp_requests.push_back(disp_req);
-                $display("Dispatch request added: Tag %0h, PC %0h, Active Mask %b, Dst %0d",
-                    disp_req.tag, disp_req.pc, disp_req.active_mask, disp_req.dst);
+                $display("Dispatch request: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h",
+                    disp_req.tag, disp_req.pc, disp_req.active_mask, disp_req.dst, disp_req.inst);
             end
 
             if (opc_valid && eu_ready) begin
                 // Add to EU requests
                 eu_requests.push_back(eu_req);
-                $display("Execution Unit request added: Tag %0h, PC %0h, Active Mask %b, Dst %0d",
-                    eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.dst);
+                $display("EU request: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h",
+                    eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.dst, eu_req.inst);
             end
 
             if (disp_requests.size() == 0 || eu_requests.size() == 0) begin
@@ -266,7 +272,8 @@ module tb_register_opc_stage #(
                 if (disp.tag == eu.tag
                     && disp.pc == eu.pc
                     && disp.active_mask == eu.active_mask
-                    && disp.dst == eu.dst) begin
+                    && disp.dst == eu.dst
+                    && disp.inst == eu.inst) begin
 
                     for (int i = 0; i < OperandsPerInst; i++) begin
                         wid = 0;
@@ -370,6 +377,7 @@ module tb_register_opc_stage #(
                 $display("\tTag: %0h", disp_req.tag);
                 $display("\tPC: %0h", disp_req.pc);
                 $display("\tActive Mask: %b", disp_req.active_mask);
+                $display("\tInstruction: %0h", disp_req.inst);
                 $display("\tDst reg: %0d", disp_req.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     $display("\tSrc[%0d] reg: %0d", i, disp_req.srcs[i]);
@@ -410,6 +418,7 @@ module tb_register_opc_stage #(
                 $display("\tTag (wid): %0h", eu_req.tag[WidWidth-1:0]);
                 $display("\tPC: %0h", eu_req.pc);
                 $display("\tActive Mask: %b", eu_req.active_mask);
+                $display("\tInstruction: %0h", eu_req.inst);
                 $display("\tDst reg: %0d", eu_req.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     $display("\tSrc[%0d] data: %0d", i, eu_req.src_data[i]);

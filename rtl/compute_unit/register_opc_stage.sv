@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu/instructions.svh"
+
 /// Register and Operand Collector Stage
 module register_opc_stage #(
     /// Number of inflight instructions per warp
@@ -40,13 +42,14 @@ module register_opc_stage #(
     input  logic rst_ni,
 
     /// From Multi Warp Dispatcher
-    output logic      opc_ready_o,
-    input  logic      disp_valid_i,
-    input  iid_t      disp_tag_i,
-    input  pc_t       disp_pc_i,
-    input  act_mask_t disp_act_mask_i,
-    input  reg_idx_t  disp_dst_i,
-    input  reg_idx_t  [OperandsPerInst-1:0] disp_src_i,
+    output logic       opc_ready_o,
+    input  logic       disp_valid_i,
+    input  iid_t       disp_tag_i,
+    input  pc_t        disp_pc_i,
+    input  act_mask_t  disp_act_mask_i,
+    input  bgpu_inst_t disp_inst_i,
+    input  reg_idx_t   disp_dst_i,
+    input  reg_idx_t   [OperandsPerInst-1:0] disp_src_i,
 
     /// To Execution Units
     output logic       opc_valid_o,
@@ -54,6 +57,7 @@ module register_opc_stage #(
     output iid_t       opc_tag_o,
     output pc_t        opc_pc_o,
     output act_mask_t  opc_act_mask_o,
+    output bgpu_inst_t opc_inst_o,
     output reg_idx_t   opc_dst_o,
     output warp_data_t [OperandsPerInst-1:0] opc_operand_data_o,
 
@@ -87,16 +91,17 @@ module register_opc_stage #(
 
     // Ready instruction from Operand Collector to Execution Unit
     typedef struct packed {
-        iid_t      tag;          // Instruction ID
-        pc_t       pc;           // Program Counter
-        act_mask_t act_mask;     // Activation Mask
-        reg_idx_t  dst;          // Destination Register Index
-        warp_data_t     [OperandsPerInst-1:0] operands; // Operands Data
+        iid_t       tag;       // Instruction ID
+        pc_t        pc;        // Program Counter
+        act_mask_t  act_mask;  // Activation Mask
+        bgpu_inst_t inst;      // Instruction
+        reg_idx_t   dst;       // Destination Register Index
+        warp_data_t [OperandsPerInst-1:0] operands; // Operands Data
     } opc_inst_t;
 
     typedef struct packed {
         bank_reg_addr_t addr; // Address in the bank
-        warp_data_t          data; // Data to write
+        warp_data_t     data; // Data to write
     } bank_write_req_t;
 
     // #######################################################################################
@@ -108,10 +113,10 @@ module register_opc_stage #(
     logic [NumOperandCollectors-1:0] opc_insert_valid, opc_insert_ready;
 
     // Read Request
-    logic           [NumOPCRequestPorts-1:0] opc_read_req_valid;
-    logic           [NumOPCRequestPorts-1:0] opc_read_req_ready;
-    wid_t           [NumOPCRequestPorts-1:0] opc_read_req_wid;
-    reg_idx_t       [NumOPCRequestPorts-1:0] opc_read_req_reg_idx;
+    logic     [NumOPCRequestPorts-1:0] opc_read_req_valid;
+    logic     [NumOPCRequestPorts-1:0] opc_read_req_ready;
+    wid_t     [NumOPCRequestPorts-1:0] opc_read_req_wid;
+    reg_idx_t [NumOPCRequestPorts-1:0] opc_read_req_reg_idx;
 
     // Read WID+REG_IDX to Bank Selection and Register Address
     bank_sel_t      [NumOPCRequestPorts-1:0] opc_read_req_bank_sel;
@@ -143,10 +148,10 @@ module register_opc_stage #(
     opc_tag_t       [NumBanks-1:0] banks_read_req_tag;
 
     // Register Banks Read Response to Read Response Interconnect
-    logic           [NumBanks-1:0] banks_read_rsp_valid;
-    logic           [NumBanks-1:0] banks_read_rsp_ready;
-    opc_tag_t       [NumBanks-1:0] banks_read_rsp_tag;
-    warp_data_t          [NumBanks-1:0] banks_read_rsp_data;
+    logic       [NumBanks-1:0] banks_read_rsp_valid;
+    logic       [NumBanks-1:0] banks_read_rsp_ready;
+    opc_tag_t   [NumBanks-1:0] banks_read_rsp_tag;
+    warp_data_t [NumBanks-1:0] banks_read_rsp_data;
 
     // #######################################################################################
     // # Read Request Interconnect between Operand Collectors and Register Banks             #
@@ -357,6 +362,7 @@ module register_opc_stage #(
             .disp_tag_i     ( disp_tag_i          ),
             .disp_pc_i      ( disp_pc_i           ),
             .disp_act_mask_i( disp_act_mask_i     ),
+            .disp_inst_i    ( disp_inst_i         ),
             .disp_dst_i     ( disp_dst_i          ),
             .disp_src_i     ( disp_src_i          ),
 
@@ -376,6 +382,7 @@ module register_opc_stage #(
             .opc_tag_o         ( opc_eu_inst [i].tag      ),
             .opc_pc_o          ( opc_eu_inst [i].pc       ),
             .opc_act_mask_o    ( opc_eu_inst [i].act_mask ),
+            .opc_inst_o        ( opc_eu_inst [i].inst     ),
             .opc_dst_o         ( opc_eu_inst [i].dst      ),
             .opc_operand_data_o( opc_eu_inst [i].operands )
         );
@@ -405,6 +412,7 @@ module register_opc_stage #(
     assign opc_tag_o          = selected_opc_inst.tag;
     assign opc_pc_o           = selected_opc_inst.pc;
     assign opc_act_mask_o     = selected_opc_inst.act_mask;
+    assign opc_inst_o         = selected_opc_inst.inst;
     assign opc_dst_o          = selected_opc_inst.dst;
     assign opc_operand_data_o = selected_opc_inst.operands;
 

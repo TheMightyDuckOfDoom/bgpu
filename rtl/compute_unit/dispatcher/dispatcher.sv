@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu/instructions.svh"
+
 /// Dispatcher
 // Contains a WaitBuffer, RegTable and a tag_queue
 // When a new instruction is decoded:
@@ -29,8 +31,6 @@ module dispatcher #(
     /// How many operands each instruction can have
     parameter int unsigned OperandsPerInst = 2,
 
-    parameter type dec_inst_t = logic,
-
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth   = $clog2(NumTags),
     parameter type         tag_t      = logic [   TagWidth-1:0],
@@ -49,20 +49,23 @@ module dispatcher #(
     output logic ib_space_available_o,
 
     /// From decoder
-    output logic      disp_ready_o,
-    input  logic      dec_valid_i,
-    input  pc_t       dec_pc_i,
-    input  act_mask_t dec_act_mask_i,
-    input  dec_inst_t dec_inst_i,
+    output logic       disp_ready_o,
+    input  logic       dec_valid_i,
+    input  pc_t        dec_pc_i,
+    input  act_mask_t  dec_act_mask_i,
+    input  bgpu_inst_t dec_inst_i,
+    input  reg_idx_t   dec_dst_i,
+    input  reg_idx_t   [OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collector
-    input  logic      opc_ready_i,
-    output logic      disp_valid_o,
-    output tag_t      disp_tag_o,
-    output pc_t       disp_pc_o,
-    output act_mask_t disp_act_mask_o,
-    output reg_idx_t  disp_dst_o,
-    output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
+    input  logic       opc_ready_i,
+    output logic       disp_valid_o,
+    output tag_t       disp_tag_o,
+    output pc_t        disp_pc_o,
+    output act_mask_t  disp_act_mask_o,
+    output bgpu_inst_t disp_inst_o,
+    output reg_idx_t   disp_dst_o,
+    output reg_idx_t   [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
     input  logic eu_valid_i,
@@ -137,8 +140,8 @@ module dispatcher #(
         .space_available_o( reg_table_space_available ),
         .insert_i         ( insert                    ),
         .tag_i            ( dst_tag                   ),
-        .dst_reg_i        ( dec_inst_i.dst            ),
-        .operands_reg_i   ( dec_inst_i.src            ),
+        .dst_reg_i        ( dec_dst_i                 ),
+        .operands_reg_i   ( dec_operands_i            ),
 
         .operands_ready_o( operands_ready ),
         .operands_tag_o  ( operands_tag   ),
@@ -170,16 +173,18 @@ module dispatcher #(
         .dec_pc_i            ( dec_pc_i       ),
         .dec_act_mask_i      ( dec_act_mask_i ),
         .dec_tag_i           ( dst_tag        ),
-        .dec_dst_reg_i       ( dec_inst_i.dst ),
+        .dec_inst_i          ( dec_inst_i     ),
+        .dec_dst_reg_i       ( dec_dst_i      ),
         .dec_operands_ready_i( operands_ready ),
         .dec_operand_tags_i  ( operands_tag   ),
-        .dec_operands_i      ( dec_inst_i.src ),
+        .dec_operands_i      ( dec_operands_i ),
 
         .opc_ready_i     ( opc_ready_i     ),
         .disp_valid_o    ( disp_valid_o    ),
         .disp_tag_o      ( disp_tag_o      ),
         .disp_pc_o       ( disp_pc_o       ),
         .disp_act_mask_o ( disp_act_mask_o ),
+        .disp_inst_o     ( disp_inst_o     ),
         .disp_dst_o      ( disp_dst_o      ),
         .disp_operands_o ( disp_operands_o ),
 

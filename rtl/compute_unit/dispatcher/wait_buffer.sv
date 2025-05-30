@@ -2,6 +2,7 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu/instructions.svh"
 `include "common_cells/registers.svh"
 
 /// Wait Buffer
@@ -36,24 +37,26 @@ module wait_buffer #(
     output logic ib_space_available_o,
 
     /// From decoder
-    output logic      wb_ready_o,
-    input  logic      dec_valid_i,
-    input  pc_t       dec_pc_i,
-    input  act_mask_t dec_act_mask_i,
-    input  tag_t      dec_tag_i,
-    input  reg_idx_t  dec_dst_reg_i,
-    input  logic    [OperandsPerInst-1:0] dec_operands_ready_i,
-    input  tag_t    [OperandsPerInst-1:0] dec_operand_tags_i,
-    input  reg_idx_t[OperandsPerInst-1:0] dec_operands_i,
+    output logic       wb_ready_o,
+    input  logic       dec_valid_i,
+    input  pc_t        dec_pc_i,
+    input  act_mask_t  dec_act_mask_i,
+    input  tag_t       dec_tag_i,
+    input  reg_idx_t   dec_dst_reg_i,
+    input  bgpu_inst_t dec_inst_i,
+    input  logic       [OperandsPerInst-1:0] dec_operands_ready_i,
+    input  tag_t       [OperandsPerInst-1:0] dec_operand_tags_i,
+    input  reg_idx_t   [OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collector
-    input  logic      opc_ready_i,
-    output logic      disp_valid_o,
-    output tag_t      disp_tag_o,
-    output pc_t       disp_pc_o,
-    output act_mask_t disp_act_mask_o,
-    output reg_idx_t  disp_dst_o,
-    output reg_idx_t [OperandsPerInst-1:0] disp_operands_o,
+    input  logic       opc_ready_i,
+    output logic       disp_valid_o,
+    output tag_t       disp_tag_o,
+    output pc_t        disp_pc_o,
+    output act_mask_t  disp_act_mask_o,
+    output bgpu_inst_t disp_inst_o,
+    output reg_idx_t   disp_dst_o,
+    output reg_idx_t   [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
     input  logic eu_valid_i,
@@ -68,11 +71,11 @@ module wait_buffer #(
 
     // Entry in the wait buffer per instruction per warp
     typedef struct packed {
-        pc_t pc;
-        act_mask_t act_mask;
-
-        tag_t tag;
-        reg_idx_t dst_reg;
+        pc_t        pc;
+        act_mask_t  act_mask;
+        tag_t       tag;
+        bgpu_inst_t inst;
+        reg_idx_t   dst_reg;
 
         logic     [OperandsPerInst-1:0] operands_ready;
         tag_t     [OperandsPerInst-1:0] operand_tags;
@@ -80,22 +83,23 @@ module wait_buffer #(
     } wait_buffer_entry_t;
 
     typedef struct packed {
-        pc_t pc;
-        act_mask_t act_mask;
-        tag_t tag;
-        reg_idx_t dst_reg;
-        reg_idx_t [OperandsPerInst-1:0] operands_reg;
+        pc_t        pc;
+        act_mask_t  act_mask;
+        tag_t       tag;
+        bgpu_inst_t inst;
+        reg_idx_t   dst_reg;
+        reg_idx_t   [OperandsPerInst-1:0] operands_reg;
     } disp_data_t;
 
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
 
-    logic [WaitBufferSizePerWarp-1:0] wait_buffer_valid_q, wait_buffer_valid_d;
-    wait_buffer_entry_t [WaitBufferSizePerWarp-1:0] wait_buffer_q, wait_buffer_d;
+    logic               [WaitBufferSizePerWarp-1:0] wait_buffer_valid_q, wait_buffer_valid_d;
+    wait_buffer_entry_t [WaitBufferSizePerWarp-1:0] wait_buffer_q,       wait_buffer_d;
 
-    logic [WaitBufferSizePerWarp-1:0] rr_inst_ready;
-    logic [WaitBufferSizePerWarp-1:0] arb_gnt;
+    logic       [WaitBufferSizePerWarp-1:0] rr_inst_ready;
+    logic       [WaitBufferSizePerWarp-1:0] arb_gnt;
     disp_data_t [WaitBufferSizePerWarp-1:0] arb_in_data;
     disp_data_t arb_sel_data;
 
@@ -119,9 +123,9 @@ module wait_buffer #(
 
         .credit_left_o( ib_space_available_o ),
         // Not used
-        .credit_o     (),
-        .credit_crit_o(),
-        .credit_full_o()
+        .credit_o     ( /* NOT CONNECTED */ ),
+        .credit_crit_o( /* NOT CONNECTED */ ),
+        .credit_full_o( /* NOT CONNECTED */ )
     );
 
     // Wait buffer is ready if there is space available
@@ -168,6 +172,7 @@ module wait_buffer #(
                 wait_buffer_d[entry].operands_ready = dec_operands_ready_i;
                 wait_buffer_d[entry].operands       = dec_operands_i;
                 wait_buffer_d[entry].operand_tags   = dec_operand_tags_i;
+                wait_buffer_d[entry].inst           = dec_inst_i;
                 wait_buffer_d[entry].dst_reg        = dec_dst_reg_i;
                 wait_buffer_d[entry].tag            = dec_tag_i;
             end
@@ -181,6 +186,7 @@ module wait_buffer #(
         assign arb_in_data[entry].pc           = wait_buffer_q[entry].pc;
         assign arb_in_data[entry].act_mask     = wait_buffer_q[entry].act_mask;
         assign arb_in_data[entry].tag          = wait_buffer_q[entry].tag;
+        assign arb_in_data[entry].inst         = wait_buffer_q[entry].inst;
         assign arb_in_data[entry].dst_reg      = wait_buffer_q[entry].dst_reg;
         assign arb_in_data[entry].operands_reg = wait_buffer_q[entry].operands;
     end : gen_rr_inst_ready
@@ -215,6 +221,7 @@ module wait_buffer #(
     assign disp_pc_o       = arb_sel_data.pc;
     assign disp_act_mask_o = arb_sel_data.act_mask;
     assign disp_tag_o      = arb_sel_data.tag;
+    assign disp_inst_o     = arb_sel_data.inst;
     assign disp_dst_o      = arb_sel_data.dst_reg;
     assign disp_operands_o = arb_sel_data.operands_reg;
 

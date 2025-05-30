@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu/instructions.svh"
+
 /// Compute Unit
 module compute_unit #(
     /// Number of inflight instructions per warp
@@ -73,11 +75,6 @@ module compute_unit #(
     typedef logic [    WidWidth-1:0] wid_t;
     typedef logic [EncInstWidth-1:0] enc_inst_t;
 
-    typedef struct packed {
-        reg_idx_t dst;
-        reg_idx_t [OperandsPerInst-1:0] src;
-    } dec_inst_t;
-
     // Fetcher to Instruction Cache type
     typedef struct packed {
         pc_t pc;
@@ -98,7 +95,9 @@ module compute_unit #(
         pc_t pc;
         act_mask_t act_mask;
         wid_t warp_id;
-        dec_inst_t inst;
+        bgpu_inst_t inst;
+        reg_idx_t dst;
+        reg_idx_t [OperandsPerInst-1:0] operands;
     } dec_to_ib_data_t;
 
     // Multi Warp Dispatcher to Register Operand Collector Stage type
@@ -106,6 +105,7 @@ module compute_unit #(
         iid_t tag;
         pc_t pc;
         act_mask_t act_mask;
+        bgpu_inst_t inst;
         reg_idx_t dst;
         reg_idx_t [OperandsPerInst-1:0] operands;
     } disp_to_opc_data_t;
@@ -115,6 +115,7 @@ module compute_unit #(
         iid_t tag;
         pc_t pc;
         act_mask_t act_mask;
+        bgpu_inst_t inst;
         reg_idx_t dst;
         warp_data_t [OperandsPerInst-1:0] operands;
     } opc_to_eu_data_t;
@@ -274,11 +275,12 @@ module compute_unit #(
     // #######################################################################################
 
     decoder #(
-        .PcWidth     ( PcWidth      ),
-        .NumWarps    ( NumWarps     ),
-        .WarpWidth   ( WarpWidth    ),
-        .EncInstWidth( EncInstWidth ),
-        .dec_inst_t  ( dec_inst_t   )
+        .PcWidth        ( PcWidth         ),
+        .NumWarps       ( NumWarps        ),
+        .WarpWidth      ( WarpWidth       ),
+        .EncInstWidth   ( EncInstWidth    ),
+        .RegIdxWidth    ( RegIdxWidth     ),
+        .OperandsPerInst( OperandsPerInst )
     ) i_decoder (
         .dec_ready_o  ( dec_to_ic_ready_d         ),
         .ic_valid_i   ( ic_to_dec_valid_q         ),
@@ -293,6 +295,8 @@ module compute_unit #(
         .dec_act_mask_o( dec_to_ib_data_d.act_mask ),
         .dec_warp_id_o ( dec_to_ib_data_d.warp_id  ),
         .dec_inst_o    ( dec_to_ib_data_d.inst     ),
+        .dec_dst_o     ( dec_to_ib_data_d.dst      ),
+        .dec_operands_o( dec_to_ib_data_d.operands ),
 
         .dec_decoded_o         ( dec_to_fetch_decoded         ),
         .dec_stop_warp_o       ( dec_to_fetch_stop_warp       ),
@@ -332,8 +336,7 @@ module compute_unit #(
         .WarpWidth            ( WarpWidth             ),
         .WaitBufferSizePerWarp( WaitBufferSizePerWarp ),
         .RegIdxWidth          ( RegIdxWidth           ),
-        .OperandsPerInst      ( OperandsPerInst       ),
-        .dec_inst_t           ( dec_inst_t            )
+        .OperandsPerInst      ( OperandsPerInst       )
     ) i_warp_dispatcher (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
@@ -349,12 +352,15 @@ module compute_unit #(
         .dec_act_mask_i( dec_to_ib_data_q.act_mask ),
         .dec_warp_id_i ( dec_to_ib_data_q.warp_id  ),
         .dec_inst_i    ( dec_to_ib_data_q.inst     ),
+        .dec_dst_i     ( dec_to_ib_data_q.dst      ),
+        .dec_operands_i( dec_to_ib_data_q.operands ),
 
         .opc_ready_i    ( opc_to_disp_ready         ),
         .disp_valid_o   ( disp_to_opc_valid         ),
         .disp_tag_o     ( disp_to_opc_data.tag      ),
         .disp_pc_o      ( disp_to_opc_data.pc       ),
         .disp_act_mask_o( disp_to_opc_data.act_mask ),
+        .disp_inst_o    ( disp_to_opc_data.inst     ),
         .disp_dst_o     ( disp_to_opc_data.dst      ),
         .disp_operands_o( disp_to_opc_data.operands ),
 
@@ -386,6 +392,7 @@ module compute_unit #(
         .disp_tag_i     ( disp_to_opc_data.tag      ),
         .disp_pc_i      ( disp_to_opc_data.pc       ),
         .disp_act_mask_i( disp_to_opc_data.act_mask ),
+        .disp_inst_i    ( disp_to_opc_data.inst     ),
         .disp_dst_i     ( disp_to_opc_data.dst      ),
         .disp_src_i     ( disp_to_opc_data.operands ),
 
@@ -394,6 +401,7 @@ module compute_unit #(
         .opc_tag_o         ( opc_to_eu_data.tag      ),
         .opc_pc_o          ( opc_to_eu_data.pc       ),
         .opc_act_mask_o    ( opc_to_eu_data.act_mask ),
+        .opc_inst_o        ( opc_to_eu_data.inst     ),
         .opc_dst_o         ( opc_to_eu_data.dst      ),
         .opc_operand_data_o( opc_to_eu_data.operands ),
 
@@ -419,11 +427,12 @@ module compute_unit #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .eu_to_opc_ready_o   ( eu_to_opc_ready         ),
-        .opc_to_eu_valid_i   ( opc_to_eu_valid         ),
-        .opc_to_eu_tag_i     ( opc_to_eu_data.tag      ),
-        .opc_to_eu_dst_i     ( opc_to_eu_data.dst      ),
-        .opc_to_eu_operands_i( opc_to_eu_data.operands ),
+        .eu_to_opc_ready_o   ( eu_to_opc_ready             ),
+        .opc_to_eu_valid_i   ( opc_to_eu_valid             ),
+        .opc_to_eu_tag_i     ( opc_to_eu_data.tag          ),
+        .opc_to_eu_inst_sub_i( opc_to_eu_data.inst.subtype ),
+        .opc_to_eu_dst_i     ( opc_to_eu_data.dst          ),
+        .opc_to_eu_operands_i( opc_to_eu_data.operands     ),
 
         .rc_to_eu_ready_i( opc_to_eu_ready     ),
         .eu_to_rc_valid_o( eu_to_opc_valid     ),

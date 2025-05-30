@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu/instructions.svh"
+
 /// Testbench for Operand Collector
 module tb_operand_collector #(
     // Simulation parameters
@@ -50,11 +52,12 @@ module tb_operand_collector #(
     typedef logic [            WidWidth-1:0] wid_t;
 
     typedef struct packed {
-        iid_t      tag;
-        pc_t       pc;
-        act_mask_t act_mask;
-        reg_idx_t  dst;
-        reg_idx_t [OperandsPerInst-1:0] src;
+        iid_t       tag;
+        pc_t        pc;
+        act_mask_t  act_mask;
+        bgpu_inst_t inst;
+        reg_idx_t   dst;
+        reg_idx_t   [OperandsPerInst-1:0] src;
 
         data_t [OperandsPerInst-1:0] data;
     } insert_inst_t;
@@ -70,11 +73,12 @@ module tb_operand_collector #(
     } read_rsp_t;
 
     typedef struct packed {
-        iid_t      tag;
-        pc_t       pc;
-        act_mask_t act_mask;
-        reg_idx_t  dst;
-        data_t     [OperandsPerInst-1:0] data;
+        iid_t       tag;
+        pc_t        pc;
+        act_mask_t  act_mask;
+        bgpu_inst_t inst;
+        reg_idx_t   dst;
+        data_t      [OperandsPerInst-1:0] data;
     } eu_inst_t;
 
     // ########################################################################################
@@ -210,6 +214,7 @@ module tb_operand_collector #(
         .disp_tag_i     ( insert_inst_req.tag      ),
         .disp_pc_i      ( insert_inst_req.pc       ),
         .disp_act_mask_i( insert_inst_req.act_mask ),
+        .disp_inst_i    ( insert_inst_req.inst     ),
         .disp_dst_i     ( insert_inst_req.dst      ),
         .disp_src_i     ( insert_inst_req.src      ),
 
@@ -229,6 +234,7 @@ module tb_operand_collector #(
         .opc_tag_o          ( opc_inst.tag      ),
         .opc_pc_o           ( opc_inst.pc       ),
         .opc_act_mask_o     ( opc_inst.act_mask ),
+        .opc_inst_o         ( opc_inst.inst     ),
         .opc_dst_o          ( opc_inst.dst      ),
         .opc_operand_data_o ( opc_inst.data     )
     );
@@ -259,6 +265,7 @@ module tb_operand_collector #(
                 $display("  Tag: %0h", inserted_inst_q.tag);
                 $display("  PC: %0h", inserted_inst_q.pc);
                 $display("  Activate Mask: %0h", inserted_inst_q.act_mask);
+                $display("  Instruction: %0h", inserted_inst_q.inst);
                 $display("  Destination Register: %0h", inserted_inst_q.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     $display("  Source Register %0d: %0h Data: %0h",
@@ -285,8 +292,9 @@ module tb_operand_collector #(
             // Execution unit handshake
             if (opc_valid && eu_ready) begin
                 completed_insts++;
-                $display("Cycle %0d: Completed inst with tag %0h, pc %0h, act_mask %0h, dst %0h",
-                         cycles, opc_inst.tag, opc_inst.pc, opc_inst.act_mask, opc_inst.dst);
+                $display("Cycle %0d:", cycles);
+                $display("  Completed inst with tag %0h, pc %0h, act_mask %0h, dst %0h inst %0h",
+                         opc_inst.tag, opc_inst.pc, opc_inst.act_mask, opc_inst.dst, opc_inst.inst);
                 assert (opc_inst.tag == inserted_inst_q.tag)
                 else $error("Instruction tag mismatch: expected %0h, got %0h",
                             inserted_inst_q.tag, opc_inst.tag);
@@ -296,6 +304,9 @@ module tb_operand_collector #(
                 assert (opc_inst.act_mask == inserted_inst_q.act_mask)
                 else $error("Instruction activate mask mismatch: expected %0h, got %0h",
                             inserted_inst_q.act_mask, opc_inst.act_mask);
+                assert (opc_inst.inst == inserted_inst_q.inst)
+                else $error("Instruction opcode mismatch: expected %0h, got %0h",
+                            inserted_inst_q.inst, opc_inst.inst);
                 assert (opc_inst.dst == inserted_inst_q.dst)
                 else $error("Instruction destination register mismatch: expected %0h, got %0h",
                             inserted_inst_q.dst, opc_inst.dst);

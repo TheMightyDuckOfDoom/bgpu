@@ -10,6 +10,9 @@ package:
 dependencies:
     common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.37.0 }
 
+export_include_dirs:
+  - rtl/include
+
 sources:
     - rtl/compute_unit/dummy_reconvergence_stack.sv
     - rtl/compute_unit/fetcher.sv

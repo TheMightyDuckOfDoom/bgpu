@@ -2,6 +2,7 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu/instructions.svh"
 `include "common_cells/registers.svh"
 
 /// Operand Collector
@@ -36,13 +37,14 @@ module operand_collector #(
     input  logic rst_ni,
 
     /// From Multi Warp Dispatcher
-    output logic      opc_ready_o,
-    input  logic      disp_valid_i,
-    input  iid_t      disp_tag_i,
-    input  pc_t       disp_pc_i,
-    input  act_mask_t disp_act_mask_i,
-    input  reg_idx_t  disp_dst_i,
-    input  reg_idx_t  [OperandsPerInst-1:0] disp_src_i,
+    output logic       opc_ready_o,
+    input  logic       disp_valid_i,
+    input  iid_t       disp_tag_i,
+    input  pc_t        disp_pc_i,
+    input  act_mask_t  disp_act_mask_i,
+    input  bgpu_inst_t disp_inst_i,
+    input  reg_idx_t   disp_dst_i,
+    input  reg_idx_t   [OperandsPerInst-1:0] disp_src_i,
 
     /// To Register File
     output logic     [OperandsPerInst-1:0] opc_read_req_valid_o,
@@ -61,6 +63,7 @@ module operand_collector #(
     output iid_t       opc_tag_o,
     output pc_t        opc_pc_o,
     output act_mask_t  opc_act_mask_o,
+    output bgpu_inst_t opc_inst_o,
     output reg_idx_t   opc_dst_o,
     output warp_data_t [OperandsPerInst-1:0] opc_operand_data_o
 );
@@ -76,6 +79,8 @@ module operand_collector #(
     pc_t pc_q, pc_d;
     // Instruction Activate Mask
     act_mask_t act_mask_q, act_mask_d;
+    // Instruction
+    bgpu_inst_t inst_q, inst_d;
     // Instruction Destination Register Index
     reg_idx_t dst_q, dst_d;
     // Have we already sent a request for the operands?
@@ -134,6 +139,7 @@ module operand_collector #(
         tag_d      = tag_q;
         pc_d       = pc_q;
         act_mask_d = act_mask_q;
+        inst_d     = inst_q;
         dst_d      = dst_q;
 
         // Insert new instruction |-> Handshake
@@ -142,6 +148,7 @@ module operand_collector #(
             tag_d      = disp_tag_i;
             pc_d       = disp_pc_i;
             act_mask_d = disp_act_mask_i;
+            inst_d     = disp_inst_i;
             dst_d      = disp_dst_i;
         end : new_instruction
 
@@ -160,6 +167,7 @@ module operand_collector #(
     assign opc_tag_o          = tag_q;
     assign opc_pc_o           = pc_q;
     assign opc_act_mask_o     = act_mask_q;
+    assign opc_inst_o         = inst_q;
     assign opc_dst_o          = dst_q;
     assign opc_operand_data_o = operand_data_q;
 
@@ -172,6 +180,7 @@ module operand_collector #(
     `FF(tag_q,      tag_d,      '0, clk_i, rst_ni);
     `FF(pc_q,       pc_d,       '0, clk_i, rst_ni);
     `FF(act_mask_q, act_mask_d, '0, clk_i, rst_ni);
+    `FF(inst_q,     inst_d,     '0, clk_i, rst_ni);
     `FF(dst_q,      dst_d,      '0, clk_i, rst_ni);
 
     // Operands
