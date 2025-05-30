@@ -33,7 +33,7 @@ module tb_register_opc_stage #(
     /// How many Banks are in the register file
     parameter int unsigned NumBanks = 4,
     /// Width of a singled register
-    parameter int unsigned RegWidth = 32 / WarpWidth,
+    parameter int unsigned RegWidth = OperandsPerInst * RegIdxWidth,
     /// Should the register file banks be dual port?
     parameter bit          DualPortRegisterBanks = 1'b0,
     /// Number of operand collectors
@@ -249,15 +249,15 @@ module tb_register_opc_stage #(
             if (opc_ready && disp_valid && initialized) begin
                 // Add dispatch request to the queue
                 disp_requests.push_back(disp_req);
-                $display("Dispatch request: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h",
-                    disp_req.tag, disp_req.pc, disp_req.active_mask, disp_req.dst, disp_req.inst);
+                $display("Dispatch request: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h, Srcs Required %b",
+                    disp_req.tag, disp_req.pc, disp_req.active_mask, disp_req.dst, disp_req.inst, disp_req.srcs_required);
             end
 
             if (opc_valid && eu_ready) begin
                 // Add to EU requests
                 eu_requests.push_back(eu_req);
-                $display("EU request: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h",
-                    eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.dst, eu_req.inst);
+                $display("EU request: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h, Src Data %h",
+                    eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.dst, eu_req.inst, eu_req.src_data);
             end
 
             if (disp_requests.size() == 0 || eu_requests.size() == 0) begin
@@ -265,7 +265,7 @@ module tb_register_opc_stage #(
             end
 
             // Get newest eu request
-            eu   = eu_requests.pop_front();
+            eu = eu_requests.pop_front();
 
             // Search for matching dispatch request
             found = 1'b0;
@@ -285,7 +285,9 @@ module tb_register_opc_stage #(
                         wid = 0;
                         reg_idx = 0;
 
-                        wid[WidWidth-1:0] = eu.tag[WidWidth-1:0];
+                        if (NumWarps > 1)
+                            wid[WidWidth-1:0] = eu.tag[WidWidth-1:0];
+
                         reg_idx[RegIdxWidth-1:0] = disp.srcs[i];
 
                         if (eu.src_data[i] != reg_file[wid][reg_idx]) begin
@@ -309,6 +311,30 @@ module tb_register_opc_stage #(
                 eu.tag);
         end
     end : check_disp_req_match
+
+    function static reg_data_t randomize_ram_data();
+        int unsigned rand_data;
+        reg_data_t data_o;
+
+        if (RegWidth * WarpWidth <= 32) begin
+            // If the data width is less than or equal to 32 bits, randomize the entire data_o.
+            rand_data = $urandom;
+            /* verilator lint_off SELRANGE */
+            data_o = rand_data[RegWidth * WarpWidth - 1:0];
+            /* verilator lint_on SELRANGE */
+        end else begin
+            /* verilator lint_off UNSIGNED */
+            for (int i = 0; i <= (RegWidth * WarpWidth + RegWidth * WarpWidth / 2) / 32; i++) begin
+            /* verilator lint_on UNSIGNED */
+                rand_data = $urandom;
+                /* verilator lint_off SELRANGE */
+                data_o[i*32+:32] = rand_data;
+                /* verilator lint_on SELRANGE */
+            end
+        end
+
+        return data_o;
+    endfunction
 
     initial begin : simulation_logic
         int unsigned cycles, dispatched_insts, insts_sent_to_eu;
@@ -354,7 +380,7 @@ module tb_register_opc_stage #(
                 eu_rsp.tag[WidWidth-1:0] = wid[WidWidth-1:0];
                 eu_rsp.dst               = reg_idx[RegIdxWidth-1:0];
 
-                reg_file[wid][reg_idx]   = $urandom();
+                reg_file[wid][reg_idx]   = randomize_ram_data();
                 eu_rsp.data              = reg_file[wid][reg_idx];
                 @(posedge clk);
                 while(!opc_to_eu_ready) begin
