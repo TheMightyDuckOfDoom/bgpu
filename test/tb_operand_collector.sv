@@ -24,13 +24,13 @@ module tb_operand_collector #(
     /// Number of warps per compute unit
     parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
-    parameter int unsigned WarpWidth = 8,
+    parameter int unsigned WarpWidth = 4,
     /// How many registers can each warp access as operand or destination
-    parameter int unsigned RegIdxWidth = 6,
+    parameter int unsigned RegIdxWidth = 8,
     /// How many operands each instruction can have
     parameter int unsigned OperandsPerInst = 3,
     /// Width of a singled register
-    parameter int unsigned RegWidth = 4
+    parameter int unsigned RegWidth = OperandsPerInst * RegIdxWidth
 ) ();
 
     // ########################################################################################
@@ -246,6 +246,7 @@ module tb_operand_collector #(
 
     initial begin : simulation_logic
         int unsigned cycles, inserted_insts, completed_insts, num_read_reqs, num_expected_reqs;
+        data_t expected_data;
 
         cycles            = 0;
         inserted_insts    = 0;
@@ -270,8 +271,9 @@ module tb_operand_collector #(
                 $display("  Instruction: %0h", inserted_inst_q.inst);
                 $display("  Destination Register: %0h", inserted_inst_q.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
-                    $display("  Source Register %0d: %0h Data: %0h",
-                             i, inserted_inst_q.src[i], inserted_inst_q.data[i]);
+                    $display("  Source Register %0d: req %0b reg %0h Data: %0h",
+                             i, insert_inst_req.src_required[i], inserted_inst_q.src[i],
+                             inserted_inst_q.data[i]);
                 end
             end
 
@@ -323,10 +325,19 @@ module tb_operand_collector #(
                             inserted_inst_q.dst, opc_inst.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     $display("  Operand %0d: Data %0h", i, opc_inst.data[i]);
-                    assert (!inserted_inst_q.src_required[i]
-                        || opc_inst.data[i] == inserted_inst_q.data[i])
+                    expected_data = '0;
+                    if (inserted_inst_q.src_required[i]) begin
+                        expected_data = inserted_inst_q.data[i];
+                    end else begin
+                        for (int j = 0; j < WarpWidth; j++) begin
+                            expected_data[j*RegWidth + i * RegIdxWidth +: RegIdxWidth]
+                                = inserted_inst_q.src[i];
+                        end
+                    end
+
+                    assert (opc_inst.data[i] == expected_data)
                     else $error("Instruction operand %0d data mismatch: expected %0h, got %0h",
-                                i, inserted_inst_q.data[i], opc_inst.data[i]);
+                                i, expected_data, opc_inst.data[i]);
                 end
             end
         end

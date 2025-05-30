@@ -140,6 +140,14 @@ module operand_collector #(
                 operand_d[i].ready     = !disp_src_required_i[i];
                 if (disp_src_required_i[i])
                     operand_d[i].reg_idx = disp_src_i[i];
+                else begin : operands_not_required
+                    // Store register index of operands in the data
+                    operand_d[i].data = '0;
+                    for(int j = 0; j < WarpWidth; j++) begin
+                        operand_d[i].data[j*RegWidth + i*RegIdxWidth +: RegIdxWidth]
+                            = disp_src_i[i];
+                    end
+                end : operands_not_required
             end : new_instruction
         end : operand_request_logic
     end : gen_operand_request
@@ -215,6 +223,10 @@ module operand_collector #(
                                             || operand_q[i].ready |-> !opc_read_rsp_valid_i[i])
                 else $error("Operand %0d received while not occupied or not requested or ready", i);
         end : gen_operand_assertions
+
+        initial assert (OperandsPerInst * RegIdxWidth <= RegWidth)
+            else $error("OperandsPerInst * RegIdxWidth (%0d) must be <= RegWidth (%0d)",
+                        OperandsPerInst * RegIdxWidth, RegWidth);
     `endif
 
 endmodule : operand_collector

@@ -44,4 +44,4 @@ sources:
           - test/tb_operand_collector.sv
           - test/tb_register_opc_stage.sv
 
-          # - test/tb_compute_unit.sv
+          - test/tb_compute_unit.sv

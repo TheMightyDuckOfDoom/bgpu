@@ -48,8 +48,8 @@ module integer_unit #(
     typedef reg_data_t [WarpWidth-1:0] reg_data_per_thread_t;
 
     typedef struct packed {
-        iid_t      tag;
-        reg_idx_t  dst;
+        iid_t       tag;
+        reg_idx_t   dst;
         warp_data_t data;
     } eu_to_opc_t;
 
@@ -77,7 +77,13 @@ module integer_unit #(
             case (opc_to_eu_inst_sub_i)
                 IU_ADD:  result[i] = operands[0][i] + operands[1][i];
                 IU_TID:  result[i] = i; // Thread ID
-                default: result[i] = '0; // Default case, should not happen
+                IU_LDI:  result[i] = operands[0][i] | operands[1][i]; // Load immediate
+                default: begin
+                    result[i] = '0; // Default case, should not happen
+                    `ifndef SYNTHESIS
+                        $fatal("Instruction subtype not implemented: %0h", opc_to_eu_inst_sub_i);
+                    `endif
+                end
             endcase
         end : calc_result
     end : gen_result
@@ -121,7 +127,7 @@ module integer_unit #(
     `ifndef SYNTHESIS
         assert property (@(posedge clk_i) disable iff (!rst_ni)
             opc_to_eu_valid_i |-> opc_to_eu_inst_sub_i inside `BGPU_INT_UNIT_VALID_SUBTYPES)
-            else $fatal("Invalid instruction subtype: %0h", opc_to_eu_inst_sub_i);
+            else $error("Invalid instruction subtype: %0h", opc_to_eu_inst_sub_i);
     `endif
 
 endmodule : integer_unit

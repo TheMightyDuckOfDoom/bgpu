@@ -70,13 +70,14 @@ module decoder #(
         // Default
         dec_valid_o       = ic_valid_i && !dec_stop_warp_o;
         dec_inst_o        = bgpu_inst_t'(ic_inst_i[31:24]);
-        dec_dst_o         = ic_inst_i[ 7: 0];
+        dec_dst_o         = ic_inst_i[23:16];
 
         dec_operands_required_o =
-            dec_inst_o.eu == BGPU_INST_TYPE_IU && dec_inst_o.subtype == IU_TID ? '0 : '1;
+            dec_inst_o.eu == BGPU_INST_TYPE_IU && (dec_inst_o.subtype inside {IU_TID, IU_LDI}) ? '0
+                : '1;
 
-        dec_operands_o[0] = ic_inst_i[15: 8];
-        dec_operands_o[1] = ic_inst_i[23:16];
+        dec_operands_o[0] = ic_inst_i[15:8];
+        dec_operands_o[1] = ic_inst_i[7:0];
     end
 
     `ifndef SYNTHESIS

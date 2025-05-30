@@ -10,8 +10,9 @@ typedef enum logic [1:0] {
 } bgpu_eu_e;
 
 typedef enum logic [5:0] {
-    IU_ADD = 'h00,
-    IU_TID = 'h01
+    IU_ADD = 'h00, // Add operands
+    IU_TID = 'h01, // Get thread ID inside a warp
+    IU_LDI = 'h02  // Load immediate -> concatenate operands register index
 } bgpu_inst_subtype_e;
 
 typedef struct packed {
@@ -22,7 +23,8 @@ typedef struct packed {
 `ifndef SYNTHESIS
     `define BGPU_INT_UNIT_VALID_SUBTYPES {\
         IU_ADD,\
-        IU_TID\
+        IU_TID,\
+        IU_LDI\
     }
 `endif
 

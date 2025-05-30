@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu/instructions.svh"
+
 /// Testbench for Compute Unit
 module tb_compute_unit #(
     /// Number of inflight instructions per warp
@@ -9,21 +11,17 @@ module tb_compute_unit #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
-    parameter int unsigned NumWarps = 1,
+    parameter int unsigned NumWarps = 4,
     /// Number of threads per warp
-    parameter int unsigned WarpWidth = 1,
-    /// Encoded instruction width
-    parameter int unsigned EncInstWidth = 32,
+    parameter int unsigned WarpWidth = 4,
     /// Wait buffer size per warp
     parameter int unsigned WaitBufferSizePerWarp = 1,
 
-    parameter int unsigned NumBanks = 1,
-    parameter int unsigned NumOperandCollectors = 1,
+    parameter int unsigned NumBanks = 4,
+    parameter int unsigned NumOperandCollectors = 6,
     parameter int unsigned OperandsPerInst = 2,
     parameter int unsigned RegIdxWidth     = 8,
-    parameter int unsigned RegWidth       = 32,
-
-    parameter int unsigned MemorySize = 32,
+    parameter int unsigned RegWidth       = 16,
 
     parameter time         TclkPeriod   = 10ns,
     parameter int unsigned MaxSimCycles = 1000
@@ -34,9 +32,26 @@ module tb_compute_unit #(
 
     typedef logic [     PcWidth-1:0] pc_t;
     typedef logic [   WarpWidth-1:0] act_mask_t;
-    typedef logic [EncInstWidth-1:0] enc_inst_t;
     typedef logic [ RegIdxWidth-1:0] reg_idx_t;
     typedef logic [WidWidth+TagWidth-1:0] iid_t;
+
+    typedef struct packed {
+        bgpu_eu_e eu;
+        bgpu_inst_subtype_e subtype;
+        reg_idx_t dst;
+        reg_idx_t op1;
+        reg_idx_t op2;
+    } enc_inst_t;
+
+    enc_inst_t test_program [7] = {
+        '{eu: BGPU_INST_TYPE_IU, subtype: IU_TID, dst: 0, op1: 0, op2: 0},
+        '{eu: BGPU_INST_TYPE_IU, subtype: IU_LDI, dst: 1, op1: 1, op2: 1},
+        '{eu: BGPU_INST_TYPE_IU, subtype: IU_LDI, dst: 2, op1: 2, op2: 2},
+        '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 3, op1: 1, op2: 2},
+        '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0},
+        '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0},
+        '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0}
+    };
 
     logic initialized, stop;
     logic clk, rst_n, set_ready_status;
@@ -71,23 +86,14 @@ module tb_compute_unit #(
     pc_t ic_write_pc;
     enc_inst_t ic_write_inst;
 
-    logic opc_ready, disp_valid;
-    iid_t disp_tag;
-    pc_t  disp_pc;
-    act_mask_t disp_act_mask;
-    reg_idx_t disp_dst;
-    reg_idx_t [OperandsPerInst-1:0] disp_operands;
-
-    logic eu_valid, eu_valid_q, eu_valid_q2;
-    iid_t eu_tag, eu_tag_q, eu_tag_q2;
-
     // Instantiate Compute Unit
+    /* verilator lint_off PINMISSING */
     compute_unit #(
         .NumTags(InflightInstrPerWarp),
         .PcWidth(PcWidth),
         .NumWarps(NumWarps),
         .WarpWidth(WarpWidth),
-        .EncInstWidth(EncInstWidth),
+        .EncInstWidth($bits(enc_inst_t)),
         .WaitBufferSizePerWarp(WaitBufferSizePerWarp),
         .RegIdxWidth(RegIdxWidth),
         .OperandsPerInst(OperandsPerInst),
@@ -102,83 +108,13 @@ module tb_compute_unit #(
         .warp_stopped_o(warp_stopped),
         .ic_write_i(ic_write),
         .ic_write_pc_i(ic_write_pc),
-        .ic_write_inst_i(ic_write_inst),
-
-        .opc_ready_i(opc_ready),
-        .disp_valid_o(disp_valid),
-        .disp_tag_o(disp_tag),
-        .disp_pc_o(disp_pc),
-        .disp_act_mask_o(disp_act_mask),
-        .disp_dst_o(disp_dst),
-        .disp_operands_o(disp_operands),
-
-        .eu_valid_i(eu_valid_q),
-        .eu_tag_i(eu_tag_q)
+        .ic_write_inst_i(ic_write_inst)
     );
-
-    // OPC queue
-    iid_t opc_tags [$];
-
-    // Dispatch
-    initial begin
-        opc_ready = 1'b0;
-        @(posedge clk);
-        while(1) begin
-            #TCLKHALF;
-            opc_ready = $urandom() % 1 == 0;
-
-            @(posedge clk);
-            if(opc_ready && disp_valid) begin
-                opc_tags.push_back(disp_tag);
-                $display("Dispatched instruction for warp %2d tag %2d",
-                    disp_tag[WidWidth+TagWidth-1:TagWidth], disp_tag[TagWidth-1:0]);
-            end
-        end
-    end
-
-    // Execution Units
-    initial begin
-        int i;
-        eu_valid = 1'b0;
-        eu_tag = '0;
-        while(1) begin
-            if(opc_tags.size() > 0) begin
-                eu_valid = $urandom_range(0, 3) == 0;
-            end else begin
-                eu_valid = 1'b0;
-            end
-            if(eu_valid) begin
-                // Choose a random tag from the queue
-                i = $urandom_range(0, opc_tags.size()-1);
-                for(int j = 0; j < i; j++) begin
-                    // Pop the first element and push it to the back
-                    opc_tags.push_back(opc_tags.pop_front());
-                end
-                eu_tag = opc_tags.pop_front();
-            end
-            if(eu_valid_q)
-                $display("Executing instruction for warp %2d tag %2d",
-                    eu_tag[WidWidth+TagWidth-1:TagWidth], eu_tag[TagWidth-1:0]);
-            @(posedge clk);
-        end
-    end
-
-    always_ff @(posedge clk) begin
-        if(!rst_n) begin
-            eu_valid_q  <= 1'b0;
-            eu_valid_q2 <= 1'b0;
-            eu_tag_q    <= '0;
-            eu_tag_q2   <= '0;
-        end else begin
-            eu_valid_q  <= eu_valid;
-            eu_valid_q2 <= eu_valid_q;
-            eu_tag_q    <= eu_tag;
-            eu_tag_q2   <= eu_tag_q;
-        end
-    end
+    /* verilator lint_on PINMISSING */
 
     // Initialize memory
     initial begin
+        int unsigned program_size;
         initialized = 1'b0;
         stop = 1'b0;
 
@@ -192,11 +128,16 @@ module tb_compute_unit #(
         @(posedge clk);
 
         ic_write = 1'b1;
-        for(int i = 0; i < MemorySize; i++) begin
+        program_size = $bits(test_program) / $bits(enc_inst_t);
+        for(int i = 0; i < program_size; i++) begin
             ic_write_pc = i[PcWidth-1:0];
-            ic_write_inst = {i[7:0]+8'd1, i[7:0], i[7:0]-8'd1, i == MemorySize-1 ? 8'hFF : 8'd0};
+            ic_write_inst = test_program[i];
             @(posedge clk);
         end
+        ic_write_pc   = program_size[PcWidth-1:0];
+        ic_write_inst = '1;
+        @(posedge clk);
+
         ic_write = 1'b0;
 
         initialized = 1'b1;
@@ -420,33 +361,35 @@ module tb_compute_unit #(
             end
 
             // Start OPC Stage
-            if(disp_valid && opc_ready) begin
+            if(i_cu.disp_to_opc_valid && i_cu.opc_to_disp_ready) begin
                 // Get the instruction ID from the hashmap
-                insn_id_in_sim[PcWidth-1:0] = disp_pc;
-                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = disp_act_mask;
+                insn_id_in_sim[PcWidth-1:0] = i_cu.disp_to_opc_data.pc;
+                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.disp_to_opc_data.act_mask;
                 insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
-                    disp_tag[WidWidth + TagWidth - 1:TagWidth];
+                    i_cu.disp_to_opc_data.tag[WidWidth + TagWidth - 1:TagWidth];
                 insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
 
-                opc_insn_id_in_file[disp_tag] = insn_id_in_file;
+                opc_insn_id_in_file[i_cu.disp_to_opc_data.tag] = insn_id_in_file;
 
                 // OPC Stage
-                $fwrite(fd, "S\t%0d\t0\tOpC/Eu\n",
+                $fwrite(fd, "S\t%0d\t0\tOpC\n",
                     insn_id_in_file);
             end
 
-            // Retire Stage
-            if(eu_valid_q) begin
-                insn_id_in_file = opc_insn_id_in_file[eu_tag_q];
+            // Execute Stage
+            if (i_cu.opc_to_eu_valid && i_cu.eu_to_opc_ready) begin
+                // Get the instruction ID from the hashmap
 
-                // Retire Stage
-                $fwrite(fd, "S\t%0d\t0\tRet\n",
+                insn_id_in_file = opc_insn_id_in_file[i_cu.opc_to_eu_data.tag];
+
+                // Execute Stage
+                $fwrite(fd, "S\t%0d\t0\tEu\n",
                     insn_id_in_file);
             end
 
             // Retire
-            if(eu_valid_q2) begin
-                insn_id_in_file = opc_insn_id_in_file[eu_tag_q2];
+            if(i_cu.eu_to_opc_valid && i_cu.opc_to_eu_ready) begin
+                insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data.tag];
 
                 // Retire
                 $fwrite(fd, "R\t%0d\t%0d\t0\n",
