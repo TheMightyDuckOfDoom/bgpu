@@ -49,6 +49,7 @@ module register_opc_stage #(
     input  act_mask_t  disp_act_mask_i,
     input  bgpu_inst_t disp_inst_i,
     input  reg_idx_t   disp_dst_i,
+    input  logic       [OperandsPerInst-1:0] disp_src_required_i,
     input  reg_idx_t   [OperandsPerInst-1:0] disp_src_i,
 
     /// To Execution Units
@@ -357,14 +358,15 @@ module register_opc_stage #(
             .rst_ni( rst_ni ),
 
             // From Multi Warp Dispatcher
-            .opc_ready_o    ( opc_insert_ready[i] ),
-            .disp_valid_i   ( opc_insert_valid[i] ),
-            .disp_tag_i     ( disp_tag_i          ),
-            .disp_pc_i      ( disp_pc_i           ),
-            .disp_act_mask_i( disp_act_mask_i     ),
-            .disp_inst_i    ( disp_inst_i         ),
-            .disp_dst_i     ( disp_dst_i          ),
-            .disp_src_i     ( disp_src_i          ),
+            .opc_ready_o        ( opc_insert_ready[i] ),
+            .disp_valid_i       ( opc_insert_valid[i] ),
+            .disp_tag_i         ( disp_tag_i          ),
+            .disp_pc_i          ( disp_pc_i           ),
+            .disp_act_mask_i    ( disp_act_mask_i     ),
+            .disp_inst_i        ( disp_inst_i         ),
+            .disp_dst_i         ( disp_dst_i          ),
+            .disp_src_required_i( disp_src_required_i ),
+            .disp_src_i         ( disp_src_i          ),
 
             // To Register File
             .opc_read_req_valid_o  ( opc_read_req_valid  [i*OperandsPerInst +: OperandsPerInst] ),

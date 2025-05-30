@@ -44,6 +44,7 @@ module wait_buffer #(
     input  tag_t       dec_tag_i,
     input  reg_idx_t   dec_dst_reg_i,
     input  bgpu_inst_t dec_inst_i,
+    input  logic       [OperandsPerInst-1:0] dec_operands_required_i,
     input  logic       [OperandsPerInst-1:0] dec_operands_ready_i,
     input  tag_t       [OperandsPerInst-1:0] dec_operand_tags_i,
     input  reg_idx_t   [OperandsPerInst-1:0] dec_operands_i,
@@ -56,6 +57,7 @@ module wait_buffer #(
     output act_mask_t  disp_act_mask_o,
     output bgpu_inst_t disp_inst_o,
     output reg_idx_t   disp_dst_o,
+    output logic       [OperandsPerInst-1:0] disp_operands_required_o,
     output reg_idx_t   [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
@@ -77,6 +79,7 @@ module wait_buffer #(
         bgpu_inst_t inst;
         reg_idx_t   dst_reg;
 
+        logic     [OperandsPerInst-1:0] operands_required;
         logic     [OperandsPerInst-1:0] operands_ready;
         tag_t     [OperandsPerInst-1:0] operand_tags;
         reg_idx_t [OperandsPerInst-1:0] operands;
@@ -88,6 +91,7 @@ module wait_buffer #(
         tag_t       tag;
         bgpu_inst_t inst;
         reg_idx_t   dst_reg;
+        logic       [OperandsPerInst-1:0] operands_required;
         reg_idx_t   [OperandsPerInst-1:0] operands_reg;
     } disp_data_t;
 
@@ -166,15 +170,19 @@ module wait_buffer #(
 
             // Insert instruction into buffer
             if(dec_valid_i && wb_ready_o && insert_idx == entry) begin
-                wait_buffer_valid_d[entry]          = 1'b1;
-                wait_buffer_d[entry].pc             = dec_pc_i;
-                wait_buffer_d[entry].act_mask       = dec_act_mask_i;
-                wait_buffer_d[entry].operands_ready = dec_operands_ready_i;
-                wait_buffer_d[entry].operands       = dec_operands_i;
-                wait_buffer_d[entry].operand_tags   = dec_operand_tags_i;
-                wait_buffer_d[entry].inst           = dec_inst_i;
-                wait_buffer_d[entry].dst_reg        = dec_dst_reg_i;
-                wait_buffer_d[entry].tag            = dec_tag_i;
+                wait_buffer_valid_d[entry]             = 1'b1;
+
+                wait_buffer_d[entry].pc                = dec_pc_i;
+                wait_buffer_d[entry].act_mask          = dec_act_mask_i;
+                wait_buffer_d[entry].inst              = dec_inst_i;
+                wait_buffer_d[entry].dst_reg           = dec_dst_reg_i;
+                wait_buffer_d[entry].tag               = dec_tag_i;
+
+                wait_buffer_d[entry].operands_required = dec_operands_required_i;
+                wait_buffer_d[entry].operands_ready    = dec_operands_ready_i
+                                                         | ~dec_operands_required_i;
+                wait_buffer_d[entry].operands          = dec_operands_i;
+                wait_buffer_d[entry].operand_tags      = dec_operand_tags_i;
             end
         end
     end : gen_insert_logic
@@ -188,6 +196,8 @@ module wait_buffer #(
         assign arb_in_data[entry].tag          = wait_buffer_q[entry].tag;
         assign arb_in_data[entry].inst         = wait_buffer_q[entry].inst;
         assign arb_in_data[entry].dst_reg      = wait_buffer_q[entry].dst_reg;
+        assign arb_in_data[entry].operands_required
+                                               = wait_buffer_q[entry].operands_required;
         assign arb_in_data[entry].operands_reg = wait_buffer_q[entry].operands;
     end : gen_rr_inst_ready
 
@@ -218,12 +228,13 @@ module wait_buffer #(
         .rr_i   ( '0   )
     );
 
-    assign disp_pc_o       = arb_sel_data.pc;
-    assign disp_act_mask_o = arb_sel_data.act_mask;
-    assign disp_tag_o      = arb_sel_data.tag;
-    assign disp_inst_o     = arb_sel_data.inst;
-    assign disp_dst_o      = arb_sel_data.dst_reg;
-    assign disp_operands_o = arb_sel_data.operands_reg;
+    assign disp_pc_o                = arb_sel_data.pc;
+    assign disp_act_mask_o          = arb_sel_data.act_mask;
+    assign disp_tag_o               = arb_sel_data.tag;
+    assign disp_inst_o              = arb_sel_data.inst;
+    assign disp_dst_o               = arb_sel_data.dst_reg;
+    assign disp_operands_required_o = arb_sel_data.operands_required;
+    assign disp_operands_o          = arb_sel_data.operands_reg;
 
     // #######################################################################################
     // # Sequential Logic                                                                    #

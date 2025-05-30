@@ -51,6 +51,7 @@ module multi_warp_dispatcher #(
     input  wid_t       dec_warp_id_i,
     input  bgpu_inst_t dec_inst_i,
     input  reg_idx_t   dec_dst_i,
+    input  logic       [OperandsPerInst-1:0] dec_operands_required_i,
     input  reg_idx_t   [OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collector
@@ -61,6 +62,7 @@ module multi_warp_dispatcher #(
     output act_mask_t  disp_act_mask_o,
     output bgpu_inst_t disp_inst_o,
     output reg_idx_t   disp_dst_o,
+    output logic       [OperandsPerInst-1:0] disp_operands_required_o,
     output reg_idx_t   [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
@@ -77,6 +79,7 @@ module multi_warp_dispatcher #(
         act_mask_t  act_mask;
         bgpu_inst_t inst;
         reg_idx_t   dst_reg;
+        logic       [OperandsPerInst-1:0] operands_required;
         reg_idx_t   [OperandsPerInst-1:0] operands;
     } disp_data_t;
 
@@ -141,22 +144,24 @@ module multi_warp_dispatcher #(
             .fe_handshake_i      ( fe_handshake_warp[warp]    ),
             .ib_space_available_o( ib_space_available_o[warp] ),
 
-            .disp_ready_o  ( ib_ready_warp[warp]  ),
-            .dec_valid_i   ( dec_valid_warp[warp] ),
-            .dec_pc_i      ( dec_pc_i             ),
-            .dec_act_mask_i( dec_act_mask_i       ),
-            .dec_inst_i    ( dec_inst_i           ),
-            .dec_dst_i     ( dec_dst_i            ),
-            .dec_operands_i( dec_operands_i       ),
+            .disp_ready_o           ( ib_ready_warp [warp]    ),
+            .dec_valid_i            ( dec_valid_warp[warp]    ),
+            .dec_pc_i               ( dec_pc_i                ),
+            .dec_act_mask_i         ( dec_act_mask_i          ),
+            .dec_inst_i             ( dec_inst_i              ),
+            .dec_dst_i              ( dec_dst_i               ),
+            .dec_operands_required_i( dec_operands_required_i ),
+            .dec_operands_i         ( dec_operands_i          ),
 
-            .opc_ready_i    ( arb_gnt      [warp]        ),
-            .disp_valid_o   ( rr_inst_ready[warp]        ),
-            .disp_pc_o      ( arb_in_data[warp].pc       ),
-            .disp_act_mask_o( arb_in_data[warp].act_mask ),
-            .disp_tag_o     ( arb_in_data[warp].tag      ),
-            .disp_inst_o    ( arb_in_data[warp].inst     ),
-            .disp_dst_o     ( arb_in_data[warp].dst_reg  ),
-            .disp_operands_o( arb_in_data[warp].operands ),
+            .opc_ready_i             ( arb_gnt      [warp]                   ),
+            .disp_valid_o            ( rr_inst_ready[warp]                   ),
+            .disp_pc_o               ( arb_in_data  [warp].pc                ),
+            .disp_act_mask_o         ( arb_in_data  [warp].act_mask          ),
+            .disp_tag_o              ( arb_in_data  [warp].tag               ),
+            .disp_inst_o             ( arb_in_data  [warp].inst              ),
+            .disp_dst_o              ( arb_in_data  [warp].dst_reg           ),
+            .disp_operands_required_o( arb_in_data  [warp].operands_required ),
+            .disp_operands_o         ( arb_in_data  [warp].operands          ),
 
             .eu_valid_i( eu_valid[warp]         ),
             .eu_tag_i  ( eu_tag_i[TagWidth-1:0] )
@@ -193,11 +198,12 @@ module multi_warp_dispatcher #(
         .rr_i   ( '0   )
     );
 
-    assign disp_tag_o      = {arb_sel_wid, arb_sel_data.tag};
-    assign disp_pc_o       = arb_sel_data.pc;
-    assign disp_act_mask_o = arb_sel_data.act_mask;
-    assign disp_inst_o     = arb_sel_data.inst;
-    assign disp_dst_o      = arb_sel_data.dst_reg;
-    assign disp_operands_o = arb_sel_data.operands;
+    assign disp_tag_o               = {arb_sel_wid, arb_sel_data.tag};
+    assign disp_pc_o                = arb_sel_data.pc;
+    assign disp_act_mask_o          = arb_sel_data.act_mask;
+    assign disp_inst_o              = arb_sel_data.inst;
+    assign disp_dst_o               = arb_sel_data.dst_reg;
+    assign disp_operands_required_o = arb_sel_data.operands_required;
+    assign disp_operands_o          = arb_sel_data.operands;
 
 endmodule : multi_warp_dispatcher

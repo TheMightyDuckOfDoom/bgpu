@@ -68,6 +68,7 @@ module tb_register_opc_stage #(
         act_mask_t  active_mask;
         bgpu_inst_t inst;
         reg_idx_t   dst;
+        logic       [OperandsPerInst-1:0] srcs_required;
         reg_idx_t   [OperandsPerInst-1:0] srcs;
     } disp_req_t;
 
@@ -195,14 +196,15 @@ module tb_register_opc_stage #(
         .rst_ni( rst_n ),
 
         // Dispatcher interface
-        .opc_ready_o    ( opc_ready                 ),
-        .disp_valid_i   ( disp_valid && initialized ),
-        .disp_tag_i     ( disp_req.tag              ),
-        .disp_pc_i      ( disp_req.pc               ),
-        .disp_act_mask_i( disp_req.active_mask      ),
-        .disp_inst_i    ( disp_req.inst             ),
-        .disp_dst_i     ( disp_req.dst              ),
-        .disp_src_i     ( disp_req.srcs             ),
+        .opc_ready_o        ( opc_ready                 ),
+        .disp_valid_i       ( disp_valid && initialized ),
+        .disp_tag_i         ( disp_req.tag              ),
+        .disp_pc_i          ( disp_req.pc               ),
+        .disp_act_mask_i    ( disp_req.active_mask      ),
+        .disp_inst_i        ( disp_req.inst             ),
+        .disp_dst_i         ( disp_req.dst              ),
+        .disp_src_required_i( disp_req.srcs_required    ),
+        .disp_src_i         ( disp_req.srcs             ),
 
         // To Execution units
         .opc_valid_o       ( opc_valid          ),
@@ -276,6 +278,10 @@ module tb_register_opc_stage #(
                     && disp.inst == eu.inst) begin
 
                     for (int i = 0; i < OperandsPerInst; i++) begin
+                        if (!disp.srcs_required[i]) begin
+                            continue; // Skip if the source is not required
+                        end
+
                         wid = 0;
                         reg_idx = 0;
 
@@ -380,7 +386,8 @@ module tb_register_opc_stage #(
                 $display("\tInstruction: %0h", disp_req.inst);
                 $display("\tDst reg: %0d", disp_req.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
-                    $display("\tSrc[%0d] reg: %0d", i, disp_req.srcs[i]);
+                    $display("\tSrc[%0d] req: %0b reg: %0d", i, disp_req.srcs_required[i],
+                        disp_req.srcs[i]);
                 end
             end
 

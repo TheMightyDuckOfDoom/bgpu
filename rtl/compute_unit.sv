@@ -97,6 +97,7 @@ module compute_unit #(
         wid_t warp_id;
         bgpu_inst_t inst;
         reg_idx_t dst;
+        logic     [OperandsPerInst-1:0] operands_required;
         reg_idx_t [OperandsPerInst-1:0] operands;
     } dec_to_ib_data_t;
 
@@ -107,6 +108,7 @@ module compute_unit #(
         act_mask_t act_mask;
         bgpu_inst_t inst;
         reg_idx_t dst;
+        logic     [OperandsPerInst-1:0] operands_required;
         reg_idx_t [OperandsPerInst-1:0] operands;
     } disp_to_opc_data_t;
 
@@ -289,14 +291,15 @@ module compute_unit #(
         .ic_warp_id_i ( ic_to_dec_data_q.warp_id  ),
         .ic_inst_i    ( ic_to_dec_data_q.inst     ),
 
-        .disp_ready_i  ( ib_to_dec_ready_q         ),
-        .dec_valid_o   ( dec_to_ib_valid_d         ),
-        .dec_pc_o      ( dec_to_ib_data_d.pc       ),
-        .dec_act_mask_o( dec_to_ib_data_d.act_mask ),
-        .dec_warp_id_o ( dec_to_ib_data_d.warp_id  ),
-        .dec_inst_o    ( dec_to_ib_data_d.inst     ),
-        .dec_dst_o     ( dec_to_ib_data_d.dst      ),
-        .dec_operands_o( dec_to_ib_data_d.operands ),
+        .disp_ready_i           ( ib_to_dec_ready_q                  ),
+        .dec_valid_o            ( dec_to_ib_valid_d                  ),
+        .dec_pc_o               ( dec_to_ib_data_d.pc                ),
+        .dec_act_mask_o         ( dec_to_ib_data_d.act_mask          ),
+        .dec_warp_id_o          ( dec_to_ib_data_d.warp_id           ),
+        .dec_inst_o             ( dec_to_ib_data_d.inst              ),
+        .dec_dst_o              ( dec_to_ib_data_d.dst               ),
+        .dec_operands_required_o( dec_to_ib_data_d.operands_required ),
+        .dec_operands_o         ( dec_to_ib_data_d.operands          ),
 
         .dec_decoded_o         ( dec_to_fetch_decoded         ),
         .dec_stop_warp_o       ( dec_to_fetch_stop_warp       ),
@@ -346,23 +349,25 @@ module compute_unit #(
 
         .ib_space_available_o( ib_space_available ),
 
-        .ib_ready_o    ( ib_to_dec_ready_d         ),
-        .dec_valid_i   ( dec_to_ib_valid_q         ),
-        .dec_pc_i      ( dec_to_ib_data_q.pc       ),
-        .dec_act_mask_i( dec_to_ib_data_q.act_mask ),
-        .dec_warp_id_i ( dec_to_ib_data_q.warp_id  ),
-        .dec_inst_i    ( dec_to_ib_data_q.inst     ),
-        .dec_dst_i     ( dec_to_ib_data_q.dst      ),
-        .dec_operands_i( dec_to_ib_data_q.operands ),
+        .ib_ready_o             ( ib_to_dec_ready_d                  ),
+        .dec_valid_i            ( dec_to_ib_valid_q                  ),
+        .dec_pc_i               ( dec_to_ib_data_q.pc                ),
+        .dec_act_mask_i         ( dec_to_ib_data_q.act_mask          ),
+        .dec_warp_id_i          ( dec_to_ib_data_q.warp_id           ),
+        .dec_inst_i             ( dec_to_ib_data_q.inst              ),
+        .dec_dst_i              ( dec_to_ib_data_q.dst               ),
+        .dec_operands_required_i( dec_to_ib_data_q.operands_required ),
+        .dec_operands_i         ( dec_to_ib_data_q.operands          ),
 
-        .opc_ready_i    ( opc_to_disp_ready         ),
-        .disp_valid_o   ( disp_to_opc_valid         ),
-        .disp_tag_o     ( disp_to_opc_data.tag      ),
-        .disp_pc_o      ( disp_to_opc_data.pc       ),
-        .disp_act_mask_o( disp_to_opc_data.act_mask ),
-        .disp_inst_o    ( disp_to_opc_data.inst     ),
-        .disp_dst_o     ( disp_to_opc_data.dst      ),
-        .disp_operands_o( disp_to_opc_data.operands ),
+        .opc_ready_i             ( opc_to_disp_ready                  ),
+        .disp_valid_o            ( disp_to_opc_valid                  ),
+        .disp_tag_o              ( disp_to_opc_data.tag               ),
+        .disp_pc_o               ( disp_to_opc_data.pc                ),
+        .disp_act_mask_o         ( disp_to_opc_data.act_mask          ),
+        .disp_inst_o             ( disp_to_opc_data.inst              ),
+        .disp_dst_o              ( disp_to_opc_data.dst               ),
+        .disp_operands_required_o( disp_to_opc_data.operands_required ),
+        .disp_operands_o         ( disp_to_opc_data.operands          ),
 
         .eu_valid_i( eu_to_opc_valid && opc_to_eu_ready ),
         .eu_tag_i  ( eu_to_opc_data.tag                 )
@@ -387,14 +392,15 @@ module compute_unit #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .opc_ready_o    ( opc_to_disp_ready         ),
-        .disp_valid_i   ( disp_to_opc_valid         ),
-        .disp_tag_i     ( disp_to_opc_data.tag      ),
-        .disp_pc_i      ( disp_to_opc_data.pc       ),
-        .disp_act_mask_i( disp_to_opc_data.act_mask ),
-        .disp_inst_i    ( disp_to_opc_data.inst     ),
-        .disp_dst_i     ( disp_to_opc_data.dst      ),
-        .disp_src_i     ( disp_to_opc_data.operands ),
+        .opc_ready_o        ( opc_to_disp_ready                  ),
+        .disp_valid_i       ( disp_to_opc_valid                  ),
+        .disp_tag_i         ( disp_to_opc_data.tag               ),
+        .disp_pc_i          ( disp_to_opc_data.pc                ),
+        .disp_act_mask_i    ( disp_to_opc_data.act_mask          ),
+        .disp_inst_i        ( disp_to_opc_data.inst              ),
+        .disp_dst_i         ( disp_to_opc_data.dst               ),
+        .disp_src_required_i( disp_to_opc_data.operands_required ),
+        .disp_src_i         ( disp_to_opc_data.operands          ),
 
         .eu_ready_i        ( eu_to_opc_ready         ),
         .opc_valid_o       ( opc_to_eu_valid         ),

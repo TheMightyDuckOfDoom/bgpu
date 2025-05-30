@@ -57,9 +57,9 @@ module tb_operand_collector #(
         act_mask_t  act_mask;
         bgpu_inst_t inst;
         reg_idx_t   dst;
+        logic       [OperandsPerInst-1:0] src_required;
         reg_idx_t   [OperandsPerInst-1:0] src;
-
-        data_t [OperandsPerInst-1:0] data;
+        data_t      [OperandsPerInst-1:0] data;
     } insert_inst_t;
 
     typedef struct packed {
@@ -209,14 +209,15 @@ module tb_operand_collector #(
         .rst_ni( rst_n ),
 
         // From Dispatcher
-        .opc_ready_o    ( insert_inst_ready        ),
-        .disp_valid_i   ( insert_inst_valid        ),
-        .disp_tag_i     ( insert_inst_req.tag      ),
-        .disp_pc_i      ( insert_inst_req.pc       ),
-        .disp_act_mask_i( insert_inst_req.act_mask ),
-        .disp_inst_i    ( insert_inst_req.inst     ),
-        .disp_dst_i     ( insert_inst_req.dst      ),
-        .disp_src_i     ( insert_inst_req.src      ),
+        .opc_ready_o        ( insert_inst_ready            ),
+        .disp_valid_i       ( insert_inst_valid            ),
+        .disp_tag_i         ( insert_inst_req.tag          ),
+        .disp_pc_i          ( insert_inst_req.pc           ),
+        .disp_act_mask_i    ( insert_inst_req.act_mask     ),
+        .disp_inst_i        ( insert_inst_req.inst         ),
+        .disp_dst_i         ( insert_inst_req.dst          ),
+        .disp_src_required_i( insert_inst_req.src_required ),
+        .disp_src_i         ( insert_inst_req.src          ),
 
         // To Register File
         .opc_read_req_valid_o  ( read_req_valid   ),
@@ -244,12 +245,13 @@ module tb_operand_collector #(
     // ########################################################################################
 
     initial begin : simulation_logic
-        int unsigned cycles, inserted_insts, completed_insts, num_read_reqs;
+        int unsigned cycles, inserted_insts, completed_insts, num_read_reqs, num_expected_reqs;
 
-        cycles = 0;
-        inserted_insts = 0;
-        completed_insts = 0;
-        num_read_reqs = 0;
+        cycles            = 0;
+        inserted_insts    = 0;
+        completed_insts   = 0;
+        num_read_reqs     = 0;
+        num_expected_reqs = 0;
 
         $display("Simulation started, running for %0d cycles", MaxSimCycles);
 
@@ -279,8 +281,16 @@ module tb_operand_collector #(
                     num_read_reqs++;
                     read_rsp_wid[i] = read_req[i].wid;
                     read_rsp_data[i] = inserted_inst_q.data[i];
-                    $display("Cycle %0d: Read request for wid=%0h, reg_idx=%0h",
+                    $display("Cycle %0d: Read request  for wid=%0h, reg_idx=%0h",
                              cycles, read_rsp_wid[i], read_req[i].reg_idx);
+
+                    assert(inserted_inst_q.src_required[i] == 1'b1)
+                    else $error("Source register %0d not required for instruction with tag %0h",
+                                i, inserted_inst_q.tag);
+
+                    assert (read_req[i].reg_idx == inserted_inst_q.src[i])
+                    else $error("Read request reg_idx mismatch: expected %0h, got %0h",
+                                inserted_inst_q.src[i], read_req[i].reg_idx);
                 end
 
                 if (read_rsp_valid[i]) begin
@@ -292,6 +302,7 @@ module tb_operand_collector #(
             // Execution unit handshake
             if (opc_valid && eu_ready) begin
                 completed_insts++;
+                num_expected_reqs += $countbits(insert_inst_req.src_required, 1'b1);
                 $display("Cycle %0d:", cycles);
                 $display("  Completed inst with tag %0h, pc %0h, act_mask %0h, dst %0h inst %0h",
                          opc_inst.tag, opc_inst.pc, opc_inst.act_mask, opc_inst.dst, opc_inst.inst);
@@ -312,7 +323,8 @@ module tb_operand_collector #(
                             inserted_inst_q.dst, opc_inst.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     $display("  Operand %0d: Data %0h", i, opc_inst.data[i]);
-                    assert (opc_inst.data[i] == inserted_inst_q.data[i])
+                    assert (!inserted_inst_q.src_required[i]
+                        || opc_inst.data[i] == inserted_inst_q.data[i])
                     else $error("Instruction operand %0d data mismatch: expected %0h, got %0h",
                                 i, inserted_inst_q.data[i], opc_inst.data[i]);
                 end
@@ -335,9 +347,9 @@ module tb_operand_collector #(
         assert (num_read_reqs > 0)
         else $error("No read requests were made during the simulation!");
 
-        assert(num_read_reqs >= completed_insts * OperandsPerInst)
-        else $error("Number of read requests (%0d) is less than expected (%0d * %0d)",
-                    num_read_reqs, completed_insts, OperandsPerInst);
+        assert(num_read_reqs >= num_expected_reqs)
+        else $error("Number of read requests (%0d) is less than expected (%d)",
+                    num_read_reqs, num_expected_reqs);
 
         assert(cycles < MaxSimCycles)
         else $error("Simulation exceeded maximum cycles (%0d)!", MaxSimCycles);
