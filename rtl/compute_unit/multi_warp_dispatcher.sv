@@ -125,7 +125,7 @@ module multi_warp_dispatcher #(
     // Execution Unit Valid Demultiplexer
     always_comb begin
         eu_valid = '0;
-        eu_valid[eu_tag_i[WidWidth+TagWidth-1:TagWidth]] = eu_valid_i;
+        eu_valid[eu_tag_i[WidWidth-1:0]] = eu_valid_i;
     end
 
     // Dispatcher per Warp

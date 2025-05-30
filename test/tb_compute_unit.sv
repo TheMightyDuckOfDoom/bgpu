@@ -367,7 +367,7 @@ module tb_compute_unit #(
                 insn_id_in_sim[PcWidth-1:0] = i_cu.disp_to_opc_data.pc;
                 insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.disp_to_opc_data.act_mask;
                 insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
-                    i_cu.disp_to_opc_data.tag[WidWidth + TagWidth - 1:TagWidth];
+                    i_cu.disp_to_opc_data.tag[WidWidth-1:0];
                 insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
 
                 opc_insn_id_in_file[i_cu.disp_to_opc_data.tag] = insn_id_in_file;
