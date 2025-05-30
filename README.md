@@ -4,6 +4,7 @@
 
 [![Lint RTL](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/lint.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/lint.yml)
 [![Simulate](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/sim.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/sim.yml)
+[![Synthesis](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth.yml)
 [![License](https://img.shields.io/badge/license-SHL--0.51-green)](LICENSE-SHL)
 </div>
 

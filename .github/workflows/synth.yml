@@ -1,4 +1,4 @@
-name: Synthesize
+name: Synthesis
 on: [push, pull_request, workflow_dispatch]
 jobs:
     gowin:
@@ -6,7 +6,7 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@master
-            - name: Synthesize
+            - name: Synthesis for Gowin FPGA
               run: make gowin
 
     asic:
@@ -14,5 +14,5 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@master
-            - name: Synthesize
+            - name: Synthesis for ASIC
               run: make asic
