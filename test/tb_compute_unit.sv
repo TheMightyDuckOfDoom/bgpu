@@ -6,8 +6,6 @@
 
 /// Testbench for Compute Unit
 module tb_compute_unit #(
-    /// Number of inflight instructions per warp
-    parameter int unsigned InflightInstrPerWarp = 2,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -16,6 +14,8 @@ module tb_compute_unit #(
     parameter int unsigned WarpWidth = 4,
     /// Wait buffer size per warp
     parameter int unsigned WaitBufferSizePerWarp = 1,
+    /// Number of inflight instructions per warp
+    parameter int unsigned InflightInstrPerWarp = WaitBufferSizePerWarp * 2,
 
     parameter int unsigned NumBanks = 4,
     parameter int unsigned NumOperandCollectors = 6,
@@ -43,11 +43,12 @@ module tb_compute_unit #(
         reg_idx_t op2;
     } enc_inst_t;
 
-    enc_inst_t test_program [7] = {
+    enc_inst_t test_program [8] = {
         '{eu: BGPU_INST_TYPE_IU, subtype: IU_TID, dst: 0, op1: 0, op2: 0},
         '{eu: BGPU_INST_TYPE_IU, subtype: IU_LDI, dst: 1, op1: 1, op2: 1},
         '{eu: BGPU_INST_TYPE_IU, subtype: IU_LDI, dst: 2, op1: 2, op2: 2},
         '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 3, op1: 1, op2: 2},
+        '{eu: BGPU_INST_TYPE_IU, subtype: IU_SUB, dst: 4, op1: 3, op2: 2},
         '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0},
         '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0},
         '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0}

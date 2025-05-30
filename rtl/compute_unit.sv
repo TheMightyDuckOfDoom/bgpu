@@ -427,8 +427,8 @@ module compute_unit #(
         .RegWidth       ( RegWidth        ),
         .WarpWidth      ( WarpWidth       ),
         .OperandsPerInst( OperandsPerInst ),
-        .iid_t          ( iid_t           ),
-        .reg_idx_t      ( reg_idx_t       )
+        .RegIdxWidth    ( RegIdxWidth     ),
+        .iid_t          ( iid_t           )
     ) i_integer_unit (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),

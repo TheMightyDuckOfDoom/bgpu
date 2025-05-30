@@ -14,12 +14,21 @@ jobs:
   # Main testbench for compute unit
   tb_compute_unit:
     runs-on: self-hosted
-    needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector, tb_register_opc_stage]
+    needs: [tb_tag_queue, tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector, tb_register_opc_stage]
     steps:
       - name: Checkout
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_compute_unit
+
+  # Tag Queue Testbench
+  tb_tag_queue:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_tag_queue
 
   # Register File Bank Testbenches
   tb_register_file_bank_singleport:

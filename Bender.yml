@@ -40,6 +40,8 @@ sources:
           - test/rand_synch_holdable_driver.sv
           - test/rand_stream_slv.sv
 
+          - test/tb_tag_queue.sv
+
           - test/tb_register_file_bank.sv
           - test/tb_operand_collector.sv
           - test/tb_register_opc_stage.sv

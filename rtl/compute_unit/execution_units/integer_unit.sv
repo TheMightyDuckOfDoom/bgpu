@@ -13,13 +13,14 @@ module integer_unit #(
     parameter int unsigned WarpWidth = 4,
     // Number of operands per instruction
     parameter int unsigned OperandsPerInst = 2,
+    /// How many registers can each warp access as operand or destination
+    parameter int unsigned RegIdxWidth = 8,
     // Tag data type
-    parameter type iid_t     = logic,
-    // Register index data type
-    parameter type reg_idx_t = logic,
+    parameter type iid_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter type warp_data_t = logic [RegWidth * WarpWidth-1:0]
+    parameter type warp_data_t = logic [RegWidth * WarpWidth-1:0],
+    parameter type reg_idx_t   = logic [         RegIdxWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -75,9 +76,18 @@ module integer_unit #(
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_result
         always_comb begin : calc_result
             case (opc_to_eu_inst_sub_i)
-                IU_ADD:  result[i] = operands[0][i] + operands[1][i];
                 IU_TID:  result[i] = i; // Thread ID
+
+                IU_ADD:  result[i] = operands[0][i] + operands[1][i]; // Add
+                IU_ADDI: result[i] = operands[0][i] + operands[1][i]; // Add immediate
+                IU_SUB:  result[i] = operands[0][i] - operands[1][i]; // Subtract
+                IU_SUBI: result[i] = operands[0][i] - operands[1][i]; // Subtract immediate
+
                 IU_LDI:  result[i] = operands[0][i] | operands[1][i]; // Load immediate
+
+                IU_OR:   result[i] = operands[0][i] | operands[1][i]; // OR
+                IU_AND:  result[i] = operands[0][i] & operands[1][i]; // AND
+                IU_XOR:  result[i] = operands[0][i] ^ operands[1][i]; // XOR
                 default: begin
                     result[i] = '0; // Default case, should not happen
                     `ifndef SYNTHESIS

@@ -164,7 +164,7 @@ module multi_warp_dispatcher #(
             .disp_operands_o         ( arb_in_data  [warp].operands          ),
 
             .eu_valid_i( eu_valid[warp]         ),
-            .eu_tag_i  ( eu_tag_i[TagWidth-1:0] )
+            .eu_tag_i  ( eu_tag_i[WidWidth+:TagWidth] )
         );
     end : gen_dispatcher
 
@@ -198,7 +198,7 @@ module multi_warp_dispatcher #(
         .rr_i   ( '0   )
     );
 
-    assign disp_tag_o               = {arb_sel_wid, arb_sel_data.tag};
+    assign disp_tag_o               = {arb_sel_data.tag, arb_sel_wid};
     assign disp_pc_o                = arb_sel_data.pc;
     assign disp_act_mask_o          = arb_sel_data.act_mask;
     assign disp_inst_o              = arb_sel_data.inst;

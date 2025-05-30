@@ -16,7 +16,7 @@ module tb_register_opc_stage #(
     // Simulation time parameters
     parameter time ClkPeriod = 10ns,
     parameter time ApplDelay = 1ns,
-    parameter time AcqDelay  = 9ns,
+    parameter time AcqDelay  = 8ns,
 
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
@@ -238,26 +238,27 @@ module tb_register_opc_stage #(
         logic        found;
         int unsigned wid;
         int unsigned reg_idx;
+        int unsigned test;
 
         forever begin
             @(posedge clk);
             #AcqDelay;
-            if (!initialized) begin
-                continue;
-            end
+            #1ns;
 
             if (opc_ready && disp_valid && initialized) begin
                 // Add dispatch request to the queue
                 disp_requests.push_back(disp_req);
-                $display("Dispatch request: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h, Srcs Required %b",
-                    disp_req.tag, disp_req.pc, disp_req.active_mask, disp_req.dst, disp_req.inst, disp_req.srcs_required);
+                $display("Dispatch req: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h, Req %b",
+                    disp_req.tag, disp_req.pc, disp_req.active_mask, disp_req.dst, disp_req.inst,
+                    disp_req.srcs_required);
             end
 
             if (opc_valid && eu_ready) begin
                 // Add to EU requests
                 eu_requests.push_back(eu_req);
-                $display("EU request: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h, Src Data %h",
-                    eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.dst, eu_req.inst, eu_req.src_data);
+                $display("EU req: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h, Src Data %h",
+                    eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.dst, eu_req.inst,
+                    eu_req.src_data);
             end
 
             if (disp_requests.size() == 0 || eu_requests.size() == 0) begin
@@ -277,8 +278,8 @@ module tb_register_opc_stage #(
                     && disp.dst == eu.dst
                     && disp.inst == eu.inst) begin
 
-                    for (int i = 0; i < OperandsPerInst; i++) begin
-                        if (!disp.srcs_required[i]) begin
+                    for (int j = 0; j < OperandsPerInst; j++) begin
+                        if (!disp.srcs_required[j]) begin
                             continue; // Skip if the source is not required
                         end
 
@@ -288,15 +289,15 @@ module tb_register_opc_stage #(
                         if (NumWarps > 1)
                             wid[WidWidth-1:0] = eu.tag[WidWidth-1:0];
 
-                        reg_idx[RegIdxWidth-1:0] = disp.srcs[i];
+                        reg_idx[RegIdxWidth-1:0] = disp.srcs[j];
 
-                        if (eu.src_data[i] != reg_file[wid][reg_idx]) begin
-                            $display("Mismatch in source data for operand %0d", i);
+                        if (eu.src_data[j] != reg_file[wid][reg_idx]) begin
+                            $display("Mismatch in source data for operand %0d", j);
                             $error("Expected: %0d, Got: %0d",
-                                reg_file[wid][reg_idx], eu.src_data[i]);
+                                reg_file[wid][reg_idx], eu.src_data[j]);
                         end else begin
-                            $display("Source data for operand %0d: %0d == %0d", i,
-                                eu.src_data[i], reg_file[wid][reg_idx]);
+                            $display("Source data for operand %0d: %0d == %0d", j,
+                                eu.src_data[j], reg_file[wid][reg_idx]);
                         end
                     end
 
