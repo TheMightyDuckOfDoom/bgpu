@@ -45,6 +45,8 @@ $(NETLIST) $(NETLIST_DEBUG):  $(SV_FLIST)
 		2>&1 | TZ=UTC gawk '{ print strftime("[%Y-%m-%d %H:%M %Z]"), $$0 }' \
 		     | tee "$(YOSYS_DIR)/$(TOP_DESIGN).log" \
 		     | gawk -f $(YOSYS_DIR)/scripts/filter_output.awk;
+
+asic-report:
 	tail -n 128 $(YOSYS_REPORTS)/$(TOP_DESIGN)_area.rpt
 
 asic_clean:
@@ -54,4 +56,4 @@ asic_clean:
 	rm -f $(YOSYS_DIR)/$(TOP_DESIGN).log
 	rm -rf $(SV_FLIST)
 
-.PHONY: asic_clean asic
+.PHONY: asic_clean asic asic-report

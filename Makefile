@@ -104,7 +104,10 @@ gowin/gowin.f: $(BENDER_DEPS)
 gowin: gowin/gowin.f $(SRCS) gowin/build.tcl
 	echo "set top_design $(TOP)"  >  gowin/run.tcl
 	echo "source gowin/build.tcl" >> gowin/run.tcl
-	yosys -c gowin/run.tcl
+	yosys -c gowin/run.tcl -l gowin/gowin.log -t
+
+gowin-report:
+	tail -n 64 gowin/gowin.log
 
 ####################################################################################################
 # Clean
@@ -119,4 +122,5 @@ clean: asic_clean
 	rm -f  xilinx/*.log
 	rm -f  xilinx/*.jou
 	rm -f  gowin/*.f
+	rm -f  gowin/*.log
 	rm -f  gowin/run.tcl

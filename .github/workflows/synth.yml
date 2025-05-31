@@ -8,6 +8,8 @@ jobs:
               uses: actions/checkout@master
             - name: Synthesis for Gowin FPGA
               run: make gowin
+            - name: Report Area
+              run: make gowin-report
 
     asic:
         runs-on: self-hosted
@@ -16,3 +18,5 @@ jobs:
               uses: actions/checkout@master
             - name: Synthesis for ASIC
               run: make asic
+            - name: Report Area
+              run: make asic-report
