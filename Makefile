@@ -13,8 +13,8 @@ VERILATOR_FLAGS:= verilator/config.vlt -Wno-UNOPTFLAT
 VERILATOR_ARGS ?= ""
 
 # Bender Targets
-BENDER_TARGET_LINT ?= verilator
-BENDER_TARGET_SIM  ?= verilator
+BENDER_TARGET_LINT ?= -t sim
+BENDER_TARGET_SIM  ?= -t sim
 
 TOP                ?= compute_unit
 TB_TOP             ?= tb_$(TOP)
@@ -35,7 +35,7 @@ lint: lint-verilator lint-verible
 
 # Generate filelist for Verilator linting
 verilator/verilator_lint.f: $(BENDER_DEPS)
-	$(BENDER) script verilator -t $(BENDER_TARGET_LINT) > $@
+	$(BENDER) script verilator $(BENDER_TARGET_LINT) > $@
 
 # Lint using Verilator
 lint-verilator: verilator/verilator_lint.f verilator/config.vlt $(SRCS) $(TB_SRCS)
@@ -43,7 +43,7 @@ lint-verilator: verilator/verilator_lint.f verilator/config.vlt $(SRCS) $(TB_SRC
 
 # Generate filelist for Verilator linting
 verilator/verible_lint.f: $(BENDER_DEPS)
-	$(BENDER) script flist -n -t $(BENDER_TARGET_LINT) > $@
+	$(BENDER) script flist -n $(BENDER_TARGET_LINT) > $@
 	tr "\n" " " < $@ > $@.tmp
 	mv $@.tmp $@
 
@@ -57,7 +57,7 @@ lint-verible: verilator/verible_lint.f $(SRCS) $(TB_SRCS)
 
 # Generate filelist for Verilator simulation
 verilator/verilator_tb.f: $(BENDER_DEPS)
-	$(BENDER) script verilator -t $(BENDER_TARGET_LINT) > $@
+	$(BENDER) script verilator $(BENDER_TARGET_SIM) > $@
 
 # Translate RTL to C++ using Verilator
 verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)

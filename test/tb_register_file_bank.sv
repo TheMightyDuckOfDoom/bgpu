@@ -41,13 +41,13 @@ module tb_register_file_bank #(
     // Write port
     logic write_valid_mst, write_valid_sub, write_ready_mst, write_ready_sub;
     write_req_t write_req;
-    addr_t write_addr;
+    addr_t write_addr_rand, write_addr;
     data_t write_data;
 
     // Read port
     logic read_valid, read_ready, read_out_valid;
     read_req_t read_req;
-    addr_t read_addr;
+    addr_t read_addr_rand, read_addr;
     tag_t read_tag, read_out_tag;
     data_t read_out_data;
 
@@ -60,7 +60,7 @@ module tb_register_file_bank #(
         .NumRegisters( NumRegisters ),
         .DualPort    ( DualPort     ),
         .tag_t       ( tag_t        )
-    ) dut (
+    ) i_register_file_bank (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
 
@@ -110,7 +110,8 @@ module tb_register_file_bank #(
         .ready_i( write_ready_mst )
     );
 
-    assign write_addr = write_req[$bits(addr_t)+$bits(data_t)-1:$bits(data_t)];
+    assign write_addr_rand = write_req[$bits(addr_t)+$bits(data_t)-1:$bits(data_t)];
+    assign write_addr      = write_addr_rand % NumRegisters[$clog2(NumRegisters)-1:0];
     assign write_data = write_req[$bits(data_t)-1:0];
 
     // Read port
@@ -128,7 +129,8 @@ module tb_register_file_bank #(
         .ready_i( read_ready )
     );
 
-    assign read_addr = read_req[$bits(addr_t)-1:0];
+    assign read_addr_rand = read_req[$bits(addr_t)-1:0];
+    assign read_addr      = read_addr_rand % NumRegisters[$clog2(NumRegisters)-1:0];
     assign read_tag  = read_req[$bits(addr_t)+$bits(tag_t)-1:$bits(addr_t)];
 
     // Prevent write port from writing to the same address as the read port
@@ -247,6 +249,10 @@ module tb_register_file_bank #(
         $display(" with %0d ports, %0d registers, %0d bits per register", DualPort ? 2 : 1,
             NumRegisters, DataWidth);
 
+        $timeformat(-9, 0, "ns", 12);
+        // configure VCD dump
+        $dumpfile("register_file_bank.vcd");
+        $dumpvars(1,i_register_file_bank);
         $display("Simulation started, running for %0d cycles", MaxSimCycles);
 
         while(cycles < MaxSimCycles) begin
@@ -262,6 +268,8 @@ module tb_register_file_bank #(
                 end
             end
         end
+
+        $dumpflush;
 
         $display("Number of reads: %0d", num_reads);
         $display("Number of writes: %0d", num_writes);

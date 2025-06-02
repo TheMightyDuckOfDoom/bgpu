@@ -34,7 +34,7 @@ sources:
 
     - rtl/compute_unit.sv
 
-    - target: verilator
+    - target: sim
       files:
           - test/rand_stream_mst.sv
           - test/rand_synch_holdable_driver.sv
@@ -52,6 +52,15 @@ sources:
       files:
           - asic/tc_sram.sv
 
+    - target: gowin_sim
+      files:
+          - test/rand_stream_mst.sv
+          - test/tb_register_file_bank.sv
+
+          - gowin/lib/prim_sim.v
+          - gowin/tc_sram.sv
+      
     - target: gowin
       files:
+          - gowin/lib/blackbox.v
           - gowin/tc_sram.sv

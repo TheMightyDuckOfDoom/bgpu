@@ -133,7 +133,7 @@ module register_file_bank #(
     tc_sram #(
         .NumWords   ( NumRegisters         ),
         .DataWidth  ( DataWidth            ),
-        .ByteWidth  ( DataWidth            ),
+        .ByteWidth  ( 8                    ),
         .NumPorts   ( NumPorts             ),
         .Latency    ( 1                    ),
         .SimInit    ( "ones"               ),
