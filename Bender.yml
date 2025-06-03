@@ -14,32 +14,36 @@ export_include_dirs:
   - rtl/include
 
 sources:
-    - rtl/compute_unit/dummy_reconvergence_stack.sv
-    - rtl/compute_unit/fetcher.sv
-    - rtl/compute_unit/dummy_instruction_cache.sv
-    - rtl/compute_unit/decoder.sv
-    
-    - rtl/compute_unit/dispatcher/tag_queue.sv
-    - rtl/compute_unit/dispatcher/reg_table.sv
-    - rtl/compute_unit/dispatcher/wait_buffer.sv
-    - rtl/compute_unit/dispatcher/dispatcher.sv
-    - rtl/compute_unit/multi_warp_dispatcher.sv
+    - target: not(any(post_synth, post_layout))
+      files:
+          - rtl/compute_unit/dummy_reconvergence_stack.sv
+          - rtl/compute_unit/fetcher.sv
+          - rtl/compute_unit/dummy_instruction_cache.sv
+          - rtl/compute_unit/decoder.sv
+      
+          - rtl/compute_unit/dispatcher/tag_queue.sv
+          - rtl/compute_unit/dispatcher/reg_table.sv
+          - rtl/compute_unit/dispatcher/wait_buffer.sv
+          - rtl/compute_unit/dispatcher/dispatcher.sv
+          - rtl/compute_unit/multi_warp_dispatcher.sv
 
-    - rtl/compute_unit/register_opc/register_file_bank.sv
-    - rtl/compute_unit/register_opc/operand_collector.sv
-    - rtl/compute_unit/register_opc/register_indexer.sv
-    - rtl/compute_unit/register_opc_stage.sv
+          - rtl/compute_unit/register_opc/register_file_bank.sv
+          - rtl/compute_unit/register_opc/operand_collector.sv
+          - rtl/compute_unit/register_opc/register_indexer.sv
+          - rtl/compute_unit/register_opc_stage.sv
 
-    - rtl/compute_unit/execution_units/integer_unit.sv
+          - rtl/compute_unit/execution_units/integer_unit.sv
 
-    - rtl/compute_unit.sv
+          - rtl/compute_unit.sv
 
-    - target: sim
+    - target: any(sim, gowin_sim, xilinx_sim)
       files:
           - test/rand_stream_mst.sv
           - test/rand_synch_holdable_driver.sv
           - test/rand_stream_slv.sv
 
+    - target: sim
+      files:
           - test/tb_tag_queue.sv
 
           - test/tb_register_file_bank.sv
@@ -54,13 +58,22 @@ sources:
 
     - target: gowin_sim
       files:
-          - test/rand_stream_mst.sv
-          - test/tb_register_file_bank.sv
-
           - gowin/lib/prim_sim.v
-          - gowin/tc_sram.sv
+          - test/tb_register_file_bank.sv
+      
+    - target: any(gowin, gowin_sim)
+      files:
+          - gowin/tc_sram.v
       
     - target: gowin
       files:
           - gowin/lib/blackbox.v
-          - gowin/tc_sram.sv
+
+    - target: xilinx_sim
+      files:
+          - xilinx/lib/RAMB36E1.v
+          - test/tb_register_file_bank.sv
+
+    - target: any(xilinx, xilinx_sim)
+      files:
+          - xilinx/tc_sram.sv

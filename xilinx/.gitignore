@@ -1,4 +1,5 @@
 vivado*.jou
 vivado*.log
 .Xil/
-run.tcl
+run_*.tcl
+out

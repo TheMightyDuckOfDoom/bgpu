@@ -49,7 +49,9 @@ module tc_sram #(
         // How many brams are needed for the given data width? -> width of bram array
         localparam int unsigned BramsForWidth = (DataWidth + SPWidth - 1) / SPWidth;
 
-        initial $display("BramsForWidth %0d, DataWidth %0d", BramsForWidth, DataWidth);
+        `ifndef SYNTHESIS
+            initial $display("BramsForWidth %0d, DataWidth %0d", BramsForWidth, DataWidth);
+        `endif
 
         for (genvar x = 0; x < BramsForWidth; x++) begin : gen_bram_column
             // How Wide is the current bram column?

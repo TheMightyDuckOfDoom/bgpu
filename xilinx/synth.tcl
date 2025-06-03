@@ -9,7 +9,7 @@ read_xdc dummy_constraints.xdc
 # Synthesize Design
 puts $top
 puts $device
-synth_design -top $top -part $device -verbose -debug_log
+synth_design -top $top -part $device -verbose -debug_log -mode out_of_context
 #-flatten_hierarchy none
 report_power
 report_timing -nworst 1
@@ -25,6 +25,9 @@ report_utilization -hierarchical -hierarchical_percentages
 #report_utilization -hierarchical
 
 #start_gui
+
+exec mkdir -p out
+write_verilog -force -mode funcsim out/$top.v
 
 # Write out bitfile
 ## write_bitstream -force my_proj.bit

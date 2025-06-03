@@ -1,12 +1,12 @@
 #!/bin/bash
 source $1
 cd xilinx
-echo -n 'set top "' > run.tcl
-echo -n $3 >> run.tcl
-echo '"' >> run.tcl
-echo 'set device "xc7k325tffg676-2l"' >> run.tcl
-echo "source build.tcl" >> run.tcl
-echo "source run.tcl" | $2 vivado -mode tcl
+echo -n 'set top "' > run_synth.tcl
+echo -n $3 >> run_synth.tcl
+echo '"' >> run_synth.tcl
+echo 'set device "xc7k325tffg676-2l"' >> run_synth.tcl
+echo "source synth.tcl" >> run_synth.tcl
+echo "source run_synth.tcl" | $2 vivado -mode tcl
 
 num_errors=$(grep -c ERROR vivado.log)
 

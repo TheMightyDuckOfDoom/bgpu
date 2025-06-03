@@ -7,7 +7,7 @@ module tb_register_file_bank #(
     // Simulation parameters
     parameter int unsigned MaxSimCycles     = 1000000,
     parameter int unsigned WatchdogTimeout  = 1000,
-    parameter int unsigned MaxMstWaitCycles = 100,
+    parameter int unsigned MaxMstWaitCycles = 10,
 
     // Simulation time parameters
     parameter time         ClkPeriod = 10ns,
@@ -216,19 +216,29 @@ module tb_register_file_bank #(
         write_valid_sub |-> (write_ready_sub)
     ) else $error("Write port stalled: valid %b ready %b", write_valid_sub, write_ready_sub);
 
-    // Check that the DUT's read data matches the golden model
+    // Check read valids
     assert property (@(posedge clk) disable iff (!rst_n)
-         (read_out_valid || golden_read_valid) -> (read_out_valid == golden_read_valid)
-         && (read_out_data == golden_read_data)
-         && (read_out_tag  == golden_read_tag)
-    ) else begin
-        $display("Read data mismatch: ");
-        $display("  DUT:   valid %b addr %0d data %0d tag %0d",
-            read_out_valid, read_addr, read_out_data, read_out_tag);
-        $display("  Golden: valid %b addr %0d data %0d tag %0d",
-            golden_read_valid, golden_read_addr, golden_read_data, golden_read_tag);
-        $fatal("Read data mismatch");
-    end
+        (read_out_valid || golden_read_valid) -> (read_out_valid == golden_read_valid)
+    ) else $error("Read valid mismatch: DUT %b, Golden %b",
+            read_out_valid, golden_read_valid);
+
+    // Check read tags
+    assert property (@(posedge clk) disable iff (!rst_n)
+        (read_out_valid || golden_read_valid) -> (read_out_tag == golden_read_tag)
+    ) else $error("Read tag mismatch: DUT %b, Golden %b",
+            read_out_tag, golden_read_tag);
+
+    // Check read data
+    assert property (@(posedge clk) disable iff (!rst_n)
+        (read_out_valid || golden_read_valid) -> (read_out_data == golden_read_data)
+    ) else $error("Read data mismatch: DUT %h, Golden %h",
+            read_out_data, golden_read_data);
+
+    assert property (@(posedge clk) disable iff (!rst_n)
+        (read_valid && read_ready) && (write_valid_sub && write_ready_mst)
+        -> (read_addr != write_addr)
+    ) else $error("Read and write ports access the same address: read addr %0h, write addr %0h",
+            read_addr, write_addr);
 
     // ########################################################################################
     // # Simulation timeout                                                                   #

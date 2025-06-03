@@ -39,13 +39,21 @@ jobs:
       - name: Simulate
         run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0"
 
-  tb_register_file_bank_singleport_gowin:
+  gowin_tb_register_file_bank_singleport:
     runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+
+  xilinx_tb_register_file_bank_singleport:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
 
   tb_register_file_bank_dualport:
     runs-on: self-hosted

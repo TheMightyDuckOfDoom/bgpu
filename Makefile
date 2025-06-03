@@ -9,7 +9,7 @@ VIVADO          ?= vivado
 VIVADO_SETTINGS ?= /tools/Xilinx/Vivado/202?.?/settings64.sh
 VERIBLE_LINT    ?= verible-verilog-lint
 
-VERILATOR_FLAGS:= verilator/config.vlt -Wno-UNOPTFLAT
+VERILATOR_FLAGS:= verilator/config.vlt -Wno-UNOPTFLAT -Wno-TIMESCALEMOD
 VERILATOR_ARGS ?= ""
 
 # Bender Targets
@@ -77,11 +77,11 @@ tb_%: verilator/obj_dir/Vtb_%
 
 # Generate filelist for Vivado synthesis
 xilinx/vivado.f: $(BENDER_DEPS)
-	$(BENDER) script vivado -t fpga -D SYNTHESIS > $@
+	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -D SYNTHESIS > $@
 
 # Run Vivado synthesis
-xilinx: xilinx/vivado.f $(SRCS) xilinx/build.tcl xilinx/dummy_constraints.xdc xilinx/run.sh
-	time ./xilinx/run.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
+xilinx: xilinx/vivado.f $(SRCS) xilinx/synth.tcl xilinx/dummy_constraints.xdc xilinx/synth.sh
+	time ./xilinx/synth.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
 ####################################################################################################
 # ASIC Synthesis
@@ -117,10 +117,11 @@ clean: asic_clean
 	rm -f  verilator/*.f
 	rm -rf verilator/obj_dir
 	rm -f  xilinx/*.f
-	rm -f  xilinx/run.tcl
+	rm -f  xilinx/run_*.tcl
 	rm -rf xilinx/.Xil
 	rm -f  xilinx/*.log
 	rm -f  xilinx/*.jou
+	rm -rf xilinx/out
 	rm -f  gowin/*.f
 	rm -f  gowin/*.log
 	rm -f  gowin/run.tcl

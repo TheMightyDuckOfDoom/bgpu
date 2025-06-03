@@ -3,5 +3,5 @@
     "editor.insertSpaces": true,
     "editor.tabSize": 4,
     "makefile.configureOnOpen": false,
-    "systemverilog.excludeIndexing": ".bender/*"
+    "systemverilog.excludeIndexing": ".bender/* gowin/* xilinx/* asic/*"
 }
