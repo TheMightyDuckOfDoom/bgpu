@@ -234,11 +234,13 @@ module tb_register_file_bank #(
     ) else $error("Read data mismatch: DUT %h, Golden %h",
             read_out_data, golden_read_data);
 
-    assert property (@(posedge clk) disable iff (!rst_n)
-        (read_valid && read_ready) && (write_valid_sub && write_ready_mst)
-        -> (read_addr != write_addr)
-    ) else $error("Read and write ports access the same address: read addr %0h, write addr %0h",
-            read_addr, write_addr);
+    if (!DualPort) begin : gen_single_port_read_write_assertions
+        assert property (@(posedge clk) disable iff (!rst_n)
+            (read_valid && read_ready) && (write_valid_sub && write_ready_mst)
+            -> (read_addr != write_addr)
+        ) else $error("Read and write ports access the same address: read addr %0h, write addr %0h",
+                read_addr, write_addr);
+    end : gen_single_port_read_write_assertions
 
     // ########################################################################################
     // # Simulation timeout                                                                   #

@@ -63,8 +63,8 @@ sources:
       
     - target: any(gowin, gowin_sim)
       files:
-          - gowin/tc_sram.v
-      
+          - gowin/tc_sram.sv
+
     - target: gowin
       files:
           - gowin/lib/blackbox.v
