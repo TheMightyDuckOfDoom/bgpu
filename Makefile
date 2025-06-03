@@ -125,3 +125,4 @@ clean: asic_clean
 	rm -f  gowin/*.f
 	rm -f  gowin/*.log
 	rm -f  gowin/run.tcl
+	rm -rf gowin/out

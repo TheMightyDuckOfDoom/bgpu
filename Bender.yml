@@ -34,6 +34,8 @@ sources:
 
           - rtl/compute_unit/execution_units/integer_unit.sv
 
+          - rtl/compute_unit/execution_units/load_store/coalesce_comparator.sv
+
           - rtl/compute_unit.sv
 
     - target: any(sim, gowin_sim, xilinx_sim)
@@ -49,6 +51,8 @@ sources:
           - test/tb_register_file_bank.sv
           - test/tb_operand_collector.sv
           - test/tb_register_opc_stage.sv
+
+          - test/tb_coalesce_comparator.sv
 
           - test/tb_compute_unit.sv
 
