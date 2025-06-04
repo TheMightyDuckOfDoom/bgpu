@@ -6,7 +6,8 @@
 `define BGPU_INSTRUCTIONS_SVH_
 
 typedef enum logic [1:0] {
-    BGPU_INST_TYPE_IU = 'd0
+    BGPU_INST_TYPE_IU  = 'd0,
+    BGPU_INST_TYPE_LSU = 'd1
 } bgpu_eu_e;
 
 typedef enum logic [5:0] {
@@ -20,7 +21,10 @@ typedef enum logic [5:0] {
 
     IU_LDI  = 'h06, // Load immediate -> concatenate operands register index
     IU_ADDI = 'h07, // Add immediate -> add immediate value to first operand
-    IU_SUBI = 'h08  // Subtract immediate -> subtract immediate value from first operand
+    IU_SUBI = 'h08,  // Subtract immediate -> subtract immediate value from first operand
+
+    LSU_LOAD = 'h09, // Load from memory
+    LSU_STORE = 'h0A // Store to memory
 } bgpu_inst_subtype_e;
 
 typedef struct packed {

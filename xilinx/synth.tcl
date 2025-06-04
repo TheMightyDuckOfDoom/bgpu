@@ -14,9 +14,11 @@ synth_design -top $top -part $device -verbose -debug_log -mode out_of_context
 report_power
 report_timing -nworst 1
 report_utilization -hierarchical -hierarchical_percentages
-#report_timing_summary
+# report_timing_summary
 # Opt Design
-#opt_design
+# opt_design -directive ExploreWithRemap
+# report_utilization -hierarchical -hierarchical_percentages
+# report_timing_summary
 # Place Design
 #place_design
 # Route Design

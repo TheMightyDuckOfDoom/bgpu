@@ -7,7 +7,7 @@
 /// Integer Unit
 // Performs integer alu operations
 module integer_unit #(
-    // Width of the regusters
+    // Width of the registers
     parameter int unsigned RegWidth = 32,
     // Number of threads in a warp
     parameter int unsigned WarpWidth = 4,
