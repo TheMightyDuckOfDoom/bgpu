@@ -27,7 +27,7 @@ module tb_load_store_unit #(
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// How many registers can each warp access as operand or destination
-    parameter int unsigned RegIdxWidth = 6,
+    parameter int unsigned RegIdxWidth = 32,
     /// How many operands each instruction can have
     parameter int unsigned OperandsPerInst = 2,
     /// Width of a singled register
@@ -36,9 +36,9 @@ module tb_load_store_unit #(
     // Memory Block size in bytes -> Memory request width
     parameter int unsigned BlockIdxBits = 4,
     // Memory Address width in bits
-    parameter int unsigned AddressWidth = BlockIdxBits + 2,
+    parameter int unsigned AddressWidth = BlockIdxBits + 1,
     // Width of the id for requests queue
-    parameter int unsigned OutstandingReqIdxWidth = 1
+    parameter int unsigned OutstandingReqIdxWidth = 3
 ) ();
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -301,16 +301,11 @@ module tb_load_store_unit #(
     // # DUT                                                                                 #
     // #######################################################################################
 
-    // bgpu_inst_subtype_e INSTS [6] = {
-    //     LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD
-    // };
-    // bgpu_inst_subtype_e inst;
-    // assign inst = INSTS[eu_req.inst.subtype % 6];
-    bgpu_inst_subtype_e INSTS [3] = {
-        LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD
+    bgpu_inst_subtype_e INSTS [6] = {
+        LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD
     };
     bgpu_inst_subtype_e inst;
-    assign inst = INSTS[eu_req.inst.subtype % 3];
+    assign inst = INSTS[eu_req.inst.subtype % 6];
 
     act_mask_t non_zero_mask;
     assign non_zero_mask = (eu_req.active_mask != '0) ? eu_req.active_mask : '1;
@@ -392,6 +387,38 @@ module tb_load_store_unit #(
 
             assert(non_zero_mask != '0) else $error("Golden Model: Active mask is zero!");
 
+            // Overlapping store data get OR-ed together -> store 0 first
+            for(int thread = 0; thread < WarpWidth; thread++) begin
+                if (!non_zero_mask[thread]) begin
+                    continue; // Skip inactive threads
+                end
+                if (inst inside `BGPU_INST_STORE) begin
+                    if (inst == LSU_STORE_BYTE) begin
+                        size = 1;
+                    end else if (inst == LSU_STORE_HALF) begin
+                        size = 2;
+                    end else if (inst == LSU_STORE_WORD) begin
+                        size = 4;
+                    end else begin
+                        $error("Golden Model: Unsupported store instruction %0h", inst);
+                    end
+                    block_addr = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                        / BlockWidth;
+                    block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                        % BlockWidth;
+                    for(int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
+                        // Check that we're not storing outside of a block
+                        if(block_offset == BlockWidth) begin
+                            break;
+                        end
+                        // Write zero to golden memory
+                        golden_mem[block_addr][block_offset] = 0;
+
+                        block_offset++;
+                    end
+                end
+            end
+
             for(int thread = 0; thread < WarpWidth; thread++) begin
                 if (!non_zero_mask[thread]) begin
                     continue; // Skip inactive threads
@@ -405,17 +432,16 @@ module tb_load_store_unit #(
                         size = 4;
                     end else begin
                         $error("Golden Model: Unsupported load instruction %0h", inst);
-                        continue;
                     end
                     $display("Golden Model: Thread %0d is performing a LOAD operation of size",
                         thread, size);
-                    block_addr = int'(eu_req.src_data[0][thread * RegWidth +: RegWidth])
+                    block_addr = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
                         / BlockWidth;
-                    block_offset = int'(eu_req.src_data[0][thread * RegWidth +: RegWidth])
+                    block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
                         % BlockWidth;
                     for(int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
                         // Check that we're not reading outside of a block
-                        if(block_offset == BlockWidth) begin
+                        if(block_offset >= BlockWidth) begin
                             break;
                         end
                         // Read byte from golden memory
@@ -429,7 +455,36 @@ module tb_load_store_unit #(
                         block_offset++;
                     end
                 end else begin
-                    $display("Golden Model: Thread %0d is performing a STORE operation", thread);
+                    if (inst == LSU_STORE_BYTE) begin
+                        size = 1;
+                    end else if (inst == LSU_STORE_HALF) begin
+                        size = 2;
+                    end else if (inst == LSU_STORE_WORD) begin
+                        size = 4;
+                    end else begin
+                        $error("Golden Model: Unsupported store instruction %0h", inst);
+                    end
+                    $display("Golden Model: Thread %0d is performing a STORE operation of size",
+                        thread, size);
+                    block_addr = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                        / BlockWidth;
+                    block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                        % BlockWidth;
+                    for(int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
+                        // Check that we're not storing outside of a block
+                        if(block_offset == BlockWidth) begin
+                            break;
+                        end
+                        // Write byte to golden memory -> OR data together
+                        golden_mem[block_addr][block_offset] = golden_mem[block_addr][block_offset]
+                            | eu_req.src_data[1][thread * RegWidth + i * 8 +: 8];
+
+                        $display("Golden Model: Thread %0d, Block Addr=%0d, Offset=%0d, Data=%h",
+                                 thread, block_addr, block_offset,
+                                 golden_mem[block_addr][block_offset]);
+
+                        block_offset++;
+                    end
                 end
             end
             $display("Golden Model: Response built: Tag=%0d, Dst=%0d, Data=%h",
@@ -437,6 +492,9 @@ module tb_load_store_unit #(
 
             // Add to golden response queue
             golden_responses.push_back(rsp);
+            rsp = golden_responses[golden_responses.size() - 1];
+            $display("Golden Model: Response built: Tag=%0d, Dst=%0d, Data=%h",
+                     rsp.tag, rsp.dst, rsp.data);
         end
     end : golden_model
 
@@ -450,7 +508,6 @@ module tb_load_store_unit #(
 
         while(1) begin
             @(posedge clk);
-            #AcqDelay;
 
             if (i_result_sub.gen_queue.queue.size() == 0) begin
                 continue; // No results to check
@@ -474,7 +531,16 @@ module tb_load_store_unit #(
                         break;
                     end
                     assert(dut_rsp.data == golden_rsp.data) else begin
-                         $error("Data mismatch: DUT=%h, Golden=%h", dut_rsp.data, golden_rsp.data);
+                        $warning("Data mismatch: DUT=%h, Golden=%h", dut_rsp.data, golden_rsp.data);
+                        $display("Might need to increase the RegIdxWidth to have more unique",
+                            " requests!");
+                        $display("Available golden responses:");
+                        for (int i = 0; i < golden_responses.size(); i++) begin
+                            golden_rsp = golden_responses[i];
+                            $display("\tTag=%0d, Dst=%0d, Data=%h", golden_rsp.tag, golden_rsp.dst,
+                                golden_rsp.data);
+                        end
+                        $error();
                     end
                 end
             end
@@ -499,11 +565,12 @@ module tb_load_store_unit #(
     // ########################################################################################
 
     initial begin : sim_logic
-        int unsigned cycles, insts_completed;
+        int unsigned cycles, insts_completed, occupancy;
 
         cycles = 0;
         insts_issued = 0;
         insts_completed = 0;
+        occupancy = 0;
 
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
@@ -520,15 +587,23 @@ module tb_load_store_unit #(
             #AcqDelay;
             #1ns;
 
+            // Count how many bits in i_load_store_unit.buffer_valid_q are set
+            for(int i = 0; i < OutstandingReqs; i++) begin
+                if(i_load_store_unit.buffer_valid_q[i]) begin
+                    occupancy++;
+                end
+            end
+
+
             if (eu_req_valid && eu_req_ready) begin
                 // Log issued instruction
                 insts_issued++;
                 $display("Cycle %0d", cycles);
                 $display("\tIssued instruction: Tag=%0d, PC=%0h, Active Mask=%b, Inst=%0h, Dst=%0d",
-                         eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.inst.subtype,
+                         eu_req.tag, eu_req.pc, non_zero_mask, eu_req.inst.subtype,
                          eu_req.dst);
                 for (int thread = 0; thread < WarpWidth; thread++) begin
-                    if (eu_req.active_mask[thread]) begin
+                    if (non_zero_mask[thread]) begin
                         $display("\tThread %0d, Addr=%h Data=%h",
                                  thread, eu_req.src_data[0][thread * RegWidth +: RegWidth],
                                  eu_req.src_data[1][thread * RegWidth +: RegWidth]);
@@ -566,6 +641,8 @@ module tb_load_store_unit #(
 
         $display("Finished after %0d cycles, %0d instructions completed.", cycles, insts_completed);
         $display("Issued %0d instructions.", insts_issued);
+        $display("Occupancy of the request buffer: %0d/%0d (%0.2f)",
+                 occupancy, cycles, occupancy / cycles);
         $finish();
     end : sim_logic
 

@@ -85,8 +85,9 @@ module load_store_unit #(
     // # Local parameters                                                                    #
     // #######################################################################################
 
-    localparam int unsigned SubReqIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
+    localparam int unsigned SubReqIdWidth   = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
     localparam int unsigned RegWidthInBytes = RegWidth / 8;
+    localparam int unsigned WidthBits       = RegWidthInBytes > 1 ? $clog2(RegWidthInBytes) : 1;
 
     // #######################################################################################
     // # Type Definitions                                                                    #
@@ -96,11 +97,11 @@ module load_store_unit #(
     typedef addr_t      [   WarpWidth-1:0] req_addr_t;
     typedef block_idx_t [   WarpWidth-1:0] offsets_t;
 
-    typedef logic       [OutstandingReqIdxWidth-1:0] com_req_id_t;
-    typedef logic       [         SubReqIdWidth-1:0] sub_req_id_t;
+    typedef logic [OutstandingReqIdxWidth-1:0] com_req_id_t;
+    typedef logic [         SubReqIdWidth-1:0] sub_req_id_t;
 
-    typedef logic [RegWidthInBytes-1:0] width_t;
-    typedef logic [       RegWidth-1:0] reg_data_t;
+    typedef logic [WidthBits-1:0] width_t;
+    typedef logic [ RegWidth-1:0] reg_data_t;
 
     // Data passed from the Coalesce Splitter to the Wdata Assembler
     typedef struct packed {
@@ -190,7 +191,7 @@ module load_store_unit #(
             end
             LSU_STORE_WORD, LSU_LOAD_WORD : begin
                 if(RegWidthInBytes >= 4)
-                    opc_to_eu_width = 'd3; // 4 bytes
+                    opc_to_eu_width = 'd2; // 4 bytes
                 else if(RegWidthInBytes >= 2)
                     opc_to_eu_width = 'd1; // 2 bytes
             end
@@ -221,7 +222,7 @@ module load_store_unit #(
     assign mem_rsp_com_id = mem_rsp_id_i[OutstandingReqIdxWidth + SubReqIdWidth-1:SubReqIdWidth];
 
     // #######################################################################################
-    // # Request buffer                                                                     #
+    // # Request buffer                                                                      #
     // #######################################################################################
 
     always_comb begin : request_buffer
@@ -328,15 +329,28 @@ module load_store_unit #(
 
         // Build the warp data for the Result Collector
         for(int unsigned i = 0; i < WarpWidth; i++) begin : build_warp_data
-            case (selected_buffer_entry.load_width)
-                'd0 : eu_to_rc_data_o[i*RegWidth +: RegWidth]
-                    = selected_buffer_entry.thread_data[i].data & 'hff; // 1 byte
-                'd1 : eu_to_rc_data_o[i*RegWidth +: RegWidth]
-                    = selected_buffer_entry.thread_data[i].data & 'hffff; // 2 bytes
-                'd3 : eu_to_rc_data_o[i*RegWidth +: RegWidth]
-                    = selected_buffer_entry.thread_data[i].data & 'hffffffff; // 4 bytes
-                default : eu_to_rc_data_o[i*RegWidth +: RegWidth] = '0;
-            endcase
+            /* verilator lint_off WIDTHTRUNC  */
+            /* verilator lint_off WIDTHEXPAND */
+            if (selected_buffer_entry.load_width == 'd0) begin
+                // If the load width is 1 byte, we only take the first byte
+                eu_to_rc_data_o[i*RegWidth +: RegWidth] = selected_buffer_entry.thread_data[i].data
+                    & 'hff;
+            end else if (RegWidthInBytes >= 1 && selected_buffer_entry.load_width == 'd1) begin
+                // If the load width is 2 bytes, we take the first two bytes
+                eu_to_rc_data_o[i*RegWidth +: RegWidth] = selected_buffer_entry.thread_data[i].data
+                    & 'hffff;
+            end else if (RegWidthInBytes >= 2 && selected_buffer_entry.load_width == 'd2) begin
+                // If the load width is 4 bytes, we take the first four bytes
+                eu_to_rc_data_o[i*RegWidth +: RegWidth] = selected_buffer_entry.thread_data[i].data
+                    & 'hffffffff;
+            end else begin
+                `ifndef SYNTHESIS
+                    $error("Invalid load width %0d for register width %0d",
+                        selected_buffer_entry.load_width, RegWidthInBytes);
+                `endif
+            end
+            /* verilator lint_on WIDTHEXPAND */
+            /* verilator lint_on WIDTHTRUNC  */
         end : build_warp_data
     end : build_warp_data_for_rc
 
@@ -345,11 +359,12 @@ module load_store_unit #(
     // #######################################################################################
 
     coalesce_splitter #(
-        .NumRequests  ( WarpWidth     ),
-        .AddressWidth ( AddressWidth  ),
-        .BlockIdxBits ( BlockIdxBits  ),
-        .warp_data_t  ( warp_data_t   ),
-        .write_width_t( width_t       )
+        .NumRequests     ( WarpWidth              ),
+        .AddressWidth    ( AddressWidth           ),
+        .BlockIdxBits    ( BlockIdxBits           ),
+        .CommonReqIdWidth( OutstandingReqIdxWidth ),
+        .warp_data_t     ( warp_data_t            ),
+        .write_width_t   ( width_t                )
     ) i_coalesce_splitter (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
@@ -410,9 +425,9 @@ module load_store_unit #(
         .BlockIdxBits ( BlockIdxBits )
     ) i_wdata_assembler (
         .we_mask_i      ( cs_to_wdata_q.is_write ? cs_to_wdata_q.wdata_valid_mask : '0 ),
-        .wdata_i        ( cs_to_wdata_q.wdata     ),
-        .write_width_i  ( '1 ),
-        .block_offsets_i( cs_to_wdata_q.offsets ),
+        .wdata_i        ( cs_to_wdata_q.wdata       ),
+        .write_width_i  ( cs_to_wdata_q.write_width ),
+        .block_offsets_i( cs_to_wdata_q.offsets     ),
 
         .mem_we_mask_o( mem_req_we_mask_o ),
         .mem_wdata_o  ( mem_req_wdata_o   )
