@@ -23,10 +23,12 @@ typedef enum logic [5:0] {
     IU_ADDI = 'h07, // Add immediate -> add immediate value to first operand
     IU_SUBI = 'h08, // Subtract immediate -> subtract immediate value from first operand
 
-    LSU_LOAD = 'h09, // Load from memory
-    LSU_STORE_BYTE = 'h0A, // Store byte to memory
-    LSU_STORE_HALF = 'h0B, // Store half-word to memory
-    LSU_STORE_WORD = 'h0C  // Store word to memory
+    LSU_LOAD_BYTE  = 'h09, // Load from memory
+    LSU_LOAD_HALF  = 'h0A, // Load half-word from memory
+    LSU_LOAD_WORD  = 'h0B, // Load word from memory
+    LSU_STORE_BYTE = 'h0C, // Store byte to memory
+    LSU_STORE_HALF = 'h0D, // Store half-word to memory
+    LSU_STORE_WORD = 'h0E  // Store word to memory
 } bgpu_inst_subtype_e;
 
 typedef struct packed {
@@ -41,7 +43,9 @@ typedef struct packed {
     IU_AND,\
     IU_OR,\
     IU_XOR,\
-    LSU_LOAD,\
+    LSU_LOAD_BYTE,\
+    LSU_LOAD_HALF,\
+    LSU_LOAD_WORD,\
     LSU_STORE_BYTE,\
     LSU_STORE_HALF,\
     LSU_STORE_WORD\
@@ -58,6 +62,12 @@ typedef struct packed {
     LSU_STORE_BYTE,\
     LSU_STORE_HALF,\
     LSU_STORE_WORD\
+}
+
+`define BGPU_INST_LOAD {\
+    LSU_LOAD_BYTE,\
+    LSU_LOAD_HALF,\
+    LSU_LOAD_WORD\
 }
 
 `ifndef SYNTHESIS

@@ -9,7 +9,7 @@ module tb_load_store_unit #(
     // Simulation parameters
     parameter int unsigned MaxSimCycles     = 100000,
     parameter int unsigned WatchdogTimeout  = 1000,
-    parameter int unsigned InstsToComplete  = 1000,
+    parameter int unsigned InstsToComplete  = 2000,
     parameter int unsigned MaxMstWaitCycles = 0,
     parameter int unsigned MaxSubWaitCycles = 0,
 
@@ -31,12 +31,12 @@ module tb_load_store_unit #(
     /// How many operands each instruction can have
     parameter int unsigned OperandsPerInst = 2,
     /// Width of a singled register
-    parameter int unsigned RegWidth = 8,
+    parameter int unsigned RegWidth = 32,
 
-    // Memory Address width in bits
-    parameter int unsigned AddressWidth = RegWidth,
     // Memory Block size in bytes -> Memory request width
     parameter int unsigned BlockIdxBits = 4,
+    // Memory Address width in bits
+    parameter int unsigned AddressWidth = BlockIdxBits + 2,
     // Width of the id for requests queue
     parameter int unsigned OutstandingReqIdxWidth = 1
 ) ();
@@ -301,11 +301,16 @@ module tb_load_store_unit #(
     // # DUT                                                                                 #
     // #######################################################################################
 
-    bgpu_inst_subtype_e INSTS [4] = {
-        LSU_LOAD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD
+    // bgpu_inst_subtype_e INSTS [6] = {
+    //     LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD
+    // };
+    // bgpu_inst_subtype_e inst;
+    // assign inst = INSTS[eu_req.inst.subtype % 6];
+    bgpu_inst_subtype_e INSTS [3] = {
+        LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD
     };
     bgpu_inst_subtype_e inst;
-    assign inst = INSTS[eu_req.inst.subtype & 'hf];
+    assign inst = INSTS[eu_req.inst.subtype % 3];
 
     act_mask_t non_zero_mask;
     assign non_zero_mask = (eu_req.active_mask != '0) ? eu_req.active_mask : '1;
@@ -354,14 +359,18 @@ module tb_load_store_unit #(
     // ########################################################################################
 
     eu_rsp_t golden_responses [$];
-    byte_t [(1 << BlockAddrWidth) * BlockWidth-1:0] golden_mem;
+    block_data_t [(1 << BlockAddrWidth)-1:0] golden_mem;
 
     initial begin : golden_model
         eu_rsp_t rsp;
+        int unsigned wbyte, size, block_addr, block_offset;
 
         // Initialize golden memory with some data
-        for(int i = 0; i < (1 << BlockAddrWidth) * BlockWidth; i++) begin
-            golden_mem[i] = i[7:0];
+        for(int i = 0; i < (1 << BlockAddrWidth); i++) begin
+            for(int j = 0; j < BlockWidth; j++) begin
+                wbyte = i * BlockWidth + j;
+                golden_mem[i][j] = wbyte[7:0];
+            end
         end
 
         while(1) begin
@@ -387,24 +396,40 @@ module tb_load_store_unit #(
                 if (!non_zero_mask[thread]) begin
                     continue; // Skip inactive threads
                 end
-                if (inst == LSU_LOAD) begin
-                    $display("Golden Model: Thread %0d is performing a LOAD operation", thread);
-                    for(int i = 0; i < RegWidth / 8; i++) begin
+                if (inst inside `BGPU_INST_LOAD) begin
+                    if (inst == LSU_LOAD_BYTE) begin
+                        size = 1;
+                    end else if (inst == LSU_LOAD_HALF) begin
+                        size = 2;
+                    end else if (inst == LSU_LOAD_WORD) begin
+                        size = 4;
+                    end else begin
+                        $error("Golden Model: Unsupported load instruction %0h", inst);
+                        continue;
+                    end
+                    $display("Golden Model: Thread %0d is performing a LOAD operation of size",
+                        thread, size);
+                    block_addr = int'(eu_req.src_data[0][thread * RegWidth +: RegWidth])
+                        / BlockWidth;
+                    block_offset = int'(eu_req.src_data[0][thread * RegWidth +: RegWidth])
+                        % BlockWidth;
+                    for(int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
+                        // Check that we're not reading outside of a block
+                        if(block_offset == BlockWidth) begin
+                            break;
+                        end
                         // Read byte from golden memory
-                        rsp.data[thread * RegWidth +: RegWidth][i * 8 +: 8] =
-                            golden_mem[int'(eu_req.src_data[0][thread * RegWidth +: RegWidth]) + i];
-                        $display("Golden Model: Loaded data[%0d] = %h from address %h",
-                                 i, rsp.data[thread * RegWidth +: RegWidth][i * 8 +: 8],
-                                 int'(eu_req.src_data[0][thread * RegWidth +: RegWidth]) + i);
-                        $display("Block address: %h",
-                                 int'(eu_req.src_data[0][thread * RegWidth +: RegWidth])
-                                    / BlockWidth);
+                        rsp.data[thread * RegWidth + i * 8 +: 8] =
+                            golden_mem[block_addr][block_offset];
+
+                        $display("Golden Model: Thread %0d, Block Addr=%0d, Offset=%0d, Data=%h",
+                                 thread, block_addr, block_offset, rsp.data[thread * RegWidth
+                                 + i * 8 +: 8]);
+
+                        block_offset++;
                     end
                 end else begin
                     $display("Golden Model: Thread %0d is performing a STORE operation", thread);
-
-                    // EU response will contain the data in operand 1
-                    rsp.data = eu_req.src_data[1];
                 end
             end
             $display("Golden Model: Response built: Tag=%0d, Dst=%0d, Data=%h",

@@ -10,8 +10,9 @@
 // Requests are coalesced into a minimum number of blocks and sent to the memory interface
 // in the order that they were received by the Load Store Unit.
 // This means that memory ordering has to be checked/enforced by another mechanism.
-// Memory responses can be received in any order, but must have atleas one cycle of latency
+// Memory responses can be received in any order, but must have atleast one cycle of latency
 // Operand 0 is the address for load/store operations
+// Operand 1 is the data for store operations
 module load_store_unit #(
     // Width of the registers
     parameter int unsigned RegWidth = 32,
@@ -85,7 +86,7 @@ module load_store_unit #(
     // #######################################################################################
 
     localparam int unsigned SubReqIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
-    localparam int unsigned RegWidthInBytes = (RegWidth + 7) / 8;
+    localparam int unsigned RegWidthInBytes = RegWidth / 8;
 
     // #######################################################################################
     // # Type Definitions                                                                    #
@@ -98,29 +99,50 @@ module load_store_unit #(
     typedef logic       [OutstandingReqIdxWidth-1:0] com_req_id_t;
     typedef logic       [         SubReqIdWidth-1:0] sub_req_id_t;
 
-    typedef logic [RegWidthInBytes-1:0] write_width_t;
+    typedef logic [RegWidthInBytes-1:0] width_t;
+    typedef logic [       RegWidth-1:0] reg_data_t;
 
     // Data passed from the Coalesce Splitter to the Wdata Assembler
     typedef struct packed {
-        com_req_id_t  com_id;
-        sub_req_id_t  sub_id;
-        block_addr_t  addr;
-        logic         is_write;
-        warp_data_t   wdata;
-        act_mask_t    wdata_valid_mask;
-        write_width_t write_width;
+        com_req_id_t com_id;
+        sub_req_id_t sub_id;
+        block_addr_t addr;
+        logic        is_write;
+        warp_data_t  wdata;
+        act_mask_t   wdata_valid_mask;
+        width_t      write_width;
         block_idx_t [WarpWidth-1:0] offsets;
     } coalesce_splitter_to_wdata_t;
+
+    // Per Thread data
+    typedef struct packed {
+        sub_req_id_t sub_id;
+        block_idx_t  offset;
+        reg_data_t   data;
+    } thread_data_t;
+
+    // Buffer entry
+    typedef struct packed {
+        iid_t     tag;
+        reg_idx_t dst;
+        width_t   load_width;
+        logic         [WarpWidth-1:0] thread_waiting;
+        logic         [WarpWidth-1:0] thread_ready;
+        thread_data_t [WarpWidth-1:0] thread_data;
+    } buffer_entry_t;
 
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
 
+    // Do we have space for a new instruction and where in the buffer?
+    logic        space_for_new_inst;
+    com_req_id_t insert_buff_id;
+
     // New instruction information
-    logic         opc_to_eu_is_write;
-    req_addr_t    opc_to_eu_addr;
-    com_req_id_t  opc_to_eu_com_id;
-    write_width_t opc_to_eu_write_width;
+    logic      opc_to_eu_is_write, eu_to_opc_ready;
+    req_addr_t opc_to_eu_addr;
+    width_t    opc_to_eu_width;
 
     // Coalesce Splitter to Wdata Assembler
     logic      cs_to_wdata_valid_d, cs_to_wdata_valid_q;
@@ -129,12 +151,21 @@ module load_store_unit #(
     logic wdata_to_cs_ready_d, wdata_to_cs_ready_q;
     coalesce_splitter_to_wdata_t cs_to_wdata_d, cs_to_wdata_q;
 
-    // #######################################################################################
-    // # Combinational logic                                                                 #
-    // #######################################################################################
+    // Memory response common and sub ID
+    com_req_id_t mem_rsp_com_id;
+    sub_req_id_t mem_rsp_sub_id;
+
+    // Request buffer
+    logic          [OutstandingReqs-1:0] buffer_valid_q, buffer_valid_d;
+    buffer_entry_t [OutstandingReqs-1:0] buffer_q,       buffer_d;
+
+    // Which buffer entries are ready to be sent to the Result Collector
+    logic [OutstandingReqs-1:0] buffer_ready_for_rc;
+    logic [OutstandingReqs-1:0] buffer_select_for_rc; // Which buffer entries to free
+    buffer_entry_t              selected_buffer_entry;
 
     // #######################################################################################
-    // # Coalesce Splitter                                                                   #
+    // # Combinational logic                                                                 #
     // #######################################################################################
 
     // Operand 0 is the address for load/store operations
@@ -147,45 +178,190 @@ module load_store_unit #(
     assign opc_to_eu_is_write = opc_to_eu_inst_sub_i inside `BGPU_INST_STORE;
 
     // Write width
-    always_comb begin : write_width
-        opc_to_eu_write_width = '0; // Default to 1 byte
+    always_comb begin : operation_width
+        opc_to_eu_width = '0; // Default to 1 byte
 
         case (opc_to_eu_inst_sub_i)
-            LSU_STORE_BYTE : opc_to_eu_write_width = 'd0; // 1 byte
+            LSU_STORE_BYTE, LSU_LOAD_BYTE : opc_to_eu_width = 'd0; // 1 byte
             /* verilator lint_off WIDTHTRUNC */
-            LSU_STORE_HALF : begin
+            LSU_STORE_HALF, LSU_LOAD_HALF : begin
                 if(RegWidthInBytes >= 2)
-                    opc_to_eu_write_width = 'd1; // 2 bytes
+                    opc_to_eu_width = 'd1; // 2 bytes
             end
-            LSU_STORE_WORD : begin
+            LSU_STORE_WORD, LSU_LOAD_WORD : begin
                 if(RegWidthInBytes >= 4)
-                    opc_to_eu_write_width = 'd3; // 4 bytes
+                    opc_to_eu_width = 'd3; // 4 bytes
                 else if(RegWidthInBytes >= 2)
-                    opc_to_eu_write_width = 'd1; // 2 bytes
+                    opc_to_eu_width = 'd1; // 2 bytes
             end
             /* verilator lint_on WIDTHTRUNC */
-            default : opc_to_eu_write_width = 'd0; // 1 byte
+            default : opc_to_eu_width = 'd0; // 1 byte
         endcase
-    end : write_width
+    end : operation_width
+
+    // Check if we have space for a new instruction -> atleast one buffer entry is free
+    assign space_for_new_inst = !(&buffer_valid_q);
+
+    // Are only ready if we have space for a new instruction and splitter is ready
+    assign eu_to_opc_ready_o = space_for_new_inst && eu_to_opc_ready;
+
+    // Find the first free buffer entry -> Also used as common request ID
+    always_comb begin : find_free_buffer_entry
+        insert_buff_id = '0; // Default to 0
+        for(int unsigned i = 0; i < OutstandingReqs; i++) begin : find_free
+            if (!buffer_valid_q[i]) begin
+                insert_buff_id = i[OutstandingReqIdxWidth-1:0];
+                break; // Found a free entry, stop searching
+            end
+        end : find_free
+    end : find_free_buffer_entry
+
+    // Get common and sub request ID from the memory response
+    assign mem_rsp_sub_id = mem_rsp_id_i[SubReqIdWidth-1:0];
+    assign mem_rsp_com_id = mem_rsp_id_i[OutstandingReqIdxWidth + SubReqIdWidth-1:SubReqIdWidth];
+
+    // #######################################################################################
+    // # Request buffer                                                                     #
+    // #######################################################################################
+
+    always_comb begin : request_buffer
+        // Default
+        buffer_valid_d = buffer_valid_q;
+        buffer_d       = buffer_q;
+
+        // If we have a new instruction, set the corresponding buffer entry to valid
+        if (opc_to_eu_valid_i && eu_to_opc_ready_o) begin
+            buffer_valid_d[insert_buff_id] = 1'b1;
+
+            buffer_d[insert_buff_id].tag        = opc_to_eu_tag_i;
+            buffer_d[insert_buff_id].dst        = opc_to_eu_dst_i;
+            buffer_d[insert_buff_id].load_width = opc_to_eu_width;
+
+            // Mark inactive threads as ready
+            buffer_d[insert_buff_id].thread_waiting = '0;
+            buffer_d[insert_buff_id].thread_ready   = ~opc_to_eu_act_mask_i;
+            buffer_d[insert_buff_id].thread_data    = '0; // Clear thread data
+        end
+
+        // If we have a request splitted, update the thread data
+        if (cs_to_wdata_valid_d && wdata_to_cs_ready_q) begin
+            for(int unsigned i = 0; i < WarpWidth; i++) begin : update_thread_data
+                if (cs_to_wdata_valid_mask_d[i]) begin
+                    // Update the thread data for the corresponding thread
+                    buffer_d[cs_to_wdata_d.com_id].thread_data   [i].sub_id = cs_to_wdata_d.sub_id;
+                    buffer_d[cs_to_wdata_d.com_id].thread_data   [i].offset
+                        = cs_to_wdata_d.offsets[i];
+                    buffer_d[cs_to_wdata_d.com_id].thread_waiting[i]        = 1'b1;
+                    buffer_d[cs_to_wdata_d.com_id].thread_ready  [i]        = 1'b0;
+                end
+            end : update_thread_data
+        end
+
+        // If we receive a memory response, update the buffer entry
+        if (mem_rsp_valid_i) begin
+            if(buffer_valid_q[mem_rsp_com_id]) begin
+                // If the buffer entry is valid, update the thread data
+                for(int unsigned i = 0; i < WarpWidth; i++) begin : update_thread_data_rsp
+                    if (!buffer_q[mem_rsp_com_id].thread_ready[i]
+                        && buffer_q[mem_rsp_com_id].thread_waiting[i]
+                        && buffer_q[mem_rsp_com_id].thread_data[i].sub_id == mem_rsp_sub_id) begin
+                        // If the thread is ready and the sub ID matches, update the data
+                        // We use the offset to load the correct data
+                        // We always load a full register width
+                        /* verilator lint_off WIDTHTRUNC */
+                        buffer_d[mem_rsp_com_id].thread_data[i].data = mem_rsp_data_i >>
+                            (buffer_q[mem_rsp_com_id].thread_data[i].offset * 8);
+                        /* verilator lint_on WIDTHTRUNC */
+
+                        buffer_d[mem_rsp_com_id].thread_ready[i] = 1'b1; // Mark thread as ready
+                    end
+                end : update_thread_data_rsp
+            end
+        end
+
+        // A buffer entry is selected for the Result Collector
+        for(int unsigned i = 0; i < OutstandingReqs; i++) begin : free_buffer
+            if(buffer_select_for_rc[i])
+                buffer_valid_d[i] = 1'b0; // Free the buffer entry
+        end : free_buffer
+
+    end : request_buffer
+
+    // Check if buffer entries are valid and ready to be sent to the Result Collector
+    for(genvar i = 0; i < OutstandingReqs; i++) begin : gen_buffer_ready_to_rc
+        assign buffer_ready_for_rc[i] = buffer_valid_q[i] && (&buffer_q[i].thread_ready);
+    end : gen_buffer_ready_to_rc
+
+    // Arbiter for Result Collector
+    rr_arb_tree #(
+        .DataType ( buffer_entry_t  ),
+        .NumIn    ( OutstandingReqs ),
+        .ExtPrio  ( 1'b0 ),
+        .AxiVldRdy( 1'b0 ),
+        .LockIn   ( 1'b0 ),
+        .FairArb  ( 1'b1 )
+    ) i_rr_arb (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .req_i ( buffer_ready_for_rc  ),
+        .gnt_o ( buffer_select_for_rc ),
+        .data_i( buffer_q             ),
+
+        .req_o ( eu_to_rc_valid_o      ),
+        .gnt_i ( rc_to_eu_ready_i      ),
+        .data_o( selected_buffer_entry ),
+
+        // Unused
+        .idx_o  ( /* NOT CONNECTED */ ),
+        .flush_i( 1'b0                ),
+        .rr_i   ( '0                  )
+    );
+
+    // Build output for Result Collector
+    assign eu_to_rc_tag_o  = selected_buffer_entry.tag;
+    assign eu_to_rc_dst_o  = selected_buffer_entry.dst;
+
+    always_comb begin : build_warp_data_for_rc
+        // Default to zero
+        eu_to_rc_data_o = '0;
+
+        // Build the warp data for the Result Collector
+        for(int unsigned i = 0; i < WarpWidth; i++) begin : build_warp_data
+            case (selected_buffer_entry.load_width)
+                'd0 : eu_to_rc_data_o[i*RegWidth +: RegWidth]
+                    = selected_buffer_entry.thread_data[i].data & 'hff; // 1 byte
+                'd1 : eu_to_rc_data_o[i*RegWidth +: RegWidth]
+                    = selected_buffer_entry.thread_data[i].data & 'hffff; // 2 bytes
+                'd3 : eu_to_rc_data_o[i*RegWidth +: RegWidth]
+                    = selected_buffer_entry.thread_data[i].data & 'hffffffff; // 4 bytes
+                default : eu_to_rc_data_o[i*RegWidth +: RegWidth] = '0;
+            endcase
+        end : build_warp_data
+    end : build_warp_data_for_rc
+
+    // #######################################################################################
+    // # Coalesce Splitter                                                                   #
+    // #######################################################################################
 
     coalesce_splitter #(
         .NumRequests  ( WarpWidth     ),
         .AddressWidth ( AddressWidth  ),
         .BlockIdxBits ( BlockIdxBits  ),
         .warp_data_t  ( warp_data_t   ),
-        .write_width_t( write_width_t )
+        .write_width_t( width_t       )
     ) i_coalesce_splitter (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .ready_o      ( eu_to_opc_ready_o       ),
-        .valid_i      ( opc_to_eu_valid_i       ),
-        .we_i         ( opc_to_eu_is_write      ),
-        .req_id_i     ( opc_to_eu_com_id        ),
-        .addr_valid_i ( opc_to_eu_act_mask_i    ),
-        .addr_i       ( opc_to_eu_addr          ),
-        .wdata_i      ( opc_to_eu_operands_i[1] ),
-        .write_width_i( opc_to_eu_write_width   ),
+        .ready_o      ( eu_to_opc_ready                         ),
+        .valid_i      ( opc_to_eu_valid_i && space_for_new_inst ),
+        .we_i         ( opc_to_eu_is_write                      ),
+        .req_id_i     ( insert_buff_id                          ),
+        .addr_valid_i ( opc_to_eu_act_mask_i                    ),
+        .addr_i       ( opc_to_eu_addr                          ),
+        .wdata_i      ( opc_to_eu_operands_i[1]                 ),
+        .write_width_i( opc_to_eu_width                         ),
 
         .req_ready_i      ( wdata_to_cs_ready_q       ),
         .req_valid_o      ( cs_to_wdata_valid_mask_d  ),
@@ -253,8 +429,40 @@ module load_store_unit #(
     // # Sequential logic                                                                    #
     // #######################################################################################
 
+    // Buffer valid bits
+    `FF(buffer_valid_q, buffer_valid_d, '0, clk_i, rst_ni);
+
+    // Buffer entries
+    `FF(buffer_q, buffer_d, '0, clk_i, rst_ni);
+
     // #######################################################################################
     // # Assertions                                                                          #
     // #######################################################################################
+
+    `ifndef SYNTHESIS
+        initial assert (RegWidth % 8 == 0)
+        else $error("Register width must be a multiple of 8 bits. Current width: %0d", RegWidth);
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            opc_to_eu_valid_i && eu_to_opc_ready_o |->
+            (opc_to_eu_inst_sub_i inside `BGPU_INST_STORE)
+            || (opc_to_eu_inst_sub_i inside `BGPU_INST_LOAD)
+        ) else $error("Received instruction with invalid type. Tag: %0h, Inst: %0h",
+            opc_to_eu_tag_i, opc_to_eu_inst_sub_i);
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            mem_rsp_valid_i |-> buffer_valid_q[mem_rsp_com_id]
+        ) else $error("Memory resp received for invalid buffer entry ID %0d", mem_rsp_com_id);
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            mem_rsp_valid_i |-> !(&buffer_q[mem_rsp_com_id].thread_ready)
+        ) else $error("Memory resp received for buffer entry ID %0d, but all threads are ready.",
+            mem_rsp_com_id);
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            opc_to_eu_valid_i && eu_to_opc_ready_o |-> opc_to_eu_act_mask_i != '0
+        ) else $error("Received instruction with no active threads. Tag: %0h, Inst: %0h",
+            opc_to_eu_tag_i, opc_to_eu_inst_sub_i);
+    `endif
 
 endmodule : load_store_unit
