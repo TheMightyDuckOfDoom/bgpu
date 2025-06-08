@@ -117,4 +117,19 @@ jobs:
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_coalesce_comparator
- 
+    
+  tb_coalesce_splitter:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_coalesce_splitter
+
+  tb_wdata_assembler:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_wdata_assembler

@@ -6,6 +6,15 @@
 `include "common_cells/registers.svh"
 
 /// Wait Buffer
+// TOOD: We need some sort of memory ordering fence/barrier,
+// otherwise we cannot guarantee that WAR-RAW hazards are not violated as instruction execute out-of-order.
+// Easiest would be to have a barrier that waits until all previous memory operations are completed.
+// All following memory operations must then wait for the barrier to be released
+// When a barrier is issued:
+// 1. Take a snapshot of which entries have a memory operation
+// -> overrides the previous snapshot to handle multiple barriers after another
+// 2. When retiring an instruction, clear it from the snapshot
+// 3. Only allow issue of new instructions when the snapshot is empty
 module wait_buffer #(
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
