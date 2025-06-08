@@ -56,6 +56,7 @@ module load_store_unit #(
     output req_id_t     mem_req_id_o,
     output block_addr_t mem_req_addr_o,
     output block_mask_t mem_req_we_mask_o,
+    output block_data_t mem_req_wdata_o,
 
     /// Memory Response
     input  logic        mem_rsp_valid_i,
@@ -78,6 +79,14 @@ module load_store_unit #(
     output reg_idx_t   eu_to_rc_dst_o,
     output warp_data_t eu_to_rc_data_o
 );
+
+    // #######################################################################################
+    // # Local parameters                                                                    #
+    // #######################################################################################
+
+    localparam int unsigned SubReqIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
+    localparam int unsigned RegWidthInBytes = (RegWidth + 7) / 8;
+
     // #######################################################################################
     // # Type Definitions                                                                    #
     // #######################################################################################
@@ -87,15 +96,19 @@ module load_store_unit #(
     typedef block_idx_t [   WarpWidth-1:0] offsets_t;
 
     typedef logic       [OutstandingReqIdxWidth-1:0] com_req_id_t;
-    typedef logic       [             WarpWidth-1:0] sub_req_id_t;
+    typedef logic       [         SubReqIdWidth-1:0] sub_req_id_t;
+
+    typedef logic [RegWidthInBytes-1:0] write_width_t;
 
     // Data passed from the Coalesce Splitter to the Wdata Assembler
     typedef struct packed {
-        com_req_id_t com_id;
-        sub_req_id_t sub_id;
-        block_addr_t addr;
-        warp_data_t  wdata;
-        block_mask_t we_mask;
+        com_req_id_t  com_id;
+        sub_req_id_t  sub_id;
+        block_addr_t  addr;
+        logic         is_write;
+        warp_data_t   wdata;
+        act_mask_t    wdata_valid_mask;
+        write_width_t write_width;
         block_idx_t [WarpWidth-1:0] offsets;
     } coalesce_splitter_to_wdata_t;
 
@@ -103,14 +116,17 @@ module load_store_unit #(
     // # Signals                                                                             #
     // #######################################################################################
 
-    // New instruction is a write
-    logic opc_to_eu_is_write;
-    // Operand 0 truncated to address width
-    req_addr_t opc_to_eu_addr;
+    // New instruction information
+    logic         opc_to_eu_is_write;
+    req_addr_t    opc_to_eu_addr;
+    com_req_id_t  opc_to_eu_com_id;
+    write_width_t opc_to_eu_write_width;
 
-    logic cs_to_wdata_valid_d, cs_to_wdata_valid_q;
+    // Coalesce Splitter to Wdata Assembler
+    logic      cs_to_wdata_valid_d, cs_to_wdata_valid_q;
+    act_mask_t cs_to_wdata_valid_mask_d;
+
     logic wdata_to_cs_ready_d, wdata_to_cs_ready_q;
-    act_mask_t cs_to_wdata_valid_mask;
     coalesce_splitter_to_wdata_t cs_to_wdata_d, cs_to_wdata_q;
 
     // #######################################################################################
@@ -126,32 +142,66 @@ module load_store_unit #(
     for(genvar i = 0; i < WarpWidth; i++) begin : gen_addr
         assign opc_to_eu_addr[i] = opc_to_eu_operands_i[0][i*RegWidth +: AddressWidth];
     end : gen_addr
-    
+
     // Check if the instruction is a write
-    assign opc_to_eu_is_write = opc_to_eu_inst_sub_i == BGPU_INST_SUBTYPE_STORE;
+    assign opc_to_eu_is_write = opc_to_eu_inst_sub_i inside `BGPU_INST_STORE;
+
+    // Write width
+    always_comb begin : write_width
+        opc_to_eu_write_width = '0; // Default to 1 byte
+
+        case (opc_to_eu_inst_sub_i)
+            LSU_STORE_BYTE : opc_to_eu_write_width = 'd0; // 1 byte
+            /* verilator lint_off WIDTHTRUNC */
+            LSU_STORE_HALF : begin
+                if(RegWidthInBytes >= 2)
+                    opc_to_eu_write_width = 'd1; // 2 bytes
+            end
+            LSU_STORE_WORD : begin
+                if(RegWidthInBytes >= 4)
+                    opc_to_eu_write_width = 'd3; // 4 bytes
+                else if(RegWidthInBytes >= 2)
+                    opc_to_eu_write_width = 'd1; // 2 bytes
+            end
+            /* verilator lint_on WIDTHTRUNC */
+            default : opc_to_eu_write_width = 'd0; // 1 byte
+        endcase
+    end : write_width
 
     coalesce_splitter #(
-        .NumRequests ( WarpWidth    ),
-        .AddressWidth( AddressWidth ),
-        .BlockIdxBits( BlockIdxBits )
+        .NumRequests  ( WarpWidth     ),
+        .AddressWidth ( AddressWidth  ),
+        .BlockIdxBits ( BlockIdxBits  ),
+        .warp_data_t  ( warp_data_t   ),
+        .write_width_t( write_width_t )
     ) i_coalesce_splitter (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .ready_o      ( eu_to_opc_ready_o    ),
-        .valid_i      ( opc_to_eu_valid_i    ),
-        .we_i         ( opc_to_eu_is_write   ),
-        .addr_valid_i ( opc_to_eu_act_mask_i ),
-        .addr_i       ( opc_to_eu_addr       ),
+        .ready_o      ( eu_to_opc_ready_o       ),
+        .valid_i      ( opc_to_eu_valid_i       ),
+        .we_i         ( opc_to_eu_is_write      ),
+        .req_id_i     ( opc_to_eu_com_id        ),
+        .addr_valid_i ( opc_to_eu_act_mask_i    ),
+        .addr_i       ( opc_to_eu_addr          ),
+        .wdata_i      ( opc_to_eu_operands_i[1] ),
+        .write_width_i( opc_to_eu_write_width   ),
 
-        .req_ready_i  ( wdata_to_cs_ready_q   ),
-        .req_valid_o  ( cs_to_wdata_valid_d   ),
-        .req_we_o     ( cs_to_wdata_d.we_mask ),
-        .req_com_id_o ( cs_to_wdata_d.com_id  ),
-        .req_sub_id_o ( cs_to_wdata_d.sub_id  ),
-        .req_addr_o   ( cs_to_wdata_d.addr    ),
-        .req_offsets_o( cs_to_wdata_d.offsets )
+        .req_ready_i      ( wdata_to_cs_ready_q       ),
+        .req_valid_o      ( cs_to_wdata_valid_mask_d  ),
+        .req_we_o         ( cs_to_wdata_d.is_write    ),
+        .req_com_id_o     ( cs_to_wdata_d.com_id      ),
+        .req_sub_id_o     ( cs_to_wdata_d.sub_id      ),
+        .req_addr_o       ( cs_to_wdata_d.addr        ),
+        .req_offsets_o    ( cs_to_wdata_d.offsets     ),
+        .req_wdata_o      ( cs_to_wdata_d.wdata       ),
+        .req_write_width_o( cs_to_wdata_d.write_width )
     );
+
+    // Valid if atleas one request is valid
+    assign cs_to_wdata_valid_d            = |cs_to_wdata_valid_mask_d;
+    // Store which threads participate in the write operation
+    assign cs_to_wdata_d.wdata_valid_mask = cs_to_wdata_valid_mask_d;
 
     // #######################################################################################
     // # Register between Coalesce Splitter and Wdata Assembler                              #
@@ -160,8 +210,10 @@ module load_store_unit #(
     stream_register #(
         .T( coalesce_splitter_to_wdata_t )
     ) i_cs_to_wdata_reg (
-        .clk_i ( clk_i ),
-        .rst_ni( rst_ni ),
+        .clk_i     ( clk_i  ),
+        .rst_ni    ( rst_ni ),
+        .clr_i     ( 1'b0   ),
+        .testmode_i( 1'b0   ),
 
         .valid_i( cs_to_wdata_valid_d ),
         .ready_o( wdata_to_cs_ready_q ),
@@ -171,6 +223,31 @@ module load_store_unit #(
         .ready_i( wdata_to_cs_ready_d ),
         .data_o ( cs_to_wdata_q       )
     );
+
+    // #######################################################################################
+    // # Wdata Assembler                                                                     #
+    // #######################################################################################
+
+    wdata_assembler #(
+        .RegWidth     ( RegWidth     ),
+        .WarpWidth    ( WarpWidth    ),
+        .BlockIdxBits ( BlockIdxBits )
+    ) i_wdata_assembler (
+        .we_mask_i      ( cs_to_wdata_q.is_write ? cs_to_wdata_q.wdata_valid_mask : '0 ),
+        .wdata_i        ( cs_to_wdata_q.wdata     ),
+        .write_width_i  ( '1 ),
+        .block_offsets_i( cs_to_wdata_q.offsets ),
+
+        .mem_we_mask_o( mem_req_we_mask_o ),
+        .mem_wdata_o  ( mem_req_wdata_o   )
+    );
+
+    // Build the memory request
+    assign mem_req_valid_o     = cs_to_wdata_valid_q;
+    assign wdata_to_cs_ready_d = mem_ready_i;
+
+    assign mem_req_addr_o = cs_to_wdata_q.addr;
+    assign mem_req_id_o   = { cs_to_wdata_q.com_id, cs_to_wdata_q.sub_id };
 
     // #######################################################################################
     // # Sequential logic                                                                    #

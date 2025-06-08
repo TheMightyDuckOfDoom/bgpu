@@ -58,7 +58,7 @@ module tb_load_store_unit #(
 
     /// Dependent parameter, do **not** overwrite.
     typedef logic  [RegWidth * WarpWidth-1:0] warp_data_t;
-    typedef logic  [         RegIdxWidth-1:0] reg_idx_t;  
+    typedef logic  [         RegIdxWidth-1:0] reg_idx_t;
     typedef logic  [          BlockWidth-1:0] block_mask_t;
     typedef logic  [      BlockAddrWidth-1:0] block_addr_t;
     typedef logic  [                     7:0] byte_t;
@@ -77,21 +77,20 @@ module tb_load_store_unit #(
         act_mask_t  active_mask;
         bgpu_inst_t inst;
         reg_idx_t   dst;
-        warp_data_t  [OperandsPerInst-1:0] src_data;
+        warp_data_t [OperandsPerInst-1:0] src_data;
     } eu_req_t;
 
     typedef struct packed {
-        iid_t      tag;
-        reg_idx_t  dst;
+        iid_t       tag;
+        reg_idx_t   dst;
         warp_data_t data;
     } eu_rsp_t;
 
     typedef struct packed {
         req_id_t     id;
         block_addr_t addr;
-        act_mask_t   we;
-        block_idx_t [WarpWidth-1:0] write_idx;
-        warp_data_t wdata;
+        block_mask_t we_mask;
+        block_data_t wdata;
     } mem_req_t;
 
     typedef struct packed {
@@ -239,7 +238,7 @@ module tb_load_store_unit #(
                 rsp.id = mem_req.id;
 
                 rsp.data = '0;
-                if(mem_req.we == '0) begin
+                if(mem_req.we_mask == '0) begin
                     $display("Memory Read Request: ID=%0h, Addr=%0h", mem_req.id, mem_req.addr);
                     for(int j = 0; j < BlockWidth; j++) begin
                         // Read data from the memory block
@@ -250,23 +249,20 @@ module tb_load_store_unit #(
                 end else begin
                     // Write to memory
                     $display("Memory Write Request: ID=%0h, Addr=%0h, WE=%b, WData=%h",
-                             mem_req.id, mem_req.addr, mem_req.we, mem_req.wdata);
-                    for(int i = 0; i < WarpWidth; i++) begin
-                        if (mem_req.we[i]) begin
-                            // Write data to the memory block
-                            for(int j = 0; j < RegWidth / 8; j++) begin
-                                // Read data from the memory block
-                                mem_data[int'(mem_req.addr) * BlockWidth + j + int'(mem_req.write_idx[i])] = 
-                                    mem_req.wdata[i * RegWidth +: RegWidth][j * 8 +: 8];
-                            end
+                             mem_req.id, mem_req.addr, mem_req.we_mask, mem_req.wdata);
+                    for(int j = 0; j < BlockWidth; j++) begin
+                        if (mem_req.we_mask[j]) begin
+                            // Write byte to memory
+                            mem_data[j + int'(mem_req.addr) * BlockWidth] = mem_req.wdata[j];
                         end
                     end
-                end 
+                end
 
                 // Check that no response with the same ID exists
                 for (int i = 0; i < mem_responses.size(); i++) begin
                     assert(mem_responses[i].id != mem_req.id)
-                    else $error("Memory response with ID %0h already exists in the queue!", mem_req.id);
+                    else $error("Memory response with ID %0h already exists in the queue!",
+                        mem_req.id);
                 end
 
                 // Add response to the queue
@@ -294,7 +290,6 @@ module tb_load_store_unit #(
                     random_shuffle--;
                 end
 
-
                 // Perform the request
                 mem_rsp_valid = 1'b1;
                 mem_rsp = mem_responses.pop_front();
@@ -306,8 +301,11 @@ module tb_load_store_unit #(
     // # DUT                                                                                 #
     // #######################################################################################
 
+    bgpu_inst_subtype_e INSTS [4] = {
+        LSU_LOAD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD
+    };
     bgpu_inst_subtype_e inst;
-    assign inst = (eu_req.inst & 'd1) == 'd0 ? LSU_LOAD : LSU_STORE;
+    assign inst = INSTS[eu_req.inst.subtype & 'hf];
 
     act_mask_t non_zero_mask;
     assign non_zero_mask = (eu_req.active_mask != '0) ? eu_req.active_mask : '1;
@@ -325,25 +323,24 @@ module tb_load_store_unit #(
         .clk_i  ( clk   ),
         .rst_ni ( rst_n ),
 
-        .mem_ready_i        ( mem_ready         ),
-        .mem_req_valid_o    ( mem_req_valid     ),
-        .mem_req_id_o       ( mem_req.id        ),
-        .mem_req_addr_o     ( mem_req.addr      ),
-        .mem_req_we_o       ( mem_req.we        ),
-        .mem_req_write_idx_o( mem_req.write_idx ),
-        .mem_req_wdata_o    ( mem_req.wdata     ),
+        .mem_ready_i      ( mem_ready       ),
+        .mem_req_valid_o  ( mem_req_valid   ),
+        .mem_req_id_o     ( mem_req.id      ),
+        .mem_req_addr_o   ( mem_req.addr    ),
+        .mem_req_we_mask_o( mem_req.we_mask ),
+        .mem_req_wdata_o  ( mem_req.wdata   ),
 
         .mem_rsp_valid_i( mem_rsp_valid ),
         .mem_rsp_id_i   ( mem_rsp.id    ),
         .mem_rsp_data_i ( mem_rsp.data  ),
 
-        .eu_to_opc_ready_o   ( eu_req_ready       ),
-        .opc_to_eu_valid_i   ( eu_req_valid       ),
-        .opc_to_eu_tag_i     ( eu_req.tag         ),
-        .opc_to_eu_act_mask_i( non_zero_mask      ),
-        .opc_to_eu_inst_sub_i( inst               ),
-        .opc_to_eu_dst_i     ( eu_req.dst         ),
-        .opc_to_eu_operands_i( eu_req.src_data    ),
+        .eu_to_opc_ready_o   ( eu_req_ready    ),
+        .opc_to_eu_valid_i   ( eu_req_valid    ),
+        .opc_to_eu_tag_i     ( eu_req.tag      ),
+        .opc_to_eu_act_mask_i( non_zero_mask   ),
+        .opc_to_eu_inst_sub_i( inst            ),
+        .opc_to_eu_dst_i     ( eu_req.dst      ),
+        .opc_to_eu_operands_i( eu_req.src_data ),
 
         .rc_to_eu_ready_i ( eu_rsp_ready ),
         .eu_to_rc_valid_o ( eu_rsp_valid ),
@@ -381,7 +378,7 @@ module tb_load_store_unit #(
             rsp.dst = eu_req.dst;
             rsp.data = '0;
 
-            $display("Golden Model: Processing request: Tag=%0d, PC=%0h, Active Mask=%b, Inst=%0h, Dst=%0d",
+            $display("Golden Model: Req: Tag=%0d, PC=%0h, Active Mask=%b, Inst=%0h, Dst=%0d",
                      rsp.tag, eu_req.pc, non_zero_mask, eu_req.inst.subtype, rsp.dst);
 
             assert(non_zero_mask != '0) else $error("Golden Model: Active mask is zero!");
@@ -394,13 +391,14 @@ module tb_load_store_unit #(
                     $display("Golden Model: Thread %0d is performing a LOAD operation", thread);
                     for(int i = 0; i < RegWidth / 8; i++) begin
                         // Read byte from golden memory
-                        rsp.data[thread * RegWidth +: RegWidth][i * 8 +: 8] = 
+                        rsp.data[thread * RegWidth +: RegWidth][i * 8 +: 8] =
                             golden_mem[int'(eu_req.src_data[0][thread * RegWidth +: RegWidth]) + i];
                         $display("Golden Model: Loaded data[%0d] = %h from address %h",
                                  i, rsp.data[thread * RegWidth +: RegWidth][i * 8 +: 8],
                                  int'(eu_req.src_data[0][thread * RegWidth +: RegWidth]) + i);
                         $display("Block address: %h",
-                                 int'(eu_req.src_data[0][thread * RegWidth +: RegWidth]) / BlockWidth);
+                                 int'(eu_req.src_data[0][thread * RegWidth +: RegWidth])
+                                    / BlockWidth);
                     end
                 end else begin
                     $display("Golden Model: Thread %0d is performing a STORE operation", thread);
@@ -457,13 +455,14 @@ module tb_load_store_unit #(
             end
 
             assert(found) else begin
-                $warning("No matching golden response found for DUT response: Tag=%0d, Dst=%0d, Data=%h",
+                $warning("No matching golden rsp found for DUT response: Tag=%0d, Dst=%0d, Data=%h",
                        dut_rsp.tag, dut_rsp.dst, dut_rsp.data);
 
                 $display("Available golden responses:");
                 for (int i = 0; i < golden_responses.size(); i++) begin
                     golden_rsp = golden_responses[i];
-                    $display("\tTag=%0d, Dst=%0d, Data=%h", golden_rsp.tag, golden_rsp.dst, golden_rsp.data);
+                    $display("\tTag=%0d, Dst=%0d, Data=%h", golden_rsp.tag, golden_rsp.dst,
+                        golden_rsp.data);
                 end
                 $error();
             end
@@ -501,7 +500,8 @@ module tb_load_store_unit #(
                 insts_issued++;
                 $display("Cycle %0d", cycles);
                 $display("\tIssued instruction: Tag=%0d, PC=%0h, Active Mask=%b, Inst=%0h, Dst=%0d",
-                         eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.inst.subtype, eu_req.dst);
+                         eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.inst.subtype,
+                         eu_req.dst);
                 for (int thread = 0; thread < WarpWidth; thread++) begin
                     if (eu_req.active_mask[thread]) begin
                         $display("\tThread %0d, Addr=%h Data=%h",
@@ -515,7 +515,7 @@ module tb_load_store_unit #(
                 // Log memory request
                 $display("Cycle %0d", cycles);
                 $display("\tMemory Request: ID=%0h, Addr=%0h, WE=%b, WData=%h",
-                         mem_req.id, mem_req.addr, mem_req.we, mem_req.wdata);
+                         mem_req.id, mem_req.addr, mem_req.we_mask, mem_req.wdata);
             end
 
             if (mem_rsp_valid) begin

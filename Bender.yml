@@ -37,7 +37,7 @@ sources:
           - rtl/compute_unit/execution_units/load_store/coalesce_comparator.sv
           - rtl/compute_unit/execution_units/load_store/coalesce_splitter.sv
           - rtl/compute_unit/execution_units/load_store/wdata_assembler.sv
-          # - rtl/compute_unit/execution_units/load_store_unit.sv
+          - rtl/compute_unit/execution_units/load_store_unit.sv
 
           - rtl/compute_unit.sv
 
@@ -58,7 +58,7 @@ sources:
           - test/tb_coalesce_comparator.sv
           - test/tb_coalesce_splitter.sv
           - test/tb_wdata_assembler.sv
-          # - test/tb_load_store_unit.sv
+          - test/tb_load_store_unit.sv
 
           - test/tb_compute_unit.sv
 

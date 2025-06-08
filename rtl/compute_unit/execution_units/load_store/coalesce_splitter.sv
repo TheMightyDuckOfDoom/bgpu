@@ -17,6 +17,10 @@ module coalesce_splitter #(
     parameter int unsigned BlockIdxBits = 4,
     /// Width of the ID that is common for all sub-requests
     parameter int unsigned CommonReqIdWidth = 1,
+    /// Warp Data
+    parameter type warp_data_t = logic,
+    /// Write width
+    parameter type write_width_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned SubReqIdWidth = NumRequests > 1 ? $clog2(NumRequests) : 1,
@@ -34,12 +38,14 @@ module coalesce_splitter #(
     input logic rst_ni,
 
     /// Insert new request
-    output logic        ready_o,
-    input  logic        valid_i,
-    input  logic        we_i,
-    input  com_req_id_t req_id_i,
-    input  valid_mask_t addr_valid_i,
-    input  req_addr_t   addr_i,
+    output logic         ready_o,
+    input  logic         valid_i,
+    input  logic         we_i,
+    input  com_req_id_t  req_id_i,
+    input  valid_mask_t  addr_valid_i,
+    input  req_addr_t    addr_i,
+    input  warp_data_t   wdata_i,
+    input  write_width_t write_width_i,
 
     /// Send out coalesced requests
     input  logic           req_ready_i,
@@ -48,7 +54,9 @@ module coalesce_splitter #(
     output com_req_id_t    req_com_id_o,
     output sub_req_id_t    req_sub_id_o,
     output block_addr_t    req_addr_o,
-    output block_offsets_t req_offsets_o
+    output block_offsets_t req_offsets_o,
+    output warp_data_t     req_wdata_o,
+    output write_width_t   req_write_width_o
 );
     // #######################################################################################
     // # Type Definitions                                                                    #
@@ -56,11 +64,13 @@ module coalesce_splitter #(
 
     // Requests to be coalesced
     typedef struct packed {
-        valid_mask_t req_valid;
-        req_addr_t   req_addr;
-        com_req_id_t com_req_id;
-        sub_req_id_t sub_req_id;
-        logic        we;
+        valid_mask_t  req_valid;
+        req_addr_t    req_addr;
+        com_req_id_t  com_req_id;
+        sub_req_id_t  sub_req_id;
+        logic         we;
+        warp_data_t   wdata;
+        write_width_t write_width;
     } state_t;
 
     // #######################################################################################
@@ -88,11 +98,13 @@ module coalesce_splitter #(
 
         // Insert handshake
         if (valid_i && ready_o) begin : insert_handshake
-            state_d.req_valid  = addr_valid_i;
-            state_d.req_addr   = addr_i;
-            state_d.we         = we_i;
-            state_d.com_req_id = req_id_i;
-            state_d.sub_req_id = '0; // First sub-request
+            state_d.req_valid   = addr_valid_i;
+            state_d.req_addr    = addr_i;
+            state_d.we          = we_i;
+            state_d.wdata       = wdata_i;
+            state_d.write_width = write_width_i;
+            state_d.com_req_id  = req_id_i;
+            state_d.sub_req_id  = '0; // First sub-request
         end : insert_handshake
 
     end : comb_logic
@@ -106,8 +118,10 @@ module coalesce_splitter #(
     assign req_com_id_o = state_q.com_req_id;
     assign req_sub_id_o = state_q.sub_req_id;
 
-    // Output write enable
-    assign req_we_o = state_q.we;
+    // Output write enable, data and width
+    assign req_we_o          = state_q.we;
+    assign req_wdata_o       = state_q.wdata;
+    assign req_write_width_o = state_q.write_width;
 
     // #######################################################################################
     // # Coalesce Comparator                                                                 #

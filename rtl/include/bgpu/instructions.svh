@@ -21,10 +21,12 @@ typedef enum logic [5:0] {
 
     IU_LDI  = 'h06, // Load immediate -> concatenate operands register index
     IU_ADDI = 'h07, // Add immediate -> add immediate value to first operand
-    IU_SUBI = 'h08,  // Subtract immediate -> subtract immediate value from first operand
+    IU_SUBI = 'h08, // Subtract immediate -> subtract immediate value from first operand
 
     LSU_LOAD = 'h09, // Load from memory
-    LSU_STORE = 'h0A // Store to memory
+    LSU_STORE_BYTE = 'h0A, // Store byte to memory
+    LSU_STORE_HALF = 'h0B, // Store half-word to memory
+    LSU_STORE_WORD = 'h0C  // Store word to memory
 } bgpu_inst_subtype_e;
 
 typedef struct packed {
@@ -38,13 +40,24 @@ typedef struct packed {
     IU_SUB,\
     IU_AND,\
     IU_OR,\
-    IU_XOR\
+    IU_XOR,\
+    LSU_LOAD,\
+    LSU_STORE_BYTE,\
+    LSU_STORE_HALF,\
+    LSU_STORE_WORD\
 }
 
 // First operand is a register, second is an immediate value (register index)
 `define BGPU_INST_REG_IMM_OPERANDS {\
     IU_ADDI,\
     IU_SUBI\
+}
+
+// Store operations
+`define BGPU_INST_STORE {\
+    LSU_STORE_BYTE,\
+    LSU_STORE_HALF,\
+    LSU_STORE_WORD\
 }
 
 `ifndef SYNTHESIS
@@ -58,6 +71,13 @@ typedef struct packed {
         IU_LDI,\
         IU_ADDI,\
         IU_SUBI\
+    }
+
+    `define BGPU_LOAD_STORE_UNIT_VALID_SUBTYPES {\
+        LSU_LOAD,\
+        LSU_STORE_BYTE,\
+        LSU_STORE_HALF,\
+        LSU_STORE_WORD\
     }
 `endif
 
