@@ -27,12 +27,12 @@ module integer_unit #(
     input logic rst_ni,
 
     // From Operand Collector
-    output logic               eu_to_opc_ready_o,
-    input  logic               opc_to_eu_valid_i,
-    input  iid_t               opc_to_eu_tag_i,
-    input  bgpu_inst_subtype_e opc_to_eu_inst_sub_i,
-    input  reg_idx_t           opc_to_eu_dst_i,
-    input  warp_data_t         [OperandsPerInst-1:0] opc_to_eu_operands_i,
+    output logic             eu_to_opc_ready_o,
+    input  logic             opc_to_eu_valid_i,
+    input  iid_t             opc_to_eu_tag_i,
+    input  bgpu_iu_subtype_e opc_to_eu_inst_sub_i,
+    input  reg_idx_t         opc_to_eu_dst_i,
+    input  warp_data_t       [OperandsPerInst-1:0] opc_to_eu_operands_i,
 
     // To Result Collector
     input  logic       rc_to_eu_ready_i,

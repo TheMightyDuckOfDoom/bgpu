@@ -301,10 +301,10 @@ module tb_load_store_unit #(
     // # DUT                                                                                 #
     // #######################################################################################
 
-    bgpu_inst_subtype_e INSTS [6] = {
+    bgpu_lsu_subtype_e INSTS [6] = {
         LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD
     };
-    bgpu_inst_subtype_e inst;
+    bgpu_lsu_subtype_e inst;
     assign inst = INSTS[eu_req.inst.subtype % 6];
 
     act_mask_t non_zero_mask;

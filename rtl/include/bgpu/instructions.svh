@@ -21,38 +21,39 @@ typedef enum logic [5:0] {
 
     IU_LDI  = 'h06, // Load immediate -> concatenate operands register index
     IU_ADDI = 'h07, // Add immediate -> add immediate value to first operand
-    IU_SUBI = 'h08, // Subtract immediate -> subtract immediate value from first operand
+    IU_SUBI = 'h08  // Subtract immediate -> subtract immediate value from first operand
+} bgpu_iu_subtype_e;
 
-    LSU_LOAD_BYTE  = 'h09, // Load from memory
-    LSU_LOAD_HALF  = 'h0A, // Load half-word from memory
-    LSU_LOAD_WORD  = 'h0B, // Load word from memory
-    LSU_STORE_BYTE = 'h0C, // Store byte to memory
-    LSU_STORE_HALF = 'h0D, // Store half-word to memory
-    LSU_STORE_WORD = 'h0E  // Store word to memory
-} bgpu_inst_subtype_e;
+typedef enum logic [5:0] {
+    LSU_LOAD_BYTE  = 'h00, // Load from memory
+    LSU_LOAD_HALF  = 'h01, // Load half-word from memory
+    LSU_LOAD_WORD  = 'h02, // Load word from memory
+    LSU_STORE_BYTE = 'h03, // Store byte to memory
+    LSU_STORE_HALF = 'h04, // Store half-word to memory
+    LSU_STORE_WORD = 'h05  // Store word to memory
+} bgpu_lsu_subtype_e;
+
+typedef union packed {
+    bgpu_iu_subtype_e  iu;
+    bgpu_lsu_subtype_e lsu;
+} bgpu_inst_subtype_u;
 
 typedef struct packed {
     bgpu_eu_e           eu;
-    bgpu_inst_subtype_e subtype;
+    bgpu_inst_subtype_u subtype;
 } bgpu_inst_t;
 
 // Both operands are registers
-`define BGPU_INST_TWO_REG_OPERANDS {\
+`define BGPU_IU_TWO_REG_OPERANDS {\
     IU_ADD,\
     IU_SUB,\
     IU_AND,\
     IU_OR,\
-    IU_XOR,\
-    LSU_LOAD_BYTE,\
-    LSU_LOAD_HALF,\
-    LSU_LOAD_WORD,\
-    LSU_STORE_BYTE,\
-    LSU_STORE_HALF,\
-    LSU_STORE_WORD\
+    IU_XOR\
 }
 
 // First operand is a register, second is an immediate value (register index)
-`define BGPU_INST_REG_IMM_OPERANDS {\
+`define BGPU_IU_REG_IMM_OPERANDS {\
     IU_ADDI,\
     IU_SUBI\
 }

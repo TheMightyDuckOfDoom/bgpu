@@ -433,12 +433,12 @@ module compute_unit #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .eu_to_opc_ready_o   ( eu_to_opc_ready             ),
-        .opc_to_eu_valid_i   ( opc_to_eu_valid             ),
-        .opc_to_eu_tag_i     ( opc_to_eu_data.tag          ),
-        .opc_to_eu_inst_sub_i( opc_to_eu_data.inst.subtype ),
-        .opc_to_eu_dst_i     ( opc_to_eu_data.dst          ),
-        .opc_to_eu_operands_i( opc_to_eu_data.operands     ),
+        .eu_to_opc_ready_o   ( eu_to_opc_ready                ),
+        .opc_to_eu_valid_i   ( opc_to_eu_valid                ),
+        .opc_to_eu_tag_i     ( opc_to_eu_data.tag             ),
+        .opc_to_eu_inst_sub_i( opc_to_eu_data.inst.subtype.iu ),
+        .opc_to_eu_dst_i     ( opc_to_eu_data.dst             ),
+        .opc_to_eu_operands_i( opc_to_eu_data.operands        ),
 
         .rc_to_eu_ready_i( opc_to_eu_ready     ),
         .eu_to_rc_valid_o( eu_to_opc_valid     ),

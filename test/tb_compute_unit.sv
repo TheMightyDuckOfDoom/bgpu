@@ -37,7 +37,7 @@ module tb_compute_unit #(
 
     typedef struct packed {
         bgpu_eu_e eu;
-        bgpu_inst_subtype_e subtype;
+        bgpu_inst_subtype_u subtype;
         reg_idx_t dst;
         reg_idx_t op1;
         reg_idx_t op2;

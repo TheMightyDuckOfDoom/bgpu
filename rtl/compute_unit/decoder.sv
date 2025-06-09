@@ -75,15 +75,22 @@ module decoder #(
         dec_operands_required_o = '0;
         if(dec_inst_o.eu == BGPU_INST_TYPE_IU) begin : decode_iu
             // Two register operands
-            if (dec_inst_o.subtype inside `BGPU_INST_TWO_REG_OPERANDS)
+            if (dec_inst_o.subtype inside `BGPU_IU_TWO_REG_OPERANDS)
                 dec_operands_required_o = '1;
 
             // First operand is a register, second is an immediate value (register index)
-            if (dec_inst_o.subtype inside `BGPU_INST_REG_IMM_OPERANDS) begin
+            if (dec_inst_o.subtype inside `BGPU_IU_REG_IMM_OPERANDS) begin
                 dec_operands_required_o[0] = 1'b1;
                 dec_operands_required_o[1] = 1'b0;
             end
         end : decode_iu
+        else if (dec_inst_o.eu == BGPU_INST_TYPE_LSU) begin : decode_lsu
+            // LSU instructions always have two operands register operands
+            // Operand 0 is the address
+            // Operand 1 is the data to store
+            dec_operands_required_o[0] = 1'b1;
+            dec_operands_required_o[1] = 1'b1;
+        end : decode_lsu
 
         dec_operands_o[0] = ic_inst_i[15:8];
         dec_operands_o[1] = ic_inst_i[7:0];
