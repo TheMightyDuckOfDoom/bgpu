@@ -7,20 +7,25 @@
 /// Integer Unit
 // Performs integer alu operations
 module integer_unit #(
+    /// Number of inflight instructions per warp
+    parameter int unsigned NumTags = 8,
     // Width of the registers
     parameter int unsigned RegWidth = 32,
     // Number of threads in a warp
     parameter int unsigned WarpWidth = 4,
+    /// Number of warps per compute unit
+    parameter int unsigned NumWarps = 8,
     // Number of operands per instruction
     parameter int unsigned OperandsPerInst = 2,
     /// How many registers can each warp access as operand or destination
     parameter int unsigned RegIdxWidth = 8,
-    // Tag data type
-    parameter type iid_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
+    parameter int unsigned TagWidth    = $clog2(NumTags),
+    parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
     parameter type warp_data_t = logic [RegWidth * WarpWidth-1:0],
-    parameter type reg_idx_t   = logic [         RegIdxWidth-1:0]
+    parameter type reg_idx_t   = logic [         RegIdxWidth-1:0],
+    parameter type iid_t       = logic [   TagWidth+WidWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -75,21 +80,26 @@ module integer_unit #(
     // Calculate result
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_result
         always_comb begin : calc_result
+            result[i] = '0; // Default value
+
+            // Check instruction subtype and perform operation
             case (opc_to_eu_inst_sub_i)
                 IU_TID:  result[i] = i; // Thread ID
+                IU_WID:  result[i][WidWidth-1:0] = opc_to_eu_tag_i[WidWidth-1:0]; // Warp ID
 
-                IU_ADD:  result[i] = operands[0][i] + operands[1][i]; // Add
-                IU_ADDI: result[i] = operands[0][i] + operands[1][i]; // Add immediate
-                IU_SUB:  result[i] = operands[0][i] - operands[1][i]; // Subtract
-                IU_SUBI: result[i] = operands[0][i] - operands[1][i]; // Subtract immediate
+                IU_ADD, IU_ADDI: result[i] = operands[1][i] + operands[0][i]; // Add, immediate
+                IU_SUB, IU_SUBI: result[i] = operands[1][i] - operands[0][i]; // Subtract, immediate
 
-                IU_LDI:  result[i] = operands[0][i] | operands[1][i]; // Load immediate
+                IU_LDI, IU_OR:  result[i] = operands[1][i] | operands[0][i]; // Load immediate
 
-                IU_OR:   result[i] = operands[0][i] | operands[1][i]; // OR
-                IU_AND:  result[i] = operands[0][i] & operands[1][i]; // AND
-                IU_XOR:  result[i] = operands[0][i] ^ operands[1][i]; // XOR
+                IU_AND:  result[i] = operands[1][i] & operands[0][i]; // AND
+                IU_XOR:  result[i] = operands[1][i] ^ operands[0][i]; // XOR
+
+                // Shift left logical, immediate
+                IU_SLL, IU_SLLI: result[i] = operands[1][i] << operands[0][i];
+
                 default: begin
-                    result[i] = '0; // Default case, should not happen
+                    result[i] = '1; // Default case, should not happen
                     `ifndef SYNTHESIS
                         $fatal("Instruction subtype not implemented: %0h", opc_to_eu_inst_sub_i);
                     `endif

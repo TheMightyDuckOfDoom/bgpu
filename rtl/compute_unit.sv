@@ -30,15 +30,24 @@ module compute_unit #(
     parameter bit          DualPortRegisterBanks = 1'b0,
     /// Width of the registers
     parameter int unsigned RegWidth = 32,
+    // Memory Address width in bits
+    parameter int unsigned AddressWidth = 32,
+    // Memory Block size in bytes -> Memory request width
+    parameter int unsigned BlockIdxBits = 4,
+    // Width of the id for requests queue
+    parameter int unsigned OutstandingReqIdxWidth = 3,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned TagWidth = $clog2(NumTags),
-    parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type reg_idx_t = logic [RegIdxWidth-1:0],
-    parameter type iid_t = logic [WidWidth+TagWidth-1:0],
-    parameter type pc_t = logic [PcWidth-1:0],
-    parameter type act_mask_t = logic [WarpWidth-1:0],
-    parameter type warp_data_t = logic [RegWidth * WarpWidth-1:0]
+    parameter int unsigned BlockAddrWidth  = AddressWidth - BlockIdxBits,
+    parameter int unsigned BlockWidth      = 1 << BlockIdxBits, // In bytes
+    parameter int unsigned ThreadIdxWidth  = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter type pc_t         = logic  [             PcWidth-1:0],
+    parameter type block_addr_t = logic  [      BlockAddrWidth-1:0],
+    parameter type byte_t       = logic  [                     7:0],
+    parameter type block_data_t = byte_t [          BlockWidth-1:0],
+    parameter type block_idx_t  = logic  [        BlockIdxBits-1:0],
+    parameter type block_mask_t = logic  [          BlockWidth-1:0],
+    parameter type req_id_t     = logic  [OutstandingReqIdxWidth + ThreadIdxWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -50,28 +59,38 @@ module compute_unit #(
 
     // Dummy inputs / outputs
     input  logic                    ic_write_i,
-    input  logic [PcWidth-1:0]      ic_write_pc_i,
+    input  pc_t      ic_write_pc_i,
     input  logic [EncInstWidth-1:0] ic_write_inst_i,
 
-    output logic       eu_to_opc_ready_o,
-    output logic       opc_to_eu_valid_o,
-    output iid_t       opc_to_eu_tag_o,
-    output pc_t        opc_to_eu_pc_o,
-    output act_mask_t  opc_to_eu_act_mask_o,
-    output reg_idx_t   opc_to_eu_dst_o,
-    output warp_data_t [OperandsPerInst-1:0] opc_to_eu_operands_o,
+    /// Memory Request
+    input  logic        mem_ready_i,
+    output logic        mem_req_valid_o,
+    output req_id_t     mem_req_id_o,
+    output block_addr_t mem_req_addr_o,
+    output block_mask_t mem_req_we_mask_o,
+    output block_data_t mem_req_wdata_o,
 
-    output logic       opc_to_eu_ready_o,
-    output logic       eu_to_opc_valid_o,
-    output iid_t       eu_to_opc_tag_o,
-    output reg_idx_t   eu_to_opc_dst_o,
-    output warp_data_t eu_to_opc_data_o
+    /// Memory Response
+    input  logic        mem_rsp_valid_i,
+    input  req_id_t     mem_rsp_id_i,
+    input  block_data_t mem_rsp_data_i
 );
+    // #######################################################################################
+    // # Local Parameters                                                                    #
+    // #######################################################################################
+
+    localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
+    localparam int unsigned TagWidth = NumTags  > 1 ? $clog2( NumTags) : 1;
+
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
 
     // Typedefs
+    typedef logic [         RegIdxWidth-1:0] reg_idx_t;
+    typedef logic [ WidWidth + TagWidth-1:0] iid_t;
+    typedef logic [           WarpWidth-1:0] act_mask_t;
+    typedef logic [RegWidth * WarpWidth-1:0] warp_data_t;
     typedef logic [    WidWidth-1:0] wid_t;
     typedef logic [EncInstWidth-1:0] enc_inst_t;
 
@@ -163,12 +182,16 @@ module compute_unit #(
     disp_to_opc_data_t disp_to_opc_data;
 
     // Register Operand Collector Stage to Execution Units
-    logic opc_to_eu_valid, opc_to_eu_ready;
+    logic opc_to_eu_valid,  eu_to_opc_ready;
+    logic opc_to_iu_valid,  iu_to_opc_ready;
+    logic opc_to_lsu_valid, lsu_to_opc_ready;
     opc_to_eu_data_t opc_to_eu_data;
 
     // Execution Units to Register Operand Collector Stage
-    logic eu_to_opc_valid, eu_to_opc_ready;
-    eu_to_opc_data_t eu_to_opc_data;
+    logic eu_to_opc_valid, opc_to_eu_ready;
+    logic iu_to_rc_valid,  rc_to_iu_ready;
+    logic lsu_to_rc_valid, rc_to_lsu_ready;
+    eu_to_opc_data_t eu_to_opc_data, iu_to_rc_data, lsu_to_rc_data;
 
     // #######################################################################################
     // # Fetcher                                                                             #
@@ -419,50 +442,115 @@ module compute_unit #(
     );
 
     // #######################################################################################
+    // # Execution Unit Demux                                                                #
+    // #######################################################################################
+
+    stream_demux #(
+        .N_OUP(2)
+    ) i_eu_demux (
+        .inp_valid_i( opc_to_eu_valid ),
+        .inp_ready_o( eu_to_opc_ready ),
+
+        .oup_sel_i( opc_to_eu_data.inst.eu[0] ),
+
+        .oup_valid_o({ opc_to_lsu_valid, opc_to_iu_valid }),
+        .oup_ready_i({ lsu_to_opc_ready, iu_to_opc_ready })
+    );
+
+    `ifndef SYNTHESIS
+        assert property (@(posedge clk_i) opc_to_eu_valid
+            |-> opc_to_eu_data.inst.eu inside {BGPU_EU_IU, BGPU_EU_LSU})
+            else $error("Invalid execution unit type: %0d", opc_to_eu_data.inst.eu);
+    `endif
+
+    // #######################################################################################
     // # Execution Units                                                                     #
     // #######################################################################################
 
     // Integer Unit
     integer_unit #(
+        .NumTags        ( NumTags         ),
+        .NumWarps       ( NumWarps        ),
         .RegWidth       ( RegWidth        ),
         .WarpWidth      ( WarpWidth       ),
         .OperandsPerInst( OperandsPerInst ),
-        .RegIdxWidth    ( RegIdxWidth     ),
-        .iid_t          ( iid_t           )
+        .RegIdxWidth    ( RegIdxWidth     )
     ) i_integer_unit (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .eu_to_opc_ready_o   ( eu_to_opc_ready                ),
-        .opc_to_eu_valid_i   ( opc_to_eu_valid                ),
+        .eu_to_opc_ready_o   ( iu_to_opc_ready                ),
+        .opc_to_eu_valid_i   ( opc_to_iu_valid                ),
         .opc_to_eu_tag_i     ( opc_to_eu_data.tag             ),
         .opc_to_eu_inst_sub_i( opc_to_eu_data.inst.subtype.iu ),
         .opc_to_eu_dst_i     ( opc_to_eu_data.dst             ),
         .opc_to_eu_operands_i( opc_to_eu_data.operands        ),
 
-        .rc_to_eu_ready_i( opc_to_eu_ready     ),
-        .eu_to_rc_valid_o( eu_to_opc_valid     ),
-        .eu_to_rc_tag_o  ( eu_to_opc_data.tag  ),
-        .eu_to_rc_dst_o  ( eu_to_opc_data.dst  ),
-        .eu_to_rc_data_o ( eu_to_opc_data.data )
+        .rc_to_eu_ready_i( rc_to_iu_ready     ),
+        .eu_to_rc_valid_o( iu_to_rc_valid     ),
+        .eu_to_rc_tag_o  ( iu_to_rc_data.tag  ),
+        .eu_to_rc_dst_o  ( iu_to_rc_data.dst  ),
+        .eu_to_rc_data_o ( iu_to_rc_data.data )
+    );
+
+    // Load Store Unit
+    load_store_unit #(
+        .RegWidth              ( RegWidth               ),
+        .WarpWidth             ( WarpWidth              ),
+        .OperandsPerInst       ( OperandsPerInst        ),
+        .RegIdxWidth           ( RegIdxWidth            ),
+        .iid_t                 ( iid_t                  ),
+        .AddressWidth          ( AddressWidth           ),
+        .BlockIdxBits          ( BlockIdxBits           ),
+        .OutstandingReqIdxWidth( OutstandingReqIdxWidth )
+    ) i_load_store_unit (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .eu_to_opc_ready_o   ( lsu_to_opc_ready                ),
+        .opc_to_eu_valid_i   ( opc_to_lsu_valid                ),
+        .opc_to_eu_tag_i     ( opc_to_eu_data.tag              ),
+        .opc_to_eu_inst_sub_i( opc_to_eu_data.inst.subtype.lsu ),
+        .opc_to_eu_act_mask_i( opc_to_eu_data.act_mask         ),
+        .opc_to_eu_dst_i     ( opc_to_eu_data.dst              ),
+        .opc_to_eu_operands_i( opc_to_eu_data.operands         ),
+
+        .rc_to_eu_ready_i( rc_to_lsu_ready     ),
+        .eu_to_rc_valid_o( lsu_to_rc_valid     ),
+        .eu_to_rc_tag_o  ( lsu_to_rc_data.tag  ),
+        .eu_to_rc_dst_o  ( lsu_to_rc_data.dst  ),
+        .eu_to_rc_data_o ( lsu_to_rc_data.data ),
+
+        .mem_ready_i      ( mem_ready_i       ),
+        .mem_req_valid_o  ( mem_req_valid_o   ),
+        .mem_req_id_o     ( mem_req_id_o      ),
+        .mem_req_addr_o   ( mem_req_addr_o    ),
+        .mem_req_we_mask_o( mem_req_we_mask_o ),
+        .mem_req_wdata_o  ( mem_req_wdata_o   ),
+
+        .mem_rsp_valid_i  ( mem_rsp_valid_i   ),
+        .mem_rsp_id_i     ( mem_rsp_id_i      ),
+        .mem_rsp_data_i   ( mem_rsp_data_i    )
     );
 
     // #######################################################################################
-    // # Dummy Outputs                                                                       #
+    // # Execution Unit Result Collector                                                     #
     // #######################################################################################
 
-    assign eu_to_opc_ready_o    = eu_to_opc_ready;
-    assign opc_to_eu_valid_o    = opc_to_eu_valid;
-    assign opc_to_eu_tag_o      = opc_to_eu_data.tag;
-    assign opc_to_eu_pc_o       = opc_to_eu_data.pc;
-    assign opc_to_eu_act_mask_o = opc_to_eu_data.act_mask;
-    assign opc_to_eu_dst_o      = opc_to_eu_data.dst;
-    assign opc_to_eu_operands_o = opc_to_eu_data.operands;
+    stream_arbiter #(
+        .DATA_T ( eu_to_opc_data_t ),
+        .N_INP  ( 2                ),
+        .ARBITER( "rr"             )
+    ) i_result_collector (
+        .clk_i        ( clk_i           ),
+        .rst_ni       ( rst_ni          ),
+        .inp_data_i   ({ iu_to_rc_data,  lsu_to_rc_data  }),
+        .inp_valid_i  ({ iu_to_rc_valid, lsu_to_rc_valid }),
+        .inp_ready_o  ({ rc_to_iu_ready, rc_to_lsu_ready }),
 
-    assign opc_to_eu_ready_o = opc_to_eu_ready;
-    assign eu_to_opc_valid_o = eu_to_opc_valid;
-    assign eu_to_opc_tag_o   = eu_to_opc_data.tag;
-    assign eu_to_opc_dst_o   = eu_to_opc_data.dst;
-    assign eu_to_opc_data_o  = eu_to_opc_data.data;
+        .oup_data_o   ( eu_to_opc_data   ),
+        .oup_valid_o  ( eu_to_opc_valid  ),
+        .oup_ready_i  ( opc_to_eu_ready  )
+    );
 
 endmodule : compute_unit

@@ -56,7 +56,6 @@ module tb_load_store_unit #(
     // # Type Definitions                                                                    #
     // #######################################################################################
 
-    /// Dependent parameter, do **not** overwrite.
     typedef logic  [RegWidth * WarpWidth-1:0] warp_data_t;
     typedef logic  [         RegIdxWidth-1:0] reg_idx_t;
     typedef logic  [          BlockWidth-1:0] block_mask_t;

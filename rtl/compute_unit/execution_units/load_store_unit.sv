@@ -35,7 +35,6 @@ module load_store_unit #(
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned BlockWidth      = 1 << BlockIdxBits, // In bytes
     parameter int unsigned BlockAddrWidth  = AddressWidth - BlockIdxBits,
-    parameter int unsigned OutstandingReqs = 1 << OutstandingReqIdxWidth,
     parameter int unsigned ThreadIdxWidth  = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
     parameter type warp_data_t  = logic  [RegWidth * WarpWidth-1:0],
     parameter type reg_idx_t    = logic  [         RegIdxWidth-1:0],
@@ -88,6 +87,7 @@ module load_store_unit #(
     localparam int unsigned SubReqIdWidth   = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
     localparam int unsigned RegWidthInBytes = RegWidth / 8;
     localparam int unsigned WidthBits       = RegWidthInBytes > 1 ? $clog2(RegWidthInBytes) : 1;
+    localparam int unsigned OutstandingReqs = 1 << OutstandingReqIdxWidth;
 
     // #######################################################################################
     // # Type Definitions                                                                    #
@@ -457,6 +457,13 @@ module load_store_unit #(
     `ifndef SYNTHESIS
         initial assert (RegWidth % 8 == 0)
         else $error("Register width must be a multiple of 8 bits. Current width: %0d", RegWidth);
+
+        initial assert (RegWidth >= AddressWidth)
+        else begin
+            $display("Register width must be at least as wide as the address width. ");
+            $display("Current register width: %0d, address width: %0d", RegWidth, AddressWidth);
+            $fatal();
+        end
 
         assert property (@(posedge clk_i) disable iff (!rst_ni)
             opc_to_eu_valid_i && eu_to_opc_ready_o |->

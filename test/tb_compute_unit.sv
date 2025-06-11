@@ -16,24 +16,53 @@ module tb_compute_unit #(
     parameter int unsigned WaitBufferSizePerWarp = 1,
     /// Number of inflight instructions per warp
     parameter int unsigned InflightInstrPerWarp = WaitBufferSizePerWarp * 2,
-
+    /// Number of banks in the register file
     parameter int unsigned NumBanks = 4,
+    /// Number of operand collectors
     parameter int unsigned NumOperandCollectors = 6,
+    /// How many operands can each instruction have
     parameter int unsigned OperandsPerInst = 2,
-    parameter int unsigned RegIdxWidth     = 8,
-    parameter int unsigned RegWidth       = 16,
+    /// How many bits are used to index a register
+    parameter int unsigned RegIdxWidth = 8,
+    /// Width of a register
+    parameter int unsigned RegWidth = 16,
+    // Memory Block size in bytes -> Memory request width
+    parameter int unsigned BlockIdxBits = 3,
+    /// Width of a memory address
+    parameter int unsigned AddressWidth = 7,
+    // Width of the id for requests queue
+    parameter int unsigned OutstandingReqIdxWidth = 3,
 
     parameter time         TclkPeriod   = 10ns,
+    parameter time         AcqDelay     = 1ns,
     parameter int unsigned MaxSimCycles = 1000
 );
+    // #######################################################################################
+    // # Local Parameters                                                                    #
+    // #######################################################################################
+
     localparam time TCLKHALF = TclkPeriod / 2;
     localparam int WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
     localparam int TagWidth = $clog2(InflightInstrPerWarp);
 
-    typedef logic [     PcWidth-1:0] pc_t;
-    typedef logic [   WarpWidth-1:0] act_mask_t;
-    typedef logic [ RegIdxWidth-1:0] reg_idx_t;
-    typedef logic [WidWidth+TagWidth-1:0] iid_t;
+    localparam int BlockAddrWidth = AddressWidth - BlockIdxBits;
+    localparam int BlockWidth = 1 << BlockIdxBits;
+    localparam int ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
+
+    // #######################################################################################
+    // # Type Definitions                                                                    #
+    // #######################################################################################
+
+    typedef logic [7:0] byte_t;
+
+    typedef logic  [          PcWidth-1:0] pc_t;
+    typedef logic  [        WarpWidth-1:0] act_mask_t;
+    typedef logic  [      RegIdxWidth-1:0] reg_idx_t;
+    typedef logic  [WidWidth+TagWidth-1:0] iid_t;
+    typedef logic  [   BlockAddrWidth-1:0] block_addr_t;
+    typedef logic  [       BlockWidth-1:0] block_mask_t;
+    typedef byte_t [       BlockWidth-1:0] block_data_t;
+    typedef logic  [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
 
     typedef struct packed {
         bgpu_eu_e eu;
@@ -43,19 +72,70 @@ module tb_compute_unit #(
         reg_idx_t op2;
     } enc_inst_t;
 
-    enc_inst_t test_program [8] = {
-        '{eu: BGPU_INST_TYPE_IU, subtype: IU_TID, dst: 0, op1: 0, op2: 0},
-        '{eu: BGPU_INST_TYPE_IU, subtype: IU_LDI, dst: 1, op1: 1, op2: 1},
-        '{eu: BGPU_INST_TYPE_IU, subtype: IU_LDI, dst: 2, op1: 2, op2: 2},
-        '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 3, op1: 1, op2: 2},
-        '{eu: BGPU_INST_TYPE_IU, subtype: IU_SUB, dst: 4, op1: 3, op2: 2},
-        '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0},
-        '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0},
-        '{eu: BGPU_INST_TYPE_IU, subtype: IU_ADD, dst: 0, op1: 0, op2: 0}
+    typedef struct packed {
+        req_id_t id;
+        block_addr_t addr;
+        block_mask_t we_mask;
+        block_data_t data;
+    } mem_req_t;
+
+    typedef struct packed {
+        req_id_t     id;
+        block_data_t data;
+    } mem_rsp_t;
+
+    // #######################################################################################
+    // # Signals                                                                             #
+    // #######################################################################################
+
+    // Memory request
+    logic     mem_ready, mem_req_valid;
+    mem_req_t mem_req;
+
+    // Memory response
+    logic     mem_rsp_valid_q, mem_rsp_valid_d;
+    mem_rsp_t mem_rsp_q,       mem_rsp_d;
+
+    // Test program
+    enc_inst_t test_program [12] = {
+        // Calculate byte offset from thread ID and warp ID
+        '{eu: BGPU_EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
+        '{eu: BGPU_EU_IU,  subtype: IU_SLLI,        dst: 0, op1: 2, op2: 0}, // reg0 = reg0 << 2
+        '{eu: BGPU_EU_IU,  subtype: IU_TID,         dst: 1, op1: 0, op2: 0}, // reg1 = thread ID
+        '{eu: BGPU_EU_IU,  subtype: IU_ADD,         dst: 1, op1: 1, op2: 0}, // reg1 = reg1 + reg0
+
+        // Load byte from memory
+        '{eu: BGPU_EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 2, op1: 1, op2: 0}, // reg2 = [reg1]
+        // Do some computation
+        '{eu: BGPU_EU_IU,  subtype: IU_SUB,         dst: 3, op1: 2, op2: 2}, // reg3 = reg2 - reg2
+        '{eu: BGPU_EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
+        '{eu: BGPU_EU_IU,  subtype: IU_ADD,         dst: 3, op1: 3, op2: 0}, // reg3 = reg3 + reg0
+        // Store result back to memory
+        '{eu: BGPU_EU_LSU, subtype: LSU_STORE_BYTE, dst: 4, op1: 1, op2: 3}, // [reg1] = reg3
+
+        // NOPs
+        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}  // reg0 = reg0 + 0
     };
 
-    logic initialized, stop;
-    logic clk, rst_n, set_ready_status;
+    // Clock and initialization signals
+    logic initialized, stop, clk, rst_n, set_ready_status;
+
+    // Status signals
+    logic [NumWarps-1:0] warp_active, warp_stopped;
+
+    // Write to Instruction Cache
+    logic      ic_write;
+    pc_t       ic_write_pc;
+    enc_inst_t ic_write_inst;
+
+    // Memory
+    block_data_t [(1 << BlockAddrWidth)-1:0] memory;
+
+    // #######################################################################################
+    // # Clock generation                                                                    #
+    // #######################################################################################
 
     // Generate clock
     initial clk = 1'b1;
@@ -81,39 +161,55 @@ module tb_compute_unit #(
         set_ready_status = 1'b0;
     end
 
-    logic [NumWarps-1:0] warp_active, warp_stopped;
-
-    logic ic_write;
-    pc_t ic_write_pc;
-    enc_inst_t ic_write_inst;
+    // #######################################################################################
+    // # DUT                                                                                 #
+    // #######################################################################################
 
     // Instantiate Compute Unit
-    /* verilator lint_off PINMISSING */
     compute_unit #(
-        .NumTags(InflightInstrPerWarp),
-        .PcWidth(PcWidth),
-        .NumWarps(NumWarps),
-        .WarpWidth(WarpWidth),
-        .EncInstWidth($bits(enc_inst_t)),
-        .WaitBufferSizePerWarp(WaitBufferSizePerWarp),
-        .RegIdxWidth(RegIdxWidth),
-        .OperandsPerInst(OperandsPerInst),
-        .NumBanks(NumBanks),
-        .NumOperandCollectors(NumOperandCollectors),
-        .RegWidth(RegWidth)
+        .NumTags               ( InflightInstrPerWarp   ),
+        .PcWidth               ( PcWidth                ),
+        .NumWarps              ( NumWarps               ),
+        .WarpWidth             ( WarpWidth              ),
+        .EncInstWidth          ( $bits(enc_inst_t)      ),
+        .WaitBufferSizePerWarp ( WaitBufferSizePerWarp  ),
+        .RegIdxWidth           ( RegIdxWidth            ),
+        .OperandsPerInst       ( OperandsPerInst        ),
+        .NumBanks              ( NumBanks               ),
+        .NumOperandCollectors  ( NumOperandCollectors   ),
+        .RegWidth              ( RegWidth               ),
+        .AddressWidth          ( AddressWidth           ),
+        .BlockIdxBits          ( BlockIdxBits           ),
+        .OutstandingReqIdxWidth( OutstandingReqIdxWidth )
     ) i_cu (
-        .clk_i(clk),
-        .rst_ni(rst_n),
-        .set_ready_i(set_ready_status),
-        .warp_active_o(warp_active),
-        .warp_stopped_o(warp_stopped),
-        .ic_write_i(ic_write),
-        .ic_write_pc_i(ic_write_pc),
-        .ic_write_inst_i(ic_write_inst)
-    );
-    /* verilator lint_on PINMISSING */
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
 
-    // Initialize memory
+        .set_ready_i   ( set_ready_status ),
+        .warp_active_o ( warp_active      ),
+        .warp_stopped_o( warp_stopped     ),
+
+        .ic_write_i     ( ic_write      ),
+        .ic_write_pc_i  ( ic_write_pc   ),
+        .ic_write_inst_i( ic_write_inst ),
+
+        .mem_ready_i       ( mem_ready       ),
+        .mem_req_valid_o   ( mem_req_valid   ),
+        .mem_req_id_o      ( mem_req.id      ),
+        .mem_req_addr_o    ( mem_req.addr    ),
+        .mem_req_we_mask_o ( mem_req.we_mask ),
+        .mem_req_wdata_o   ( mem_req.data    ),
+
+        .mem_rsp_valid_i( mem_rsp_valid_q ),
+        .mem_rsp_id_i   ( mem_rsp_q.id    ),
+        .mem_rsp_data_i ( mem_rsp_q.data  )
+    );
+
+    // #######################################################################################
+    // # Memory                                                                              #
+    // #######################################################################################
+
+    // Initialize program
     initial begin
         int unsigned program_size;
         initialized = 1'b0;
@@ -144,6 +240,57 @@ module tb_compute_unit #(
         initialized = 1'b1;
         $display("Memory initialized.");
     end
+
+    // Memory read/write
+    initial begin
+        int val;
+
+        mem_ready = 1'b0;
+        for(int i = 0; i < (1 << BlockAddrWidth); i++) begin
+            for(int j = 0; j < BlockWidth; j++) begin
+                val = i * BlockWidth + j;
+                memory[i][j] = val[7:0];
+            end
+        end
+
+        mem_ready = 1'b1;
+
+        while(1) begin
+            @(posedge clk);
+            #AcqDelay;
+            mem_rsp_valid_d = 1'b0;
+
+            if(mem_req_valid) begin
+                if(mem_req.we_mask != '0) begin
+                    // Write request
+                    $display("Memory write request: ID %0d Addr %0d WeMask %b Data %h",
+                        mem_req.id, mem_req.addr, mem_req.we_mask, mem_req.data);
+                    for(int i = 0; i < BlockWidth; i++) begin
+                        if(mem_req.we_mask[i]) begin
+                            memory[mem_req.addr][i] = mem_req.data[i];
+                        end
+                    end
+                    mem_rsp_d.data = '0;
+                end else begin
+                    // Read request
+                    $display("Memory read request: ID %0d Addr %0d", mem_req.id, mem_req.addr);
+                    mem_rsp_d.data  = memory[mem_req.addr];
+                end
+                mem_rsp_valid_d = 1'b1;
+                mem_rsp_d.id    = mem_req.id;
+            end
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        // Memory response
+        mem_rsp_valid_q <= mem_rsp_valid_d;
+        mem_rsp_q       <= mem_rsp_d;
+    end
+
+    // ########################################################################################
+    // # Simulation Logic                                                                     #
+    // ########################################################################################
 
     // Monitor output
     int cycles;
@@ -409,7 +556,8 @@ module tb_compute_unit #(
         error = 1'b0;
         repeat(MaxSimCycles) @(posedge clk);
         $display("Max simulation cycles reached.");
-        stop = 1'b1;
+        stop  = 1'b1;
+        error = 1'b1;
     end
 
     // Stop simulation
@@ -417,6 +565,11 @@ module tb_compute_unit #(
         wait(stop);
         $display("Stopping simulation...");
         $dumpflush;
+
+        for(int i = 0; i < (1 << BlockAddrWidth); i++) begin
+            $display("Memory block[%0d]: %h", i, memory[i]);
+        end
+
         if (error)
             $fatal(1);
         else

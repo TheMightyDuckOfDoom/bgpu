@@ -6,22 +6,26 @@
 `define BGPU_INSTRUCTIONS_SVH_
 
 typedef enum logic [1:0] {
-    BGPU_INST_TYPE_IU  = 'd0,
-    BGPU_INST_TYPE_LSU = 'd1
+    BGPU_EU_IU  = 'd0,
+    BGPU_EU_LSU = 'd1
 } bgpu_eu_e;
 
 typedef enum logic [5:0] {
     IU_TID  = 'h00, // Get thread ID inside a warp
+    IU_WID  = 'h01, // Get warp ID
 
-    IU_ADD  = 'h01, // Add operands
-    IU_SUB  = 'h02, // Subtract operands
-    IU_AND  = 'h03, // Bitwise AND operands
-    IU_OR   = 'h04, // Bitwise OR operands
-    IU_XOR  = 'h05, // Bitwise XOR operands
+    IU_ADD  = 'h02, // Add operands
+    IU_SUB  = 'h03, // Subtract operands
+    IU_AND  = 'h04, // Bitwise AND operands
+    IU_OR   = 'h05, // Bitwise OR operands
+    IU_XOR  = 'h06, // Bitwise XOR operands
 
-    IU_LDI  = 'h06, // Load immediate -> concatenate operands register index
-    IU_ADDI = 'h07, // Add immediate -> add immediate value to first operand
-    IU_SUBI = 'h08  // Subtract immediate -> subtract immediate value from first operand
+    IU_LDI  = 'h07, // Load immediate -> concatenate operands register index
+    IU_ADDI = 'h08, // Add immediate -> add immediate value to first operand
+    IU_SUBI = 'h09, // Subtract immediate -> subtract immediate value from first operand
+
+    IU_SLL  = 'h0A, // Shift left logical
+    IU_SLLI = 'h0B  // Shift left logical immediate
 } bgpu_iu_subtype_e;
 
 typedef enum logic [5:0] {
@@ -49,13 +53,15 @@ typedef struct packed {
     IU_SUB,\
     IU_AND,\
     IU_OR,\
-    IU_XOR\
+    IU_XOR,\
+    IU_SLL\
 }
 
-// First operand is a register, second is an immediate value (register index)
+// First operand is an immediate, second is an register
 `define BGPU_IU_REG_IMM_OPERANDS {\
     IU_ADDI,\
-    IU_SUBI\
+    IU_SUBI,\
+    IU_SLLI\
 }
 
 // Store operations
@@ -74,6 +80,7 @@ typedef struct packed {
 `ifndef SYNTHESIS
     `define BGPU_INT_UNIT_VALID_SUBTYPES {\
         IU_TID,\
+        IU_WID,\
         IU_ADD,\
         IU_SUB,\
         IU_AND,\
@@ -81,14 +88,9 @@ typedef struct packed {
         IU_XOR,\
         IU_LDI,\
         IU_ADDI,\
-        IU_SUBI\
-    }
-
-    `define BGPU_LOAD_STORE_UNIT_VALID_SUBTYPES {\
-        LSU_LOAD,\
-        LSU_STORE_BYTE,\
-        LSU_STORE_HALF,\
-        LSU_STORE_WORD\
+        IU_SUBI,\
+        IU_SLL,\
+        IU_SLLI\
     }
 `endif
 

@@ -143,8 +143,9 @@ module operand_collector #(
                 else begin : operands_not_required
                     // Store register index of operands in the data
                     operand_d[i].data = '0;
-                    for(int j = 0; j < WarpWidth; j++) begin
-                        operand_d[i].data[j*RegWidth + i*RegIdxWidth +: RegIdxWidth]
+                    for(int thread = 0; thread < WarpWidth; thread++) begin
+                        // Load {operand1, operand2} register index into data
+                        operand_d[i].data[thread * RegWidth + i * RegIdxWidth +: RegIdxWidth]
                             = disp_src_i[i];
                     end
                 end : operands_not_required
