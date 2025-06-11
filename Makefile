@@ -113,15 +113,21 @@ gowin-report:
 # Clean
 ####################################################################################################
 
-clean: asic_clean
+clean: asic-clean gowin-clean xilinx-clean verilator-clean
+
+verilator-clean:
 	rm -f  verilator/*.f
 	rm -rf verilator/obj_dir
+
+xilinx-clean:
 	rm -f  xilinx/*.f
 	rm -f  xilinx/run_*.tcl
 	rm -rf xilinx/.Xil
 	rm -f  xilinx/*.log
 	rm -f  xilinx/*.jou
 	rm -rf xilinx/out
+
+gowin-clean:
 	rm -f  gowin/*.f
 	rm -f  gowin/*.log
 	rm -f  gowin/run.tcl

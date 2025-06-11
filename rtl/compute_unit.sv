@@ -6,8 +6,6 @@
 
 /// Compute Unit
 module compute_unit #(
-    /// Number of inflight instructions per warp
-    parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -18,6 +16,8 @@ module compute_unit #(
     parameter int unsigned EncInstWidth = 32,
     /// How many instructions that wait on previous results can be buffered per warp
     parameter int unsigned WaitBufferSizePerWarp = 4,
+    /// Number of inflight instructions per warp
+    parameter int unsigned NumTags = WaitBufferSizePerWarp * 2,
     /// How many registers can each warp access as operand or destination
     parameter int unsigned RegIdxWidth = 8,
     /// How many operands each instruction can have

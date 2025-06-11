@@ -66,6 +66,14 @@ sources:
       files:
           - asic/tc_sram.sv
 
+    - target: gowin_postsynth
+      defines:
+          POST: ~
+      files:
+          - /usr/local/share/yosys/gowin/cells_sim.v
+          - gowin/lib/prim_sim.v
+          - gowin/out/compute_unit.v
+
     - target: gowin_sim
       files:
           - gowin/lib/prim_sim.v

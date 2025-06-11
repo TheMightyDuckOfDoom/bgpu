@@ -10,6 +10,8 @@ jobs:
               run: make gowin
             - name: Report Area
               run: make gowin-report
+            - name: Post Synthesis Simulation
+              run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth" VERILATOR_ARGS="-Wno-MODDUP"
 
     asic:
         runs-on: self-hosted

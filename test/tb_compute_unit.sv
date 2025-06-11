@@ -9,11 +9,11 @@ module tb_compute_unit #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
-    parameter int unsigned NumWarps = 4,
+    parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// Wait buffer size per warp
-    parameter int unsigned WaitBufferSizePerWarp = 8,
+    parameter int unsigned WaitBufferSizePerWarp = 4,
     /// Number of inflight instructions per warp
     parameter int unsigned InflightInstrPerWarp = WaitBufferSizePerWarp * 2,
     /// Number of banks in the register file
@@ -25,13 +25,15 @@ module tb_compute_unit #(
     /// How many bits are used to index a register
     parameter int unsigned RegIdxWidth = 8,
     /// Width of a register
-    parameter int unsigned RegWidth = 16,
+    parameter int unsigned RegWidth = 32,
     // Memory Block size in bytes -> Memory request width
-    parameter int unsigned BlockIdxBits = 3,
+    parameter int unsigned BlockIdxBits = 4,
     /// Width of a memory address
-    parameter int unsigned AddressWidth = 7,
+    parameter int unsigned AddressWidth = 32,
     // Width of the id for requests queue
     parameter int unsigned OutstandingReqIdxWidth = 3,
+
+    parameter int unsigned SimMemBlocks = 16,
 
     parameter time         TclkPeriod   = 10ns,
     parameter time         AcqDelay     = 1ns,
@@ -134,7 +136,7 @@ module tb_compute_unit #(
     enc_inst_t ic_write_inst;
 
     // Memory
-    block_data_t [(1 << BlockAddrWidth)-1:0] memory;
+    block_data_t [SimMemBlocks-1:0] memory;
 
     // #######################################################################################
     // # Clock generation                                                                    #
@@ -170,6 +172,7 @@ module tb_compute_unit #(
 
     // Instantiate Compute Unit
     compute_unit #(
+    `ifndef POST
         .NumTags               ( InflightInstrPerWarp   ),
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),
@@ -184,6 +187,7 @@ module tb_compute_unit #(
         .AddressWidth          ( AddressWidth           ),
         .BlockIdxBits          ( BlockIdxBits           ),
         .OutstandingReqIdxWidth( OutstandingReqIdxWidth )
+    `endif
     ) i_cu (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
@@ -249,7 +253,7 @@ module tb_compute_unit #(
         int val;
 
         mem_ready = 1'b0;
-        for(int i = 0; i < (1 << BlockAddrWidth); i++) begin
+        for(int i = 0; i < SimMemBlocks; i++) begin
             for(int j = 0; j < BlockWidth; j++) begin
                 val = i * BlockWidth + j;
                 memory[i][j] = val[7:0];
@@ -264,6 +268,9 @@ module tb_compute_unit #(
             mem_rsp_valid_d = 1'b0;
 
             if(mem_req_valid) begin
+                assert(int'(mem_req.addr) < SimMemBlocks)
+                else $error("Memory write request out of bounds: Addr %0d", mem_req.addr);
+
                 if(mem_req.we_mask != '0) begin
                     // Write request
                     $display("Memory write request: ID %0d Addr %0d WeMask %b Data %h",
@@ -306,6 +313,7 @@ module tb_compute_unit #(
             $display("Cycle %4d Time %8d", cycles, $time);
             if(rst_n) begin
                 // Output from fetcher
+                `ifndef POST
                 $display("Fetcher output valid: %b", i_cu.fe_to_ic_valid_d);
                 if(i_cu.fe_to_ic_valid_d) begin
                     $display("Instruction at PC %d", i_cu.fe_to_ic_data_d.pc);
@@ -327,6 +335,7 @@ module tb_compute_unit #(
                     $display("Act. mask:        X");
                     $display("Warp ID:          X");
                 end
+                `endif
 
                 // Check if there are still active warps
                 if(warp_active == '0) begin
@@ -347,7 +356,7 @@ module tb_compute_unit #(
             $display("\n");
         end
     end
-
+    `ifndef POST
     for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_display_dispatcher
         initial begin
             wait(initialized);
@@ -552,6 +561,7 @@ module tb_compute_unit #(
         // Close file
         $fclose(fd);
     end : kanata_format
+    `endif
 
     // Max simulation cycles
     logic error;
@@ -569,7 +579,7 @@ module tb_compute_unit #(
         $display("Stopping simulation...");
         $dumpflush;
 
-        for(int i = 0; i < (1 << BlockAddrWidth); i++) begin
+        for(int i = 0; i < SimMemBlocks; i++) begin
             $display("Memory block[%0d]: %h", i, memory[i]);
         end
 

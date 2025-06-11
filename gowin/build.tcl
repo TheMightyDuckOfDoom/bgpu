@@ -6,4 +6,6 @@ yosys read_slang --top $top_design -F gowin/gowin.f \
 
 exec mkdir -p gowin/out
 
-synth_gowin -top $top_design -nowidelut -noiopads -vout gowin/out/$top_design.v
+synth_gowin -top $top_design -nowidelut -noiopads
+
+write_verilog -simple-lhs -decimal -attr2comment -renameprefix gen gowin/out/$top_design.v

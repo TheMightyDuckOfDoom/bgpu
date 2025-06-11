@@ -49,11 +49,11 @@ $(NETLIST) $(NETLIST_DEBUG):  $(SV_FLIST)
 asic-report:
 	tail -n 128 $(YOSYS_REPORTS)/$(TOP)_area.rpt
 
-asic_clean:
+asic-clean:
 	rm -rf $(YOSYS_OUT)
 	rm -rf $(YOSYS_TMP)
 	rm -rf $(YOSYS_REPORTS) 
 	rm -f $(YOSYS_DIR)/*.log
 	rm -rf $(SV_FLIST)
 
-.PHONY: asic_clean asic asic-report
+.PHONY: asic-clean asic asic-report
