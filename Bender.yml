@@ -70,7 +70,7 @@ sources:
       defines:
           POST: ~
       files:
-          - /usr/local/share/yosys/gowin/cells_sim.v
+          - gowin/lib/cells_sim.v
           - gowin/lib/prim_sim.v
           - gowin/out/compute_unit.v
 
