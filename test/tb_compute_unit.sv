@@ -13,7 +13,7 @@ module tb_compute_unit #(
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// Wait buffer size per warp
-    parameter int unsigned WaitBufferSizePerWarp = 1,
+    parameter int unsigned WaitBufferSizePerWarp = 8,
     /// Number of inflight instructions per warp
     parameter int unsigned InflightInstrPerWarp = WaitBufferSizePerWarp * 2,
     /// Number of banks in the register file
@@ -97,7 +97,7 @@ module tb_compute_unit #(
     mem_rsp_t mem_rsp_q,       mem_rsp_d;
 
     // Test program
-    enc_inst_t test_program [12] = {
+    enc_inst_t test_program [15] = {
         // Calculate byte offset from thread ID and warp ID
         '{eu: BGPU_EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
         '{eu: BGPU_EU_IU,  subtype: IU_SLLI,        dst: 0, op1: 2, op2: 0}, // reg0 = reg0 << 2
@@ -114,6 +114,9 @@ module tb_compute_unit #(
         '{eu: BGPU_EU_LSU, subtype: LSU_STORE_BYTE, dst: 4, op1: 1, op2: 3}, // [reg1] = reg3
 
         // NOPs
+        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
         '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
         '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
         '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}  // reg0 = reg0 + 0
