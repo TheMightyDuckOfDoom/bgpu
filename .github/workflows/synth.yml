@@ -35,7 +35,7 @@ jobs:
             - name: Yosys Synthesis for Xilinx FPGA
               run: make xilinx-yosys
             - name: Post Synthesis Simulation
-              run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth"
+              run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
 
     asic:
         runs-on: self-hosted
