@@ -2,7 +2,6 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
 `include "common_cells/registers.svh"
 
 /// Wait Buffer
@@ -15,7 +14,7 @@
 // -> overrides the previous snapshot to handle multiple barriers after another
 // 2. When retiring an instruction, clear it from the snapshot
 // 3. Only allow issue of new instructions when the snapshot is empty
-module wait_buffer #(
+module wait_buffer import bgpu_pkg::*; #(
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 32,
@@ -46,28 +45,28 @@ module wait_buffer #(
     output logic ib_space_available_o,
 
     /// From decoder
-    output logic       wb_ready_o,
-    input  logic       dec_valid_i,
-    input  pc_t        dec_pc_i,
-    input  act_mask_t  dec_act_mask_i,
-    input  tag_t       dec_tag_i,
-    input  reg_idx_t   dec_dst_reg_i,
-    input  bgpu_inst_t dec_inst_i,
-    input  logic       [OperandsPerInst-1:0] dec_operands_required_i,
-    input  logic       [OperandsPerInst-1:0] dec_operands_ready_i,
-    input  tag_t       [OperandsPerInst-1:0] dec_operand_tags_i,
-    input  reg_idx_t   [OperandsPerInst-1:0] dec_operands_i,
+    output logic      wb_ready_o,
+    input  logic      dec_valid_i,
+    input  pc_t       dec_pc_i,
+    input  act_mask_t dec_act_mask_i,
+    input  tag_t      dec_tag_i,
+    input  reg_idx_t  dec_dst_reg_i,
+    input  inst_t     dec_inst_i,
+    input  logic      [OperandsPerInst-1:0] dec_operands_required_i,
+    input  logic      [OperandsPerInst-1:0] dec_operands_ready_i,
+    input  tag_t      [OperandsPerInst-1:0] dec_operand_tags_i,
+    input  reg_idx_t  [OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collector
-    input  logic       opc_ready_i,
-    output logic       disp_valid_o,
-    output tag_t       disp_tag_o,
-    output pc_t        disp_pc_o,
-    output act_mask_t  disp_act_mask_o,
-    output bgpu_inst_t disp_inst_o,
-    output reg_idx_t   disp_dst_o,
-    output logic       [OperandsPerInst-1:0] disp_operands_required_o,
-    output reg_idx_t   [OperandsPerInst-1:0] disp_operands_o,
+    input  logic      opc_ready_i,
+    output logic      disp_valid_o,
+    output tag_t      disp_tag_o,
+    output pc_t       disp_pc_o,
+    output act_mask_t disp_act_mask_o,
+    output inst_t     disp_inst_o,
+    output reg_idx_t  disp_dst_o,
+    output logic      [OperandsPerInst-1:0] disp_operands_required_o,
+    output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
     input  logic eu_valid_i,
@@ -85,7 +84,7 @@ module wait_buffer #(
         pc_t        pc;
         act_mask_t  act_mask;
         tag_t       tag;
-        bgpu_inst_t inst;
+        inst_t      inst;
         reg_idx_t   dst_reg;
 
         logic     [OperandsPerInst-1:0] operands_required;
@@ -98,7 +97,7 @@ module wait_buffer #(
         pc_t        pc;
         act_mask_t  act_mask;
         tag_t       tag;
-        bgpu_inst_t inst;
+        inst_t      inst;
         reg_idx_t   dst_reg;
         logic       [OperandsPerInst-1:0] operands_required;
         reg_idx_t   [OperandsPerInst-1:0] operands_reg;

@@ -2,10 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Testbench for Load Store Unit
-module tb_load_store_unit #(
+module tb_load_store_unit import bgpu_pkg::*; #(
     // Simulation parameters
     parameter int unsigned MaxSimCycles     = 100000,
     parameter int unsigned WatchdogTimeout  = 1000,
@@ -74,7 +72,7 @@ module tb_load_store_unit #(
         iid_t       tag;
         pc_t        pc;
         act_mask_t  active_mask;
-        bgpu_inst_t inst;
+        inst_t      inst;
         reg_idx_t   dst;
         warp_data_t [OperandsPerInst-1:0] src_data;
     } eu_req_t;
@@ -300,10 +298,10 @@ module tb_load_store_unit #(
     // # DUT                                                                                 #
     // #######################################################################################
 
-    bgpu_lsu_subtype_e INSTS [6] = {
+    bgpu_pkg::lsu_subtype_e INSTS [6] = {
         LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD
     };
-    bgpu_lsu_subtype_e inst;
+    bgpu_pkg::lsu_subtype_e inst;
     assign inst = INSTS[eu_req.inst.subtype % 6];
 
     act_mask_t non_zero_mask;
@@ -391,7 +389,7 @@ module tb_load_store_unit #(
                 if (!non_zero_mask[thread]) begin
                     continue; // Skip inactive threads
                 end
-                if (inst inside `BGPU_INST_STORE) begin
+                if (inst inside `INST_STORE) begin
                     if (inst == LSU_STORE_BYTE) begin
                         size = 1;
                     end else if (inst == LSU_STORE_HALF) begin
@@ -422,7 +420,7 @@ module tb_load_store_unit #(
                 if (!non_zero_mask[thread]) begin
                     continue; // Skip inactive threads
                 end
-                if (inst inside `BGPU_INST_LOAD) begin
+                if (inst inside `INST_LOAD) begin
                     if (inst == LSU_LOAD_BYTE) begin
                         size = 1;
                     end else if (inst == LSU_LOAD_HALF) begin

@@ -2,10 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Compute Unit
-module compute_unit #(
+module compute_unit import bgpu_pkg::*; #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -96,55 +94,55 @@ module compute_unit #(
 
     // Fetcher to Instruction Cache type
     typedef struct packed {
-        pc_t pc;
+        pc_t       pc;
         act_mask_t act_mask;
-        wid_t warp_id;
+        wid_t      warp_id;
     } fe_to_ic_data_t;
 
     // Instruction Cache to Decoder type
     typedef struct packed {
-        pc_t pc;
+        pc_t       pc;
         act_mask_t act_mask;
-        wid_t warp_id;
+        wid_t      warp_id;
         enc_inst_t inst;
     } ic_to_dec_data_t;
 
     // Decoder to Instruction Buffer type
     typedef struct packed {
-        pc_t pc;
+        pc_t       pc;
         act_mask_t act_mask;
-        wid_t warp_id;
-        bgpu_inst_t inst;
-        reg_idx_t dst;
-        logic     [OperandsPerInst-1:0] operands_required;
-        reg_idx_t [OperandsPerInst-1:0] operands;
+        wid_t      warp_id;
+        inst_t     inst;
+        reg_idx_t  dst;
+        logic      [OperandsPerInst-1:0] operands_required;
+        reg_idx_t  [OperandsPerInst-1:0] operands;
     } dec_to_ib_data_t;
 
     // Multi Warp Dispatcher to Register Operand Collector Stage type
     typedef struct packed {
-        iid_t tag;
-        pc_t pc;
+        iid_t      tag;
+        pc_t       pc;
         act_mask_t act_mask;
-        bgpu_inst_t inst;
-        reg_idx_t dst;
-        logic     [OperandsPerInst-1:0] operands_required;
-        reg_idx_t [OperandsPerInst-1:0] operands;
+        inst_t     inst;
+        reg_idx_t  dst;
+        logic      [OperandsPerInst-1:0] operands_required;
+        reg_idx_t  [OperandsPerInst-1:0] operands;
     } disp_to_opc_data_t;
 
     // Register Operand Collector Stage to Execution Units type
     typedef struct packed {
-        iid_t tag;
-        pc_t pc;
-        act_mask_t act_mask;
-        bgpu_inst_t inst;
-        reg_idx_t dst;
+        iid_t       tag;
+        pc_t        pc;
+        act_mask_t  act_mask;
+        inst_t      inst;
+        reg_idx_t   dst;
         warp_data_t [OperandsPerInst-1:0] operands;
     } opc_to_eu_data_t;
 
     // Execution Units to Register Operand Collector Stage type
     typedef struct packed {
-        iid_t tag;
-        reg_idx_t dst;
+        iid_t       tag;
+        reg_idx_t   dst;
         warp_data_t data;
     } eu_to_opc_data_t;
 
@@ -459,7 +457,7 @@ module compute_unit #(
 
     `ifndef SYNTHESIS
         assert property (@(posedge clk_i) opc_to_eu_valid
-            |-> opc_to_eu_data.inst.eu inside {BGPU_EU_IU, BGPU_EU_LSU})
+            |-> opc_to_eu_data.inst.eu inside {EU_IU, EU_LSU})
             else $error("Invalid execution unit type: %0d", opc_to_eu_data.inst.eu);
     `endif
 

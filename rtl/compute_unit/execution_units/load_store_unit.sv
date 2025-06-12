@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: SHL-0.51
 
 `include "common_cells/registers.svh"
-`include "bgpu/instructions.svh"
 
 /// Load Store Unit
 // Performs load and store operations
@@ -13,7 +12,7 @@
 // Memory responses can be received in any order, but must have atleast one cycle of latency
 // Operand 0 is the address for load/store operations
 // Operand 1 is the data for store operations
-module load_store_unit #(
+module load_store_unit import bgpu_pkg::*; #(
     // Width of the registers
     parameter int unsigned RegWidth = 32,
     // Number of threads in a warp
@@ -64,13 +63,13 @@ module load_store_unit #(
     input  block_data_t mem_rsp_data_i,
 
     /// From Operand Collector
-    output logic              eu_to_opc_ready_o,
-    input  logic              opc_to_eu_valid_i,
-    input  iid_t              opc_to_eu_tag_i,
-    input  act_mask_t         opc_to_eu_act_mask_i,
-    input  bgpu_lsu_subtype_e opc_to_eu_inst_sub_i,
-    input  reg_idx_t          opc_to_eu_dst_i,
-    input  warp_data_t        [OperandsPerInst-1:0] opc_to_eu_operands_i,
+    output logic         eu_to_opc_ready_o,
+    input  logic         opc_to_eu_valid_i,
+    input  iid_t         opc_to_eu_tag_i,
+    input  act_mask_t    opc_to_eu_act_mask_i,
+    input  lsu_subtype_e opc_to_eu_inst_sub_i,
+    input  reg_idx_t     opc_to_eu_dst_i,
+    input  warp_data_t   [OperandsPerInst-1:0] opc_to_eu_operands_i,
 
     // To Result Collector
     input  logic       rc_to_eu_ready_i,
@@ -176,7 +175,8 @@ module load_store_unit #(
     end : gen_addr
 
     // Check if the instruction is a write
-    assign opc_to_eu_is_write = opc_to_eu_inst_sub_i inside `BGPU_INST_STORE;
+    assign opc_to_eu_is_write = opc_to_eu_inst_sub_i inside
+        {LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD};
 
     // Write width
     always_comb begin : operation_width
@@ -467,8 +467,8 @@ module load_store_unit #(
 
         assert property (@(posedge clk_i) disable iff (!rst_ni)
             opc_to_eu_valid_i && eu_to_opc_ready_o |->
-            (opc_to_eu_inst_sub_i inside `BGPU_INST_STORE)
-            || (opc_to_eu_inst_sub_i inside `BGPU_INST_LOAD)
+            (opc_to_eu_inst_sub_i inside `INST_STORE)
+            || (opc_to_eu_inst_sub_i inside `INST_LOAD)
         ) else $error("Received instruction with invalid type. Tag: %0h, Inst: %0h",
             opc_to_eu_tag_i, opc_to_eu_inst_sub_i);
 

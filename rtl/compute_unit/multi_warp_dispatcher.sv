@@ -2,11 +2,9 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Multi Warp Dispatcher
 /// Contains a dispatcher per warp
-module multi_warp_dispatcher #(
+module multi_warp_dispatcher import bgpu_pkg::*; #(
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -44,26 +42,26 @@ module multi_warp_dispatcher #(
     output logic [NumWarps-1:0] ib_space_available_o,
 
     /// From decoder
-    output logic       ib_ready_o,
-    input  logic       dec_valid_i,
-    input  pc_t        dec_pc_i,
-    input  act_mask_t  dec_act_mask_i,
-    input  wid_t       dec_warp_id_i,
-    input  bgpu_inst_t dec_inst_i,
-    input  reg_idx_t   dec_dst_i,
-    input  logic       [OperandsPerInst-1:0] dec_operands_required_i,
-    input  reg_idx_t   [OperandsPerInst-1:0] dec_operands_i,
+    output logic      ib_ready_o,
+    input  logic      dec_valid_i,
+    input  pc_t       dec_pc_i,
+    input  act_mask_t dec_act_mask_i,
+    input  wid_t      dec_warp_id_i,
+    input  inst_t     dec_inst_i,
+    input  reg_idx_t  dec_dst_i,
+    input  logic      [OperandsPerInst-1:0] dec_operands_required_i,
+    input  reg_idx_t  [OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collector
-    input  logic       opc_ready_i,
-    output logic       disp_valid_o,
-    output iid_t       disp_tag_o,
-    output pc_t        disp_pc_o,
-    output act_mask_t  disp_act_mask_o,
-    output bgpu_inst_t disp_inst_o,
-    output reg_idx_t   disp_dst_o,
-    output logic       [OperandsPerInst-1:0] disp_operands_required_o,
-    output reg_idx_t   [OperandsPerInst-1:0] disp_operands_o,
+    input  logic      opc_ready_i,
+    output logic      disp_valid_o,
+    output iid_t      disp_tag_o,
+    output pc_t       disp_pc_o,
+    output act_mask_t disp_act_mask_o,
+    output inst_t     disp_inst_o,
+    output reg_idx_t  disp_dst_o,
+    output logic      [OperandsPerInst-1:0] disp_operands_required_o,
+    output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
     input  logic eu_valid_i,
@@ -77,7 +75,7 @@ module multi_warp_dispatcher #(
         tag_t       tag;
         pc_t        pc;
         act_mask_t  act_mask;
-        bgpu_inst_t inst;
+        inst_t      inst;
         reg_idx_t   dst_reg;
         logic       [OperandsPerInst-1:0] operands_required;
         reg_idx_t   [OperandsPerInst-1:0] operands;

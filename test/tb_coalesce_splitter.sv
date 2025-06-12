@@ -2,8 +2,6 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Testbench for Coalesce Splitter
 module tb_coalesce_splitter #(
     // Simulation parameters

@@ -2,10 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Decoder
-module decoder #(
+module decoder import bgpu_pkg::*; #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 32,
     /// Number of warps per compute unit
@@ -36,15 +34,15 @@ module decoder #(
     input  enc_inst_t ic_inst_i,
 
     // To Dispatcher
-    input  logic       disp_ready_i,
-    output logic       dec_valid_o,
-    output pc_t        dec_pc_o,
-    output act_mask_t  dec_act_mask_o,
-    output wid_t       dec_warp_id_o,
-    output bgpu_inst_t dec_inst_o,
-    output reg_idx_t   dec_dst_o,
-    output logic       [OperandsPerInst-1:0] dec_operands_required_o,
-    output reg_idx_t   [OperandsPerInst-1:0] dec_operands_o,
+    input  logic      disp_ready_i,
+    output logic      dec_valid_o,
+    output pc_t       dec_pc_o,
+    output act_mask_t dec_act_mask_o,
+    output wid_t      dec_warp_id_o,
+    output inst_t     dec_inst_o,
+    output reg_idx_t  dec_dst_o,
+    output logic      [OperandsPerInst-1:0] dec_operands_required_o,
+    output reg_idx_t  [OperandsPerInst-1:0] dec_operands_o,
 
     // To Fetcher |-> tells it what the next PC is
     output logic dec_decoded_o,
@@ -69,22 +67,26 @@ module decoder #(
     always_comb begin : decode
         // Default
         dec_valid_o       = ic_valid_i && !dec_stop_warp_o;
-        dec_inst_o        = bgpu_inst_t'(ic_inst_i[31:24]);
+        dec_inst_o        = inst_t'(ic_inst_i[31:24]);
         dec_dst_o         = ic_inst_i[23:16];
 
         dec_operands_required_o = '0;
-        if(dec_inst_o.eu == BGPU_EU_IU) begin : decode_iu
+        if(dec_inst_o.eu == EU_IU) begin : decode_iu
             // Two register operands
-            if (dec_inst_o.subtype inside `BGPU_IU_TWO_REG_OPERANDS)
+            if (dec_inst_o.subtype inside {
+                IU_ADD, IU_SUB, IU_AND, IU_OR, IU_XOR, IU_SLL
+            })
                 dec_operands_required_o = '1;
 
             // First operand is an immediate, second is a register
-            if (dec_inst_o.subtype inside `BGPU_IU_REG_IMM_OPERANDS) begin
+            if (dec_inst_o.subtype inside {
+                IU_ADDI, IU_SUBI, IU_SLLI
+            }) begin
                 dec_operands_required_o[0] = 1'b0;
                 dec_operands_required_o[1] = 1'b1;
             end
         end : decode_iu
-        else if (dec_inst_o.eu == BGPU_EU_LSU) begin : decode_lsu
+        else if (dec_inst_o.eu == EU_LSU) begin : decode_lsu
             // LSU instructions always have two operands register operands
             // Operand 0 is the address
             // Operand 1 is the data to store

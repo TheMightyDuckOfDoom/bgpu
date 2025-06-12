@@ -3,3 +3,5 @@ vivado*.log
 .Xil/
 run_*.tcl
 out
+cong
+clockInfo.txt

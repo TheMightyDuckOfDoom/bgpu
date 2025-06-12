@@ -2,11 +2,9 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Integer Unit
 // Performs integer alu operations
-module integer_unit #(
+module integer_unit import bgpu_pkg::*; #(
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
     // Width of the registers
@@ -32,12 +30,12 @@ module integer_unit #(
     input logic rst_ni,
 
     // From Operand Collector
-    output logic             eu_to_opc_ready_o,
-    input  logic             opc_to_eu_valid_i,
-    input  iid_t             opc_to_eu_tag_i,
-    input  bgpu_iu_subtype_e opc_to_eu_inst_sub_i,
-    input  reg_idx_t         opc_to_eu_dst_i,
-    input  warp_data_t       [OperandsPerInst-1:0] opc_to_eu_operands_i,
+    output logic        eu_to_opc_ready_o,
+    input  logic        opc_to_eu_valid_i,
+    input  iid_t        opc_to_eu_tag_i,
+    input  iu_subtype_e opc_to_eu_inst_sub_i,
+    input  reg_idx_t    opc_to_eu_dst_i,
+    input  warp_data_t  [OperandsPerInst-1:0] opc_to_eu_operands_i,
 
     // To Result Collector
     input  logic       rc_to_eu_ready_i,
@@ -146,7 +144,7 @@ module integer_unit #(
 
     `ifndef SYNTHESIS
         assert property (@(posedge clk_i) disable iff (!rst_ni)
-            opc_to_eu_valid_i |-> opc_to_eu_inst_sub_i inside `BGPU_INT_UNIT_VALID_SUBTYPES)
+            opc_to_eu_valid_i |-> opc_to_eu_inst_sub_i inside `IU_VALID_SUBTYPES)
             else $error("Invalid instruction subtype: %0h", opc_to_eu_inst_sub_i);
     `endif
 

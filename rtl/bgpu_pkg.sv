@@ -2,13 +2,12 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`ifndef BGPU_INSTRUCTIONS_SVH_
-`define BGPU_INSTRUCTIONS_SVH_
+package bgpu_pkg;
 
 typedef enum logic [1:0] {
-    BGPU_EU_IU  = 'd0,
-    BGPU_EU_LSU = 'd1
-} bgpu_eu_e;
+    EU_IU  = 'd0,
+    EU_LSU = 'd1
+} eu_e;
 
 typedef enum logic [5:0] {
     IU_TID  = 'h00, // Get thread ID inside a warp
@@ -26,7 +25,7 @@ typedef enum logic [5:0] {
 
     IU_SLL  = 'h0A, // Shift left logical
     IU_SLLI = 'h0B  // Shift left logical immediate
-} bgpu_iu_subtype_e;
+} iu_subtype_e;
 
 typedef enum logic [5:0] {
     LSU_LOAD_BYTE  = 'h00, // Load from memory
@@ -35,50 +34,33 @@ typedef enum logic [5:0] {
     LSU_STORE_BYTE = 'h03, // Store byte to memory
     LSU_STORE_HALF = 'h04, // Store half-word to memory
     LSU_STORE_WORD = 'h05  // Store word to memory
-} bgpu_lsu_subtype_e;
+} lsu_subtype_e;
 
 typedef union packed {
-    bgpu_iu_subtype_e  iu;
-    bgpu_lsu_subtype_e lsu;
-} bgpu_inst_subtype_u;
+    iu_subtype_e  iu;
+    lsu_subtype_e lsu;
+} inst_subtype_t;
 
 typedef struct packed {
-    bgpu_eu_e           eu;
-    bgpu_inst_subtype_u subtype;
-} bgpu_inst_t;
-
-// Both operands are registers
-`define BGPU_IU_TWO_REG_OPERANDS {\
-    IU_ADD,\
-    IU_SUB,\
-    IU_AND,\
-    IU_OR,\
-    IU_XOR,\
-    IU_SLL\
-}
-
-// First operand is an immediate, second is an register
-`define BGPU_IU_REG_IMM_OPERANDS {\
-    IU_ADDI,\
-    IU_SUBI,\
-    IU_SLLI\
-}
+    eu_e           eu;
+    inst_subtype_t subtype;
+} inst_t;
 
 // Store operations
-`define BGPU_INST_STORE {\
+`define INST_STORE {\
     LSU_STORE_BYTE,\
     LSU_STORE_HALF,\
     LSU_STORE_WORD\
 }
 
-`define BGPU_INST_LOAD {\
+`define INST_LOAD {\
     LSU_LOAD_BYTE,\
     LSU_LOAD_HALF,\
     LSU_LOAD_WORD\
 }
 
 `ifndef SYNTHESIS
-    `define BGPU_INT_UNIT_VALID_SUBTYPES {\
+    `define IU_VALID_SUBTYPES {\
         IU_TID,\
         IU_WID,\
         IU_ADD,\
@@ -94,4 +76,4 @@ typedef struct packed {
     }
 `endif
 
-`endif
+endpackage : bgpu_pkg

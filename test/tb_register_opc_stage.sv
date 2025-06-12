@@ -2,10 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Testbench for Register Operand Collector Stage
-module tb_register_opc_stage #(
+module tb_register_opc_stage import bgpu_pkg::*; #(
     // Simulation parameters
     parameter int unsigned MaxSimCycles     = 100000,
     parameter int unsigned WatchdogTimeout  = 1000,
@@ -63,22 +61,22 @@ module tb_register_opc_stage #(
     typedef reg_per_warp_t [NumWarps-1:0] reg_file_t;
 
     typedef struct packed {
-        iid_t       tag;
-        pc_t        pc;
-        act_mask_t  active_mask;
-        bgpu_inst_t inst;
-        reg_idx_t   dst;
-        logic       [OperandsPerInst-1:0] srcs_required;
-        reg_idx_t   [OperandsPerInst-1:0] srcs;
+        iid_t      tag;
+        pc_t       pc;
+        act_mask_t active_mask;
+        inst_t     inst;
+        reg_idx_t  dst;
+        logic      [OperandsPerInst-1:0] srcs_required;
+        reg_idx_t  [OperandsPerInst-1:0] srcs;
     } disp_req_t;
 
     typedef struct packed {
-        iid_t       tag;
-        pc_t        pc;
-        act_mask_t  active_mask;
-        bgpu_inst_t inst;
-        reg_idx_t   dst;
-        reg_data_t  [OperandsPerInst-1:0] src_data;
+        iid_t      tag;
+        pc_t       pc;
+        act_mask_t active_mask;
+        inst_t     inst;
+        reg_idx_t  dst;
+        reg_data_t [OperandsPerInst-1:0] src_data;
     } eu_req_t;
 
     typedef struct packed {

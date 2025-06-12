@@ -2,10 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Testbench for Operand Collector
-module tb_operand_collector #(
+module tb_operand_collector import bgpu_pkg::*; #(
     // Simulation parameters
     parameter int unsigned MaxSimCycles     = 1000000,
     parameter int unsigned InstsToComplete  = 1000,
@@ -52,14 +50,14 @@ module tb_operand_collector #(
     typedef logic [            WidWidth-1:0] wid_t;
 
     typedef struct packed {
-        iid_t       tag;
-        pc_t        pc;
-        act_mask_t  act_mask;
-        bgpu_inst_t inst;
-        reg_idx_t   dst;
-        logic       [OperandsPerInst-1:0] src_required;
-        reg_idx_t   [OperandsPerInst-1:0] src;
-        data_t      [OperandsPerInst-1:0] data;
+        iid_t      tag;
+        pc_t       pc;
+        act_mask_t act_mask;
+        inst_t     inst;
+        reg_idx_t  dst;
+        logic      [OperandsPerInst-1:0] src_required;
+        reg_idx_t  [OperandsPerInst-1:0] src;
+        data_t     [OperandsPerInst-1:0] data;
     } insert_inst_t;
 
     typedef struct packed {
@@ -73,12 +71,12 @@ module tb_operand_collector #(
     } read_rsp_t;
 
     typedef struct packed {
-        iid_t       tag;
-        pc_t        pc;
-        act_mask_t  act_mask;
-        bgpu_inst_t inst;
-        reg_idx_t   dst;
-        data_t      [OperandsPerInst-1:0] data;
+        iid_t      tag;
+        pc_t       pc;
+        act_mask_t act_mask;
+        inst_t     inst;
+        reg_idx_t  dst;
+        data_t     [OperandsPerInst-1:0] data;
     } eu_inst_t;
 
     // ########################################################################################

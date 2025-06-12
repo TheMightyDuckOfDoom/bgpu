@@ -2,11 +2,10 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
 `include "common_cells/registers.svh"
 
 /// Operand Collector
-module operand_collector #(
+module operand_collector import bgpu_pkg::*; #(
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -37,15 +36,15 @@ module operand_collector #(
     input  logic rst_ni,
 
     /// From Multi Warp Dispatcher
-    output logic       opc_ready_o,
-    input  logic       disp_valid_i,
-    input  iid_t       disp_tag_i,
-    input  pc_t        disp_pc_i,
-    input  act_mask_t  disp_act_mask_i,
-    input  bgpu_inst_t disp_inst_i,
-    input  reg_idx_t   disp_dst_i,
-    input  logic       [OperandsPerInst-1:0] disp_src_required_i,
-    input  reg_idx_t   [OperandsPerInst-1:0] disp_src_i,
+    output logic      opc_ready_o,
+    input  logic      disp_valid_i,
+    input  iid_t      disp_tag_i,
+    input  pc_t       disp_pc_i,
+    input  act_mask_t disp_act_mask_i,
+    input  inst_t     disp_inst_i,
+    input  reg_idx_t  disp_dst_i,
+    input  logic      [OperandsPerInst-1:0] disp_src_required_i,
+    input  reg_idx_t  [OperandsPerInst-1:0] disp_src_i,
 
     /// To Register File
     output logic     [OperandsPerInst-1:0] opc_read_req_valid_o,
@@ -64,7 +63,7 @@ module operand_collector #(
     output iid_t       opc_tag_o,
     output pc_t        opc_pc_o,
     output act_mask_t  opc_act_mask_o,
-    output bgpu_inst_t opc_inst_o,
+    output inst_t      opc_inst_o,
     output reg_idx_t   opc_dst_o,
     output warp_data_t [OperandsPerInst-1:0] opc_operand_data_o
 );
@@ -78,7 +77,7 @@ module operand_collector #(
         iid_t       tag;      // Instruction Tag
         pc_t        pc;       // Instruction Program Counter
         act_mask_t  act_mask; // Instruction Activate Mask
-        bgpu_inst_t inst;     // Instruction
+        inst_t      inst;     // Instruction
         reg_idx_t   dst;      // Instruction Destination Register Index
     } common_t;
 

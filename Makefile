@@ -6,11 +6,13 @@
 BENDER          ?= bender
 VERILATOR       ?= verilator
 VIVADO          ?= vivado
-VIVADO_SETTINGS ?= /tools/Xilinx/Vivado/202?.?/settings64.sh
+VIVADO_SETTINGS ?= /tools/Xilinx/202?.?/Vivado/settings64.sh
 VERIBLE_LINT    ?= verible-verilog-lint
 
 VERILATOR_FLAGS:= verilator/config.vlt -Wno-UNOPTFLAT -Wno-TIMESCALEMOD
 VERILATOR_ARGS ?= ""
+
+GOWIN_EDA ?= /tools/Gowin/IDE_1.9.11.02
 
 # Bender Targets
 BENDER_TARGET_LINT ?= -t sim
@@ -24,7 +26,7 @@ SRCS = $(wildcard rtl/**/*.sv)
 TB_SRCS = $($(BENDER) scripts flist -n )
 BENDER_DEPS:= Bender.lock Bender.yml
 
-.PHONY: lint asic xilinx gowin clean tb_%
+.PHONY: lint asic xilinx gowin-yosys clean tb_%
 
 ####################################################################################################
 # Linting
@@ -80,8 +82,8 @@ xilinx/vivado.f: $(BENDER_DEPS)
 	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -D SYNTHESIS > $@
 
 # Run Vivado synthesis
-xilinx: xilinx/vivado.f $(SRCS) xilinx/synth.tcl xilinx/dummy_constraints.xdc xilinx/synth.sh
-	time ./xilinx/synth.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
+xilinx: xilinx/vivado.f $(SRCS) xilinx/vivado.tcl xilinx/dummy_constraints.xdc xilinx/run.sh
+	time ./xilinx/run.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
 ####################################################################################################
 # ASIC Synthesis
@@ -98,13 +100,41 @@ include asic/asic.mk
 # Gowin Synthesis
 ####################################################################################################
 
-gowin/gowin.f: $(BENDER_DEPS)
-	$(BENDER) script flist-plus -t gowin -D SYNTHESIS -t tech_cells_generic_exclude_tc_sram > $@
+gowin/gowin-yosys.f: $(BENDER_DEPS)
+	$(BENDER) script flist-plus -t gowin_yosys -D SYNTHESIS -t tech_cells_generic_exclude_tc_sram > $@
 
-gowin: gowin/gowin.f $(SRCS) gowin/build.tcl
-	echo "set top_design $(TOP)"  >  gowin/run.tcl
-	echo "source gowin/build.tcl" >> gowin/run.tcl
-	yosys -c gowin/run.tcl -l gowin/gowin.log -t
+gowin/gowin-eda.f: $(BENDER_DEPS)
+	$(BENDER) sources -f -t gowin_eda -t tech_cells_generic_exclude_tc_sram > $@
+
+gowin-yosys: gowin/gowin-yosys.f $(SRCS) gowin/scripts/yosys.tcl
+	echo "set top_design $(TOP)"  >  gowin/run_yosys.tcl
+	echo "source gowin/scripts/yosys.tcl" >> gowin/run_yosys.tcl
+	yosys -c gowin/run_yosys.tcl -l gowin/gowin.log -t
+
+gowin-eda: gowin/gowin-eda.f $(SRCS) gowin/scripts/eda.tcl
+	echo "set top_design $(TOP)"  >  gowin/run_eda.tcl
+	echo "source gowin/scripts/eda.tcl" >> gowin/run_eda.tcl
+	mkdir -p gowin/out
+	morty -f gowin/gowin-eda.f -D SYNTHESIS --top $(TOP) > gowin/out/pickled.sv
+	LD_LIBRARY_PATH=${GOWIN_EDA}/lib ${GOWIN_EDA}/bin/gw_sh gowin/run_eda.tcl
+
+gowin-eda-report:
+	lynx gowin/out/$(TOP)/impl/gwsynthesis/$(TOP)_syn.rpt.html -dump -width 256 > gowin/gowin_eda_report.rpt
+	sed -i 's/\&nbsp/     /g' gowin/gowin_eda_report.rpt
+	sed -i '1,10d' gowin/gowin_eda_report.rpt
+	grep -A 43 "Resource Usage Summary" gowin/gowin_eda_report.rpt 
+
+gowin-yosys-gen-report: gowin/scripts/yosys_timing_eda.tcl
+	echo "set top_design $(TOP)"  >  gowin/run_timing.tcl
+	echo "source gowin/scripts/yosys_timing_eda.tcl" >> gowin/run_timing.tcl
+	mkdir -p gowin/out
+	LD_LIBRARY_PATH=${GOWIN_EDA}/lib ${GOWIN_EDA}/bin/gw_sh gowin/run_timing.tcl
+
+gowin-yosys-report:
+	lynx gowin/out/$(TOP)_yosys/impl/gwsynthesis/$(TOP)_yosys_syn.rpt.html -dump -width 256 > gowin/gowin_yosys_report.rpt
+	sed -i 's/\&nbsp/     /g' gowin/gowin_yosys_report.rpt
+	sed -i '1,10d' gowin/gowin_yosys_report.rpt
+	grep -A 43 "Resource Usage Summary" gowin/gowin_yosys_report.rpt 
 
 gowin-report:
 	tail -n 64 gowin/gowin.log
@@ -126,9 +156,12 @@ xilinx-clean:
 	rm -f  xilinx/*.log
 	rm -f  xilinx/*.jou
 	rm -rf xilinx/out
+	rm -rf xilinx/cong
+	rm -f  xilinx/clockInfo.txt
 
 gowin-clean:
 	rm -f  gowin/*.f
 	rm -f  gowin/*.log
-	rm -f  gowin/run.tcl
+	rm -f  gowin/*.rpt
+	rm -f  gowin/run*.tcl
 	rm -rf gowin/out

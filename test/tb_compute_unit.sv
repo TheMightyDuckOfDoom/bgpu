@@ -2,10 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Testbench for Compute Unit
-module tb_compute_unit #(
+module tb_compute_unit import bgpu_pkg::*; #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -67,15 +65,15 @@ module tb_compute_unit #(
     typedef logic  [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
 
     typedef struct packed {
-        bgpu_eu_e eu;
-        bgpu_inst_subtype_u subtype;
-        reg_idx_t dst;
-        reg_idx_t op1;
-        reg_idx_t op2;
+        eu_e           eu;
+        inst_subtype_u subtype;
+        reg_idx_t      dst;
+        reg_idx_t      op1;
+        reg_idx_t      op2;
     } enc_inst_t;
 
     typedef struct packed {
-        req_id_t id;
+        req_id_t     id;
         block_addr_t addr;
         block_mask_t we_mask;
         block_data_t data;
@@ -101,27 +99,27 @@ module tb_compute_unit #(
     // Test program
     enc_inst_t test_program [15] = {
         // Calculate byte offset from thread ID and warp ID
-        '{eu: BGPU_EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
-        '{eu: BGPU_EU_IU,  subtype: IU_SLLI,        dst: 0, op1: 2, op2: 0}, // reg0 = reg0 << 2
-        '{eu: BGPU_EU_IU,  subtype: IU_TID,         dst: 1, op1: 0, op2: 0}, // reg1 = thread ID
-        '{eu: BGPU_EU_IU,  subtype: IU_ADD,         dst: 1, op1: 1, op2: 0}, // reg1 = reg1 + reg0
+        '{eu: EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
+        '{eu: EU_IU,  subtype: IU_SLLI,        dst: 0, op1: 2, op2: 0}, // reg0 = reg0 << 2
+        '{eu: EU_IU,  subtype: IU_TID,         dst: 1, op1: 0, op2: 0}, // reg1 = thread ID
+        '{eu: EU_IU,  subtype: IU_ADD,         dst: 1, op1: 1, op2: 0}, // reg1 = reg1 + reg0
 
         // Load byte from memory
-        '{eu: BGPU_EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 2, op1: 1, op2: 0}, // reg2 = [reg1]
+        '{eu: EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 2, op1: 1, op2: 0}, // reg2 = [reg1]
         // Do some computation
-        '{eu: BGPU_EU_IU,  subtype: IU_SUB,         dst: 3, op1: 2, op2: 2}, // reg3 = reg2 - reg2
-        '{eu: BGPU_EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
-        '{eu: BGPU_EU_IU,  subtype: IU_ADD,         dst: 3, op1: 3, op2: 0}, // reg3 = reg3 + reg0
+        '{eu: EU_IU,  subtype: IU_SUB,         dst: 3, op1: 2, op2: 2}, // reg3 = reg2 - reg2
+        '{eu: EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
+        '{eu: EU_IU,  subtype: IU_ADD,         dst: 3, op1: 3, op2: 0}, // reg3 = reg3 + reg0
         // Store result back to memory
-        '{eu: BGPU_EU_LSU, subtype: LSU_STORE_BYTE, dst: 4, op1: 1, op2: 3}, // [reg1] = reg3
+        '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 4, op1: 1, op2: 3}, // [reg1] = reg3
 
         // NOPs
-        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: BGPU_EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}  // reg0 = reg0 + 0
+        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
+        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}  // reg0 = reg0 + 0
     };
 
     // Clock and initialization signals

@@ -1,2 +1,3 @@
 out
-run.tcl
+run*.tcl
+*.rpt

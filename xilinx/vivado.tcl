@@ -16,20 +16,23 @@ report_timing -nworst 1
 report_utilization -hierarchical -hierarchical_percentages
 # report_timing_summary
 # Opt Design
-# opt_design -directive ExploreWithRemap
+# opt_design
 # report_utilization -hierarchical -hierarchical_percentages
 # report_timing_summary
 # Place Design
-#place_design
+place_design -verbose 
+
+phys_opt_design -directive AddRetime
 # Route Design
-#route_design
-#report_timing -nworst 1
-#report_utilization -hierarchical
+# route_design -verbose -timing_summary
+# report_timing_summary
+report_timing -nworst 1
+report_utilization -hierarchical -hierarchical_percentages
 
 #start_gui
 
-exec mkdir -p out
-write_verilog -force -mode funcsim out/$top.v
+# exec mkdir -p out
+# write_verilog -force -mode funcsim out/$top.v
 
 # Write out bitfile
 ## write_bitstream -force my_proj.bit

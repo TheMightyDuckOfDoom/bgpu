@@ -1,17 +1,31 @@
 name: Synthesis
 on: [push, pull_request, workflow_dispatch]
 jobs:
-    gowin:
+    gowin-yosys:
         runs-on: self-hosted
         steps:
             - name: Checkout
               uses: actions/checkout@master
-            - name: Synthesis for Gowin FPGA
-              run: make gowin
+            - name: Yosys Synthesis for Gowin FPGA
+              run: make gowin-yosys
             - name: Report Area
               run: make gowin-report
             - name: Post Synthesis Simulation
               run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
+            - name: Generating report...
+              run: make gowin-yosys-gen-report
+            - name: Show report
+              run: make gowin-yosys-report
+
+    gowin-eda:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Gowin EDA Synthesis for Gowin FPGA
+              run: make gowin-eda
+            - name: Show report
+              run: make gowin-eda-report
 
     asic:
         runs-on: self-hosted

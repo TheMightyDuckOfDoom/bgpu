@@ -2,8 +2,6 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "bgpu/instructions.svh"
-
 /// Dispatcher
 // Contains a WaitBuffer, RegTable and a tag_queue
 // When a new instruction is decoded:
@@ -17,7 +15,7 @@
 // When instruction is done:
 // 1. Check wait buffer if any instruction is waiting on this result |-> tag matches, mark as ready
 // 2. Update Register Table, clear tag for dst register
-module dispatcher #(
+module dispatcher import bgpu_pkg::*; #(
     /// Number of inflight instructions
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -49,25 +47,25 @@ module dispatcher #(
     output logic ib_space_available_o,
 
     /// From decoder
-    output logic       disp_ready_o,
-    input  logic       dec_valid_i,
-    input  pc_t        dec_pc_i,
-    input  act_mask_t  dec_act_mask_i,
-    input  bgpu_inst_t dec_inst_i,
-    input  reg_idx_t   dec_dst_i,
-    input  logic       [OperandsPerInst-1:0] dec_operands_required_i,
-    input  reg_idx_t   [OperandsPerInst-1:0] dec_operands_i,
+    output logic      disp_ready_o,
+    input  logic      dec_valid_i,
+    input  pc_t       dec_pc_i,
+    input  act_mask_t dec_act_mask_i,
+    input  inst_t     dec_inst_i,
+    input  reg_idx_t  dec_dst_i,
+    input  logic      [OperandsPerInst-1:0] dec_operands_required_i,
+    input  reg_idx_t  [OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collector
-    input  logic       opc_ready_i,
-    output logic       disp_valid_o,
-    output tag_t       disp_tag_o,
-    output pc_t        disp_pc_o,
-    output act_mask_t  disp_act_mask_o,
-    output bgpu_inst_t disp_inst_o,
-    output reg_idx_t   disp_dst_o,
-    output logic       [OperandsPerInst-1:0] disp_operands_required_o,
-    output reg_idx_t   [OperandsPerInst-1:0] disp_operands_o,
+    input  logic      opc_ready_i,
+    output logic      disp_valid_o,
+    output tag_t      disp_tag_o,
+    output pc_t       disp_pc_o,
+    output act_mask_t disp_act_mask_o,
+    output inst_t     disp_inst_o,
+    output reg_idx_t  disp_dst_o,
+    output logic      [OperandsPerInst-1:0] disp_operands_required_o,
+    output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
 
     /// From Execution Units
     input  logic eu_valid_i,
