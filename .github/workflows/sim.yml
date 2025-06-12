@@ -14,12 +14,30 @@ jobs:
   # Main testbench for compute unit
   tb_compute_unit:
     runs-on: self-hosted
-    needs: [tb_tag_queue, tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector, tb_register_opc_stage]
+    needs: [tb_tag_queue, tb_operand_collector, tb_register_opc_stage, tb_load_store_unit]
     steps:
       - name: Checkout
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_compute_unit
+
+  gowin_tb_compute_unit:
+    runs-on: self-hosted
+    needs: [tb_tag_queue, tb_operand_collector, gowin_tb_register_opc_stage, tb_load_store_unit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_compute_unit BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+
+  xilinx_tb_compute_unit:
+    runs-on: self-hosted
+    needs: [tb_tag_queue, tb_operand_collector, xilinx_tb_register_opc_stage, tb_load_store_unit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_compute_unit BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
 
   # Tag Queue Testbench
   tb_tag_queue:
@@ -81,6 +99,24 @@ jobs:
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_register_opc_stage
+
+  gowin_tb_register_opc_stage:
+    runs-on: self-hosted
+    needs: [gowin_tb_register_file_bank_singleport, tb_operand_collector]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_register_opc_stage BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+
+  xilinx_tb_register_opc_stage:
+    runs-on: self-hosted
+    needs: [xilinx_tb_register_file_bank_singleport, tb_operand_collector]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_register_opc_stage BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
 
   tb_register_opc_stage_single_bank:
     runs-on: self-hosted

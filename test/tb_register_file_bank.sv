@@ -28,8 +28,15 @@ module tb_register_file_bank #(
     typedef logic [           DataWidth-1:0] data_t;
     typedef logic [            TagWidth-1:0] tag_t;
 
-    typedef logic [$bits(addr_t)+$bits(data_t)-1:0] write_req_t;
-    typedef logic [$bits(addr_t)+$bits(tag_t) -1:0] read_req_t;
+    typedef struct packed {
+        addr_t addr;
+        tag_t  tag;
+    } read_req_t;
+
+    typedef struct packed {
+        addr_t addr;
+        data_t data;
+    } write_req_t;
 
     // #######################################################################################
     // # Signals                                                                           #
@@ -110,9 +117,9 @@ module tb_register_file_bank #(
         .ready_i( write_ready_mst )
     );
 
-    assign write_addr_rand = write_req[$bits(addr_t)+$bits(data_t)-1:$bits(data_t)];
+    assign write_addr_rand = write_req.addr;
     assign write_addr      = write_addr_rand % NumRegisters[$clog2(NumRegisters)-1:0];
-    assign write_data = write_req[$bits(data_t)-1:0];
+    assign write_data      = write_req.data;
 
     // Read port
     rand_stream_mst #(
@@ -129,9 +136,9 @@ module tb_register_file_bank #(
         .ready_i( read_ready )
     );
 
-    assign read_addr_rand = read_req[$bits(addr_t)-1:0];
+    assign read_addr_rand = read_req.addr;
     assign read_addr      = read_addr_rand % NumRegisters[$clog2(NumRegisters)-1:0];
-    assign read_tag  = read_req[$bits(addr_t)+$bits(tag_t)-1:$bits(addr_t)];
+    assign read_tag       = read_req.tag;
 
     // Prevent write port from writing to the same address as the read port
     always_comb begin
