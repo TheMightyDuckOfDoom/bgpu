@@ -13,7 +13,7 @@ jobs:
             - name: Post Synthesis Simulation
               run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
             - name: Generating report...
-              run: make gowin-yosys-gen-report
+              run: DISPLAY=:1.0 make gowin-yosys-gen-report
             - name: Show report
               run: make gowin-yosys-report
 
@@ -23,7 +23,7 @@ jobs:
             - name: Checkout
               uses: actions/checkout@master
             - name: Gowin EDA Synthesis for Gowin FPGA
-              run: make gowin-eda
+              run: DISPLAY=:1.0 make gowin-eda
             - name: Show report
               run: make gowin-eda-report
 

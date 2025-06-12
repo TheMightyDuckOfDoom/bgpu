@@ -11,9 +11,10 @@ dependencies:
     common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.37.0 }
 
 sources:
+    - rtl/bgpu_pkg.sv
+
     - target: not(any(post_synth, post_layout))
       files:
-          - rtl/bgpu_pkg.sv
           - rtl/compute_unit/dummy_reconvergence_stack.sv
           - rtl/compute_unit/fetcher.sv
           - rtl/compute_unit/dummy_instruction_cache.sv
