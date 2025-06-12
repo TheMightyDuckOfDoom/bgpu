@@ -91,6 +91,18 @@ sources:
           - xilinx/lib/RAMB36E1.v
           - test/tb_register_file_bank.sv
 
-    - target: any(xilinx, xilinx_sim)
+    - target: xilinx_yosys
+      files:
+          - xilinx/lib/blackbox.v
+    
+    - target: xilinx_postsynth
+      defines:
+          POST: ~
+      files:
+          - xilinx/lib/cells_sim.v
+          - xilinx/lib/RAMB36E1.v
+          - xilinx/out/compute_unit_yosys.v
+
+    - target: any(xilinx, xilinx_yosys, xilinx_sim)
       files:
           - xilinx/tc_sram.sv

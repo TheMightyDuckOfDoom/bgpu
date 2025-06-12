@@ -81,9 +81,19 @@ tb_%: verilator/obj_dir/Vtb_%
 xilinx/vivado.f: $(BENDER_DEPS)
 	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -D SYNTHESIS > $@
 
+# Generate filelist for Yosys synthesis
+xilinx/yosys.f: $(BENDER_DEPS)
+	$(BENDER) script flist-plus -t xilinx_yosys -t tech_cells_generic_exclude_tc_sram -D SYNTHESIS > $@
+
 # Run Vivado synthesis
-xilinx: xilinx/vivado.f $(SRCS) xilinx/vivado.tcl xilinx/dummy_constraints.xdc xilinx/run.sh
-	time ./xilinx/run.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
+xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/dummy_constraints.xdc xilinx/run_vivado.sh
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
+
+# Run Yosys synthesis
+xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
+	echo "set top_design $(TOP)"  >  xilinx/run_yosys.tcl
+	echo "source xilinx/scripts/yosys.tcl" >> xilinx/run_yosys.tcl
+	yosys -c xilinx/run_yosys.tcl -l xilinx/yosys.log -t
 
 ####################################################################################################
 # ASIC Synthesis
