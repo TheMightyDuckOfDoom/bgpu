@@ -291,7 +291,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
 
                         if (eu.src_data[j] != reg_file[wid][reg_idx]) begin
                             $display("Mismatch in source data for operand %0d", j);
-                            $error("Expected: %0d, Got: %0d",
+                            $error("Expected: %0h, Got: %0h",
                                 reg_file[wid][reg_idx], eu.src_data[j]);
                         end else begin
                             $display("Source data for operand %0d: %0d == %0d", j,

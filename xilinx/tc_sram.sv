@@ -2,6 +2,7 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+// CAUTION: Im not confident that this works correctly, but it seems to work
 module tc_sram #(
   parameter int unsigned NumWords     = 32'd1024, // Number of Words in data array
   parameter int unsigned DataWidth    = 32'd128,  // Data signal width (in bits)
@@ -62,7 +63,7 @@ module tc_sram #(
             localparam int unsigned ByteInColumn = ColumnWidth / 8;
 
             // How many words does a bram with ColumWidth have?
-            localparam int unsigned WordsPerBram      = BitsPerSP / ColumnWidth;
+            localparam int unsigned WordsPerBram      = BitsPerSP / SPWidth;
             localparam int unsigned AddrWidthInColumn = 16; //$clog2(WordsPerBram);
 
             // How many BRAMs are needed in this column?
@@ -97,7 +98,7 @@ module tc_sram #(
             // Build address for the current BRAM
             always_comb begin : bram_addr_logic
                 bram_addr = '0;
-                bram_addr[AddrWidth-1:0] = addr_i[0][AddrWidth-1:0];
+                bram_addr[AddrWidth+5:6] = addr_i[0][AddrWidth-1:0];
             end : bram_addr_logic
 
             // Byte enable
@@ -142,8 +143,8 @@ module tc_sram #(
             for (genvar y = 0; y < BramsInColumn; y++) begin : gen_bram
                 // See AMD UG473 for details
                 RAMB36E1 #(
-                    .DOA_REG          ( 0             ),
-                    .DOB_REG          ( 0             ),
+                    .DOA_REG          ( 1             ),
+                    .DOB_REG          ( 1             ),
                     .EN_ECC_READ      ( "FALSE"       ),
                     .EN_ECC_WRITE     ( "FALSE"       ),
                     .INIT_A           ( '0            ),
@@ -327,8 +328,8 @@ module tc_sram #(
                     // Tie-offs
                     .INJECTDBITERR( 1'b0 ),
                     .INJECTSBITERR( 1'b0 ),
-                    .REGCEAREGCE  ( 1'b0 ),
-                    .REGCEB       ( 1'b0 ),
+                    .REGCEAREGCE  ( 1'b1 ),
+                    .REGCEB       ( 1'b1 ),
                     .CASCADEINA   ( 1'b0 ),
                     .CASCADEINB   ( 1'b0 ),
                     .DIPADIP      ( '0   ),

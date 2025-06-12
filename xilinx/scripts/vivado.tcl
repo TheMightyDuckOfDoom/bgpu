@@ -1,3 +1,4 @@
+set_param general.maxThreads 8
 set_part $device
 
 # read all design files

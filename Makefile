@@ -95,6 +95,10 @@ xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
 	echo "source xilinx/scripts/yosys.tcl" >> xilinx/run_yosys.tcl
 	yosys -c xilinx/run_yosys.tcl -l xilinx/yosys.log -t
 
+# Show Yosys report
+xilinx-yosys-report:
+	tail -n 32 xilinx/yosys.log
+
 ####################################################################################################
 # ASIC Synthesis
 ####################################################################################################
