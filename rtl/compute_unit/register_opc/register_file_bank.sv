@@ -60,7 +60,7 @@ module register_file_bank #(
     // # Combinational logic                                                                 #
     // #######################################################################################
 
-    if(DualPort) begin : gen_dual_port_logic
+    if (DualPort) begin : gen_dual_port_logic
         // Port 0: Read port
         assign mem_req  [0] = read_valid_i;
         assign mem_addr [0] = read_addr_i;
@@ -93,7 +93,7 @@ module register_file_bank #(
             read_valid_d = 1'b0;
 
             // Write has priority over read
-            if(write_valid_i) begin
+            if (write_valid_i) begin
                 // Write request
                 mem_req  [0] = 1'b1;
                 mem_we   [0] = 1'b1;
@@ -102,7 +102,7 @@ module register_file_bank #(
 
                 // Read is not ready
                 read_ready_o = 1'b0;
-            end else if(read_valid_i) begin
+            end else if (read_valid_i) begin
                 // Read request
                 mem_req  [0] = 1'b1;
                 mem_we   [0] = 1'b0;

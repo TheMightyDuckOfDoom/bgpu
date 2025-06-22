@@ -42,15 +42,15 @@ module tag_queue #(
         tag_o       = '0;
 
         // Free
-        if(free_i) begin
+        if (free_i) begin
             tags_used_d[tag_i] = 1'b0;
         end
 
         // Get handshake
-        if(get_i && valid_o) begin
+        if (get_i && valid_o) begin
             // Find first unused tag
             for(int i=0; i<NumTags; i++) begin
-                if(!tags_used_q[i]) begin
+                if (!tags_used_q[i]) begin
                     tags_used_d[i] = 1'b1;
                     tag_o = i[TagWidth-1:0];
                     break;

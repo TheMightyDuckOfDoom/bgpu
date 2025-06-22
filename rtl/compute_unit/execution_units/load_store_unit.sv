@@ -186,13 +186,13 @@ module load_store_unit import bgpu_pkg::*; #(
             LSU_STORE_BYTE, LSU_LOAD_BYTE : opc_to_eu_width = 'd0; // 1 byte
             /* verilator lint_off WIDTHTRUNC */
             LSU_STORE_HALF, LSU_LOAD_HALF : begin
-                if(RegWidthInBytes >= 2)
+                if (RegWidthInBytes >= 2)
                     opc_to_eu_width = 'd1; // 2 bytes
             end
             LSU_STORE_WORD, LSU_LOAD_WORD : begin
-                if(RegWidthInBytes >= 4)
+                if (RegWidthInBytes >= 4)
                     opc_to_eu_width = 'd2; // 4 bytes
-                else if(RegWidthInBytes >= 2)
+                else if (RegWidthInBytes >= 2)
                     opc_to_eu_width = 'd1; // 2 bytes
             end
             /* verilator lint_on WIDTHTRUNC */
@@ -260,7 +260,7 @@ module load_store_unit import bgpu_pkg::*; #(
 
         // If we receive a memory response, update the buffer entry
         if (mem_rsp_valid_i) begin
-            if(buffer_valid_q[mem_rsp_com_id]) begin
+            if (buffer_valid_q[mem_rsp_com_id]) begin
                 // If the buffer entry is valid, update the thread data
                 for(int unsigned i = 0; i < WarpWidth; i++) begin : update_thread_data_rsp
                     if (!buffer_q[mem_rsp_com_id].thread_ready[i]
@@ -282,7 +282,7 @@ module load_store_unit import bgpu_pkg::*; #(
 
         // A buffer entry is selected for the Result Collector
         for(int unsigned i = 0; i < OutstandingReqs; i++) begin : free_buffer
-            if(buffer_select_for_rc[i])
+            if (buffer_select_for_rc[i])
                 buffer_valid_d[i] = 1'b0; // Free the buffer entry
         end : free_buffer
 

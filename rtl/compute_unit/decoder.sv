@@ -71,7 +71,7 @@ module decoder import bgpu_pkg::*; #(
         dec_dst_o         = ic_inst_i[23:16];
 
         dec_operands_required_o = '0;
-        if(dec_inst_o.eu == EU_IU) begin : decode_iu
+        if (dec_inst_o.eu == EU_IU) begin : decode_iu
             // Two register operands
             if (dec_inst_o.subtype inside {
                 IU_ADD, IU_SUB, IU_AND, IU_OR, IU_XOR, IU_SLL

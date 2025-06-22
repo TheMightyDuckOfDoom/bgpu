@@ -73,13 +73,13 @@ module reg_table #(
         use_existing_entry = 1'b0;
 
         // Insert logic
-        if(insert_i && space_available_o) begin : insert_logic
+        if (insert_i && space_available_o) begin : insert_logic
             // First check operands
             for(int op = 0; op < OperandsPerInst; op++) begin : check_operand
                 operands_ready_o[op] = 1'b1;
                 // Check all entries, if valid and the destination is the same as the operand |-> not ready
                 for(int entry = 0; entry < NumTags; entry++) begin : check_entry
-                    if(table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]) begin
+                    if (table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]) begin
                         operands_ready_o[op] = 1'b0;
                         operands_tag_o[op]   = table_q[entry].producer;
                         break;
@@ -87,14 +87,14 @@ module reg_table #(
                 end : check_entry
 
                 // Check if operand is produced by the EUs in the same cycle |-> then it is ready
-                if(eu_valid_i && eu_tag_i == operands_tag_o[op]) begin
+                if (eu_valid_i && eu_tag_i == operands_tag_o[op]) begin
                     operands_ready_o[op] = 1'b1;
                 end
             end : check_operand
 
             // Insert destination, first check if dst is already in table
             for(int entry = 0; entry < NumTags; entry++) begin : check_existing_entries
-                if(table_valid_q[entry] && table_q[entry].dst == dst_reg_i) begin
+                if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i) begin
                     table_valid_d[entry]    = 1'b1;
                     table_d[entry].producer = tag_i;
                     use_existing_entry      = 1'b1;
@@ -103,9 +103,9 @@ module reg_table #(
             end : check_existing_entries
 
             // If not, find a free entry
-            if(!use_existing_entry) begin : use_free_entry
+            if (!use_existing_entry) begin : use_free_entry
                 for(int entry = 0; entry < NumTags; entry++) begin : find_free_entry
-                    if(!table_valid_q[entry]) begin
+                    if (!table_valid_q[entry]) begin
                         table_valid_d[entry]    = 1'b1;
                         table_d[entry].dst      = dst_reg_i;
                         table_d[entry].producer = tag_i;
@@ -117,9 +117,9 @@ module reg_table #(
 
         // Clear logic
         // |-> if the EU is valid, clear all entries with the same producer tag, as result is in register file
-        if(eu_valid_i) begin : clear_entry
+        if (eu_valid_i) begin : clear_entry
             for(int entry = 0; entry < NumTags; entry++) begin
-                if(table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
+                if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
                     table_valid_d[entry] = 1'b0;
                 end
             end

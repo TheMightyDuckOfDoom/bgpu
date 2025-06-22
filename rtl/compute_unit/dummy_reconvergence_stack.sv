@@ -76,7 +76,7 @@ module dummy_reconvergence_stack #(
         warp_data_d[NumWarps-1:0] = warp_data_q[NumWarps-1:0];
 
         // Set ready status
-        if(set_ready_i) begin
+        if (set_ready_i) begin
             for(int i = 0; i < NumWarps; i++) begin
                 warp_data_d[i].active   = 1'b1;
                 warp_data_d[i].ready    = 1'b1;
@@ -85,7 +85,7 @@ module dummy_reconvergence_stack #(
         end
 
         // Did we get an update from decode?
-        if(instruction_decoded_i) begin : decode_update
+        if (instruction_decoded_i) begin : decode_update
 
             // Adjust the PC of the decoded warp
             warp_data_d[decode_wid_i].pc = decode_next_pc_i;
@@ -93,7 +93,7 @@ module dummy_reconvergence_stack #(
             warp_data_d[decode_wid_i].ready = 1'b1;
 
             // If the warp is finished |-> mark if as stopped
-            if(decode_stop_warp_i) begin
+            if (decode_stop_warp_i) begin
                 warp_data_d[decode_wid_i].stopped = 1'b1;
                 warp_data_d[decode_wid_i].active = 1'b0;
                 warp_data_d[decode_wid_i].ready = 1'b0;
@@ -103,7 +103,7 @@ module dummy_reconvergence_stack #(
 
         for(int i = 0; i < NumWarps; i++) begin : select_update
             // If the warp is selected for fetching, mark it as not ready |-> wait until decode stage
-            if(warp_selected_i[i])
+            if (warp_selected_i[i])
                 warp_data_d[i].ready = 1'b0;
 
         end : select_update

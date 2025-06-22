@@ -147,7 +147,7 @@ module wait_buffer import bgpu_pkg::*; #(
     always_comb begin
         insert_idx = '0;
         for(int i = 0; i < WaitBufferSizePerWarp; i++) begin
-            if(!wait_buffer_valid_q[i]) begin
+            if (!wait_buffer_valid_q[i]) begin
                 insert_idx = i[WaitBufferIndexWidth-1:0];
                 break;
             end
@@ -161,14 +161,14 @@ module wait_buffer import bgpu_pkg::*; #(
             wait_buffer_valid_d[entry] = wait_buffer_valid_q[entry];
 
             // Dispatch: Remove instruction from buffer
-            if(arb_gnt[entry] && rr_inst_ready[entry]) begin
+            if (arb_gnt[entry] && rr_inst_ready[entry]) begin
                 wait_buffer_valid_d[entry] = 1'b0;
             end
             // From Execution Units
-            if(eu_valid_i) begin : check_ready
-                if(wait_buffer_valid_q[entry]) begin
+            if (eu_valid_i) begin : check_ready
+                if (wait_buffer_valid_q[entry]) begin
                     for(int operand = 0; operand < OperandsPerInst; operand++) begin
-                        if(!wait_buffer_q[entry].operands_ready[operand]
+                        if (!wait_buffer_q[entry].operands_ready[operand]
                           && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i) begin
                             wait_buffer_d[entry].operands_ready[operand] = 1'b1;
                         end
@@ -177,7 +177,7 @@ module wait_buffer import bgpu_pkg::*; #(
             end : check_ready
 
             // Insert instruction into buffer
-            if(dec_valid_i && wb_ready_o && insert_idx == entry) begin
+            if (dec_valid_i && wb_ready_o && insert_idx == entry) begin
                 wait_buffer_valid_d[entry]             = 1'b1;
 
                 wait_buffer_d[entry].pc                = dec_pc_i;
