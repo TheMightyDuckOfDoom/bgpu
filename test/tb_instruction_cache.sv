@@ -1,0 +1,332 @@
+// Copyright 2025 Tobias Senti
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+/// Testbench for Instruction Cache
+module tb_instruction_cache import bgpu_pkg::*; #(
+    /// Width of the Program Counter
+    parameter int unsigned PcWidth = 8,
+    /// Number of warps
+    parameter int unsigned NumWarps = 8,
+    /// Number of threads per warp
+    parameter int unsigned WarpWidth = 4,
+    // Memory Block size in bytes -> Memory request width
+    parameter int unsigned CachelineIdxBits = 2,
+    /// Number of cachelines in the instruction cache
+    parameter int unsigned NumCachelines = 16,
+    /// Width of an encoded instruction
+    parameter int unsigned EncInstWidth = 32,
+
+    /// Number of instructions to process
+    parameter int unsigned NumInsts = 100,
+
+    parameter time         TclkPeriod   = 10ns,
+    parameter time         AcqDelay     = 9ns,
+    parameter time         ApplDelay    = 1ns,
+    parameter int unsigned MaxMstWaitCycles = 0,
+    parameter int unsigned MaxSimCycles = 1000
+);
+    // #######################################################################################
+    // # Local Parameters                                                                    #
+    // #######################################################################################
+
+    localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
+
+    localparam int unsigned CachelineAddrWidth = CachelineIdxBits > 0 ? PcWidth - CachelineIdxBits
+                                                    : PcWidth;
+
+    // #######################################################################################
+    // # Type Definitions                                                                    #
+    // #######################################################################################
+
+    typedef logic [    WidWidth-1:0] wid_t;
+    typedef logic [     PcWidth-1:0] pc_t;
+    typedef logic [   WarpWidth-1:0] act_mask_t;
+    typedef logic [EncInstWidth-1:0] enc_inst_t;
+
+    typedef logic [CachelineAddrWidth-1:0] cache_addr_t;
+
+    // Request from fetcher
+    typedef struct packed {
+        pc_t       pc;
+        act_mask_t act_mask;
+        wid_t      wid;
+    } fetch_req_t;
+
+    // Response to Decoder
+    typedef struct packed {
+        pc_t        pc;
+        act_mask_t  act_mask;
+        wid_t       wid;
+        enc_inst_t enc_inst;
+    } ic_rsp_t;
+
+    // Memory response
+    typedef enc_inst_t [(1 << CachelineIdxBits)-1:0] mem_rsp_t;
+
+    // #######################################################################################
+    // # Signals                                                                             #
+    // #######################################################################################
+
+    // Clock and Reset
+    logic clk, rst_n;
+
+    // New request from fetcher
+    logic       fetch_req_valid, ic_ready;
+    fetch_req_t fetch_req;
+
+    // Request queue
+    fetch_req_t fetch_req_q[$];
+
+    // Response to decoder
+    logic    ic_valid, dec_ready;
+    ic_rsp_t ic_rsp;
+
+    // Memory interface
+    logic        mem_req_valid, mem_ready;
+    cache_addr_t mem_req_addr;
+
+    logic     mem_rsp_valid;
+    mem_rsp_t mem_rsp;
+
+    // Memory data
+    enc_inst_t [(1 << PcWidth)-1:0] mem_data;
+
+    // Golden response
+    ic_rsp_t golden_rsp[$];
+
+    // #######################################################################################
+    // # Clock generation                                                                    #
+    // #######################################################################################
+
+    clk_rst_gen #(
+        .ClkPeriod   ( TclkPeriod ),
+        .RstClkCycles( 3          )
+    ) i_clk_rst_gen (
+        .clk_o ( clk   ),
+        .rst_no( rst_n )
+    );
+
+    // #######################################################################################
+    // # Stream Masters and Subordinates                                                     #
+    // #######################################################################################
+
+    // Fetch request
+    rand_stream_mst #(
+        .data_t       ( fetch_req_t      ),
+        .ApplDelay    ( ApplDelay        ),
+        .AcqDelay     ( AcqDelay         ),
+        .MinWaitCycles( 0                ),
+        .MaxWaitCycles( MaxMstWaitCycles )
+    ) i_fetch_req (
+        .clk_i  ( clk             ),
+        .rst_ni ( rst_n           ),
+        .valid_o( fetch_req_valid ),
+        .data_o ( fetch_req       ),
+        .ready_i( ic_ready        )
+    );
+
+    // Response to decoder
+    rand_stream_slv #(
+        .data_t       ( ic_rsp_t         ),
+        .ApplDelay    ( ApplDelay        ),
+        .AcqDelay     ( AcqDelay         ),
+        .MinWaitCycles( 0                ),
+        .MaxWaitCycles( MaxMstWaitCycles ),
+        .Enqueue      ( 1'b1             )
+    ) i_ic_rsp_to_decoder (
+        .clk_i  ( clk       ),
+        .rst_ni ( rst_n     ),
+        .data_i ( ic_rsp    ),
+        .valid_i( ic_valid  ),
+        .ready_o( dec_ready )
+    );
+
+    // Memory request
+    rand_stream_slv #(
+        .data_t       ( cache_addr_t     ),
+        .ApplDelay    ( ApplDelay        ),
+        .AcqDelay     ( AcqDelay         ),
+        .MinWaitCycles( 0                ),
+        .MaxWaitCycles( MaxMstWaitCycles ),
+        .Enqueue      ( 1'b1             )
+    ) i_mem_req_sub (
+        .clk_i  ( clk           ),
+        .rst_ni ( rst_n         ),
+        .data_i ( mem_req_addr  ),
+        .valid_i( mem_req_valid ),
+        .ready_o( mem_ready     )
+    );
+
+
+    initial begin : memory_response
+        cache_addr_t addr;
+
+        // Initialize memory with random instructions
+        for (int i = 0; i < (1 << PcWidth); i++) begin
+            mem_data[i] = $urandom;
+        end
+
+        while(1) begin
+            @(posedge clk);
+            #ApplDelay;
+            mem_rsp_valid = 1'b0;
+            if (i_mem_req_sub.gen_queue.queue.size() > 0) begin
+                mem_rsp_valid = 1'b1;
+                addr = i_mem_req_sub.gen_queue.queue.pop_front();
+
+                // Generate memory response based on the address
+                for(int j = 0; j < (1 << CachelineIdxBits); j++) begin
+                    mem_rsp[j] = mem_data[addr * (1 << CachelineIdxBits) + j];
+                end
+            end
+        end
+    end : memory_response
+
+    initial begin : golden_model
+        ic_rsp_t rsp;
+
+        while(1) begin
+            @(posedge clk);
+            #AcqDelay;
+
+            if (fetch_req_valid && ic_ready) begin
+                rsp.pc       = fetch_req.pc;
+                rsp.act_mask = fetch_req.act_mask;
+                rsp.wid      = fetch_req.wid;
+                rsp.enc_inst = mem_data[fetch_req.pc];
+
+                golden_rsp.push_back(rsp);
+            end
+        end
+    end : golden_model
+
+    // #######################################################################################
+    // # DUT                                                                                 #
+    // #######################################################################################
+
+    instruction_cache #(
+        .PcWidth         ( PcWidth          ),
+        .NumWarps        ( NumWarps         ),
+        .WarpWidth       ( WarpWidth        ),
+        .EncInstWidth    ( EncInstWidth     ),
+        .CachelineIdxBits( CachelineIdxBits ),
+        .NumCachelines   ( NumCachelines    )
+    ) i_instruction_cache (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
+
+        .mem_ready_i( mem_ready     ),
+        .mem_req_o  ( mem_req_valid ),
+        .mem_addr_o ( mem_req_addr  ),
+
+        .mem_valid_i( mem_rsp_valid ),
+        .mem_data_i ( mem_rsp       ),
+
+        .ic_ready_o   ( ic_ready           ),
+        .fe_valid_i   ( fetch_req_valid    ),
+        .fe_pc_i      ( fetch_req.pc       ),
+        .fe_act_mask_i( fetch_req.act_mask ),
+        .fe_warp_id_i ( fetch_req.wid      ),
+
+        .dec_ready_i  ( dec_ready       ),
+        .ic_valid_o   ( ic_valid        ),
+        .ic_pc_o      ( ic_rsp.pc       ),
+        .ic_act_mask_o( ic_rsp.act_mask ),
+        .ic_warp_id_o ( ic_rsp.wid      ),
+        .ic_inst_o    ( ic_rsp.enc_inst )
+    );
+
+    // ########################################################################################
+    // # Simulation Logic                                                                     #
+    // ########################################################################################
+
+    initial begin : simulation_logic
+        int unsigned cycles, fetch_req_count, mem_req_count, dec_rsp_count;
+        ic_rsp_t grsp;
+
+        cycles = 0;
+        fetch_req_count = 0;
+        mem_req_count = 0;
+        dec_rsp_count = 0;
+
+        $timeformat(-9, 0, "ns", 12);
+        // configure VCD dump
+        $dumpfile("instruction_cache.vcd");
+        $dumpvars(1,i_instruction_cache);
+
+        while (cycles < MaxSimCycles && dec_rsp_count < NumInsts) begin
+            @(posedge clk);
+
+            // Process fetch request
+            if (fetch_req_valid && ic_ready) begin
+                $display("Cycle %0d: Fetch Request - PC: %0h, Warp ID: %0d, Active Mask: %0b",
+                         cycles, fetch_req.pc, fetch_req.wid, fetch_req.act_mask);
+                fetch_req_q.push_back(fetch_req);
+                fetch_req_count++;
+            end
+
+            // Process memory request
+            if (mem_req_valid && mem_ready) begin
+                $display("Cycle %0d: Memory Request - Address: %0h", cycles, mem_req_addr
+                    * (1 << CachelineIdxBits));
+                mem_req_count++;
+            end
+
+            // Memory response
+            if (mem_rsp_valid) begin
+                $display("Cycle %0d: Memory Response - Data: %0h", cycles, mem_rsp);
+            end
+
+            // Process decoder response
+            if (ic_valid && dec_ready) begin
+                $display("Cycle %0d: Decoder Response - PC: %0h, Warp ID: %0d",
+                            cycles, ic_rsp.pc, ic_rsp.wid);
+                $display("Active Mask: %0b, Instruction: %0h",
+                            ic_rsp.act_mask, ic_rsp.enc_inst);
+                dec_rsp_count++;
+
+                // Check against golden model
+                assert(golden_rsp.size() > 0) else
+                    $error("Golden response queue is empty");
+
+                grsp = golden_rsp.pop_front();
+
+                assert(grsp.pc == ic_rsp.pc) else
+                    $error("PC mismatch: expected %0h, got %0h", grsp.pc, ic_rsp.pc);
+
+                assert(grsp.wid == ic_rsp.wid) else
+                    $error("Warp ID mismatch: expected %0d, got %0d", grsp.wid, ic_rsp.wid);
+
+                assert(grsp.act_mask == ic_rsp.act_mask) else
+                    $error("Active mask mismatch: expected %0b, got %0b",
+                        grsp.act_mask, ic_rsp.act_mask);
+
+                assert(grsp.enc_inst == ic_rsp.enc_inst) else
+                    $error("Instruction mismatch: expected %0h, got %0h",
+                        grsp.enc_inst, ic_rsp.enc_inst);
+            end
+
+            cycles++;
+        end
+
+        $dumpflush;
+
+        assert(fetch_req_count >= NumInsts) else
+            $error("Not enough fetch requests generated: %0d, expected at least %0d",
+                fetch_req_count, NumInsts);
+
+        assert(mem_req_count > 0) else
+            $error("No memory requests generated");
+
+        assert(dec_rsp_count == NumInsts) else
+            $error("Not enough decoder responses: %0d, expected %0d", dec_rsp_count, NumInsts);
+
+        assert(cycles < MaxSimCycles) else
+            $error("Simulation exceeded maximum cycles: %0d", MaxSimCycles);
+
+        $display("Simulation completed successfully after %0d cycles", cycles);
+        $finish;
+    end : simulation_logic
+
+endmodule : tb_instruction_cache

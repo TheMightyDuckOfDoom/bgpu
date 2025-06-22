@@ -18,6 +18,7 @@ sources:
           - rtl/compute_unit/dummy_reconvergence_stack.sv
           - rtl/compute_unit/fetcher.sv
           - rtl/compute_unit/dummy_instruction_cache.sv
+          - rtl/compute_unit/instruction_cache.sv
           - rtl/compute_unit/decoder.sv
       
           - rtl/compute_unit/dispatcher/tag_queue.sv
@@ -59,6 +60,8 @@ sources:
           - test/tb_wdata_assembler.sv
           - test/tb_load_store_unit.sv
 
+          - test/tb_instruction_cache.sv
+
           - test/tb_compute_unit.sv
 
     - target: asic
@@ -78,6 +81,7 @@ sources:
           - gowin/lib/prim_sim.v
           - test/tb_register_file_bank.sv
           - test/tb_register_opc_stage.sv
+          - test/tb_instruction_cache.sv
           - test/tb_compute_unit.sv
       
     - target: any(gowin_yosys, gowin_eda, gowin_sim)
@@ -93,6 +97,7 @@ sources:
           - xilinx/lib/RAMB36E1.v
           - test/tb_register_file_bank.sv
           - test/tb_register_opc_stage.sv
+          - test/tb_instruction_cache.sv
           - test/tb_compute_unit.sv
 
     - target: xilinx_yosys

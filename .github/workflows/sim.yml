@@ -39,6 +39,31 @@ jobs:
       - name: Simulate
         run: make tb_compute_unit BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
 
+  # Instruction Cache Testbench
+  tb_instruction_cache:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_instruction_cache
+
+  gowin_tb_instruction_cache:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_instruction_cache BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+
+  xilinx_tb_instruction_cache:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_instruction_cache BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
+
   # Tag Queue Testbench
   tb_tag_queue:
     runs-on: self-hosted

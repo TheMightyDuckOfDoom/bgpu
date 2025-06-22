@@ -118,7 +118,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
     // # Stream Masters and Subordinates                                                     #
     // #######################################################################################
 
-    // Instruction Insert Master -> Simualates Dispatcher
+    // Instruction Insert Master -> Simulates Dispatcher
     rand_stream_mst #(
         .data_t       ( insert_inst_t    ),
         .ApplDelay    ( ApplDelay        ),
