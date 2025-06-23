@@ -327,8 +327,10 @@ module instruction_cache #(
 
     // Valid bits have to be set to zero upon reset
     // This might require special logic for ASIC implementations -> FFs array for valid bits
+    `ifndef SYNTHESIS
     `ifdef TARGET_ASIC
         initial $fatal("Instruction cache tag memory not implemented for ASIC targets.");
+    `endif
     `endif
 
     // Instruction memory
