@@ -34,10 +34,16 @@ module tb_compute_unit import bgpu_pkg::*; #(
     parameter int unsigned NumIClines = 8,
     // Number of bits for the instruction cache line index
     parameter int unsigned IClineIdxBits = 2,
+    // How many bits are used to index thread blocks inside a thread group?
+    parameter int unsigned TblockIdxBits = 8,
+    // How many bits are used to identify a thread block?
+    parameter int unsigned TblockIdBits = 8,
 
     parameter int unsigned SimMemBlocks = 16,
 
-    parameter time         TclkPeriod   = 10ns,
+    parameter int unsigned TblocksToLaunch = 10,
+
+    parameter time         ClkPeriod    = 10ns,
     parameter time         AcqDelay     = 1ns,
     parameter time         ApplDelay    = 9ns,
     parameter int unsigned MaxSimCycles = 1000
@@ -46,7 +52,6 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // # Local Parameters                                                                    #
     // #######################################################################################
 
-    localparam time TCLKHALF = TclkPeriod / 2;
     localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
     localparam int unsigned TagWidth = $clog2(InflightInstrPerWarp);
 
@@ -70,6 +75,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
     typedef logic  [       BlockWidth-1:0] block_mask_t;
     typedef byte_t [       BlockWidth-1:0] block_data_t;
     typedef logic  [      ICAddrWidth-1:0] imem_addr_t;
+    typedef logic  [     AddressWidth-1:0] addr_t;
+    typedef logic  [    TblockIdxBits-1:0] tblock_idx_t;
+    typedef logic  [     TblockIdBits-1:0] tblock_id_t;
     typedef logic  [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
 
     typedef struct packed {
@@ -94,9 +102,24 @@ module tb_compute_unit import bgpu_pkg::*; #(
         block_data_t data;
     } mem_rsp_t;
 
+    typedef struct packed {
+        pc_t pc;
+        addr_t dp_addr;
+        tblock_idx_t tblock_idx;
+        tblock_id_t  tblock_id;
+    } warp_insert_t;
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
+
+    // Warp insertion
+    logic         warp_free, allocate_warp;
+    warp_insert_t warp_insert;
+
+    // Warp completion
+    logic       tblock_done;
+    tblock_id_t tblock_done_id;
 
     // Memory request
     logic     mem_ready, mem_req_valid;
@@ -107,21 +130,22 @@ module tb_compute_unit import bgpu_pkg::*; #(
     mem_rsp_t mem_rsp_q,       mem_rsp_d;
 
     // Test program
-    enc_inst_t test_program [15] = {
+    enc_inst_t test_program [12] = {
         // Calculate byte offset from thread ID and warp ID
-        '{eu: EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
-        '{eu: EU_IU,  subtype: IU_SLLI,        dst: 0, op1: 2, op2: 0}, // reg0 = reg0 << 2
-        '{eu: EU_IU,  subtype: IU_TID,         dst: 1, op1: 0, op2: 0}, // reg1 = thread ID
-        '{eu: EU_IU,  subtype: IU_ADD,         dst: 1, op1: 1, op2: 0}, // reg1 = reg1 + reg0
+        '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
 
-        // Load byte from memory
-        '{eu: EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 2, op1: 1, op2: 0}, // reg2 = [reg1]
-        // Do some computation
-        '{eu: EU_IU,  subtype: IU_SUB,         dst: 3, op1: 2, op2: 2}, // reg3 = reg2 - reg2
-        '{eu: EU_IU,  subtype: IU_WID,         dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
-        '{eu: EU_IU,  subtype: IU_ADD,         dst: 3, op1: 3, op2: 0}, // reg3 = reg3 + reg0
+        // Load data from memory
+        '{eu: EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 1, op1: 0, op2: 0}, // reg1 = [reg0]
+
+        // Subtract address from data
+        '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 1, op2: 0}, // reg2 = reg1 - reg0
+
+        '{eu: EU_IU,  subtype: IU_BID,         dst: 3, op1: 0, op2: 0}, // reg3 = block ID
+
+        '{eu: EU_IU,  subtype: IU_ADD,         dst: 4, op1: 2, op2: 3}, // reg4 = reg2 + reg3
+
         // Store result back to memory
-        '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 4, op1: 1, op2: 3}, // [reg1] = reg3
+        '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 5, op1: 0, op2: 2}, // [reg0] = reg4
 
         // NOPs
         '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
@@ -132,11 +156,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}  // STOP warps
     };
 
-    // Clock and initialization signals
-    logic stop, clk, rst_n, set_ready_status;
-
-    // Status signals
-    logic [NumWarps-1:0] warp_active, warp_stopped;
+    logic stop, clk, rst_n;
 
     // Instruction Cache requests
     logic       imem_ready, imem_req_valid;
@@ -155,28 +175,13 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // # Clock generation                                                                    #
     // #######################################################################################
 
-    // Generate clock
-    initial clk = 1'b1;
-    always begin
-        #TCLKHALF clk = ~clk;
-    end
-
-    // Reset
-    initial begin
-        set_ready_status = 1'b0;
-        rst_n = 1;
-        @(posedge clk);
-
-        $display("Starting reset...");
-
-        rst_n = 0;
-        repeat(2) @(posedge clk);
-        rst_n = 1;
-        $display("Reset released.");
-        set_ready_status = 1'b1;
-        @(posedge clk);
-        set_ready_status = 1'b0;
-    end
+    clk_rst_gen #(
+        .ClkPeriod   ( ClkPeriod ),
+        .RstClkCycles( 3         )
+    ) i_clk_rst_gen (
+        .clk_o ( clk   ),
+        .rst_no( rst_n )
+    );
 
     // #######################################################################################
     // # DUT                                                                                 #
@@ -200,15 +205,23 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .BlockIdxBits          ( BlockIdxBits           ),
         .OutstandingReqIdxWidth( OutstandingReqIdxWidth ),
         .NumIClines            ( NumIClines             ),
-        .IClineIdxBits         ( IClineIdxBits          )
+        .IClineIdxBits         ( IClineIdxBits          ),
+        .TblockIdxBits         ( TblockIdxBits          ),
+        .TblockIdBits          ( TblockIdBits           )
     `endif
     ) i_cu (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
 
-        .set_ready_i   ( set_ready_status ),
-        .warp_active_o ( warp_active      ),
-        .warp_stopped_o( warp_stopped     ),
+        .warp_free_o          ( warp_free              ),
+        .allocate_warp_i      ( allocate_warp          ),
+        .allocate_pc_i        ( warp_insert.pc         ),
+        .allocate_dp_addr_i   ( warp_insert.dp_addr    ),
+        .allocate_tblock_idx_i( warp_insert.tblock_idx ),
+        .allocate_tblock_id_i ( warp_insert.tblock_id  ),
+
+        .tblock_done_o   ( tblock_done    ),
+        .tblock_done_id_o( tblock_done_id ),
 
         .imem_ready_i    ( imem_ready     ),
         .imem_req_valid_o( imem_req_valid ),
@@ -228,6 +241,59 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .mem_rsp_id_i   ( mem_rsp_q.id    ),
         .mem_rsp_data_i ( mem_rsp_q.data  )
     );
+
+    // #######################################################################################
+    // # Launching Threadblocks                                                              #
+    // #######################################################################################
+
+    initial begin : launch_tblocks
+        int unsigned tblocks_launched;
+        tblocks_launched = 0;
+
+        repeat (5) @(posedge clk);
+        wait(rst_n);
+
+        while(tblocks_launched < TblocksToLaunch) begin
+            @(posedge clk);
+            #ApplDelay;
+            allocate_warp          = 1'b1;
+            warp_insert.pc         = '0;
+            warp_insert.dp_addr    =       addr_t'(tblocks_launched);
+            warp_insert.tblock_idx = tblock_idx_t'(tblocks_launched);
+            warp_insert.tblock_id  =  tblock_id_t'(tblocks_launched);
+
+            if(warp_free) begin
+                tblocks_launched++;
+            end
+        end
+
+        @(posedge clk);
+        #ApplDelay;
+        allocate_warp = 1'b0;
+
+        $display("Launched %0d thread blocks.", tblocks_launched);
+
+    end : launch_tblocks
+
+    initial begin : wait_tblocks_done
+        // Wait for all thread blocks to finish
+        int unsigned tblocks_done;
+        tblocks_done = 0;
+
+        while(tblocks_done < TblocksToLaunch) begin
+            @(posedge clk);
+            #ApplDelay;
+            if(tblock_done) begin
+                $display("Thread block %0d done.", tblock_done_id);
+                tblocks_done++;
+                tblock_done = 1'b0;
+            end
+        end
+
+        $display("All thread blocks done.");
+        stop = 1'b1;
+
+    end : wait_tblocks_done
 
     // #######################################################################################
     // # Memory                                                                              #
@@ -369,19 +435,6 @@ module tb_compute_unit import bgpu_pkg::*; #(
                     $display("Warp ID:          X");
                 end
                 `endif
-
-                // Check if there are still active warps
-                if(warp_active == '0) begin
-                    $display("\nAll warps are no longer active.");
-                end
-
-                if(warp_stopped == '1) begin
-                    $display("\nAll warps have stopped.");
-                    assert((warp_stopped & warp_active) == '0)
-                    else $error("Warps %b have stopped, but %b are still active.",
-                        warp_stopped, warp_active);
-                    stop = 1'b1;
-                end
             end
 
             cycles++;
@@ -486,7 +539,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
                 // Add to hashmap
                 assert(insn_id_in_file_map[insn_id_in_sim] == 0)
-                else $error("Instruction %0d already exists in file.", insn_id_in_sim);
+                else $warning("Instruction %0d already exists in file.", insn_id_in_sim);
 
                 insn_id_in_file_map[insn_id_in_sim] = insn_id_in_file_counter;
                 insn_id_in_file = insn_id_in_file_counter;

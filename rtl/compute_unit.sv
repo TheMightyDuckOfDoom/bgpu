@@ -38,12 +38,19 @@ module compute_unit import bgpu_pkg::*; #(
     parameter int unsigned NumIClines = 8,
     // Number of bits for the instruction cache line index
     parameter int unsigned IClineIdxBits = 2,
+    // How many bits are used to index thread blocks inside a thread group?
+    parameter int unsigned TblockIdxBits = 8,
+    // How many bits are used to identify a thread block?
+    parameter int unsigned TblockIdBits = 8,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned BlockAddrWidth  = AddressWidth - BlockIdxBits,
     parameter int unsigned BlockWidth      = 1 << BlockIdxBits, // In bytes
     parameter int unsigned ThreadIdxWidth  = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
     parameter int unsigned ICAddrWidth     = IClineIdxBits > 0 ? PcWidth - IClineIdxBits : PcWidth,
+    parameter type tblock_idx_t = logic      [       TblockIdxBits-1:0],
+    parameter type tblock_id_t  = logic      [        TblockIdBits-1:0],
+    parameter type addr_t       = logic      [        AddressWidth-1:0],
     parameter type imem_addr_t  = logic      [         ICAddrWidth-1:0],
     parameter type enc_inst_t   = logic      [        EncInstWidth-1:0],
     parameter type imem_data_t  = enc_inst_t [(1 << IClineIdxBits)-1:0],
@@ -59,9 +66,17 @@ module compute_unit import bgpu_pkg::*; #(
     input logic clk_i,
     input logic rst_ni,
 
-    input logic set_ready_i,
-    output [NumWarps-1:0] warp_active_o,
-    output [NumWarps-1:0] warp_stopped_o,
+    // Interface to start a new thread block on this compute unit
+    output logic        warp_free_o, // The is atleas one free warp that can start a new block
+    input  logic        allocate_warp_i,
+    input  pc_t         allocate_pc_i,
+    input  addr_t       allocate_dp_addr_i, // Data / Parameter address
+    input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
+    input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
+
+    // Thread block completion
+    output logic       tblock_done_o,
+    output tblock_id_t tblock_done_id_o,
 
     /// Instruction Memory Request
     input  logic       imem_ready_i,
@@ -167,6 +182,10 @@ module compute_unit import bgpu_pkg::*; #(
     logic ic_to_fe_ready_d, ic_to_fe_ready_q;
     fe_to_ic_data_t fe_to_ic_data_d, fe_to_ic_data_q;
 
+    // Fetcher to Integer Unit -> Constants per Warp
+    addr_t       [NumWarps-1:0] fe_to_iu_warp_dp_addr;    // Data / Parameter address
+    tblock_idx_t [NumWarps-1:0] fe_to_iu_warp_tblock_idx; // Block index
+
     /// Instruction Cache to Decoder
     logic ic_to_dec_valid, dec_to_ic_ready;
     ic_to_dec_data_t ic_to_dec_data;
@@ -206,16 +225,25 @@ module compute_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     fetcher #(
-        .PcWidth  ( PcWidth   ),
-        .NumWarps ( NumWarps  ),
-        .WarpWidth( WarpWidth )
+        .PcWidth      ( PcWidth       ),
+        .NumWarps     ( NumWarps      ),
+        .WarpWidth    ( WarpWidth     ),
+        .AddressWidth ( AddressWidth  ),
+        .TblockIdxBits( TblockIdxBits ),
+        .TblockIdBits ( TblockIdBits  )
     ) i_fetcher (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .set_ready_i   ( set_ready_i    ),
-        .warp_active_o ( warp_active_o  ),
-        .warp_stopped_o( warp_stopped_o ),
+        .warp_free_o          ( warp_free_o           ),
+        .allocate_warp_i      ( allocate_warp_i       ),
+        .allocate_pc_i        ( allocate_pc_i         ),
+        .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
+        .allocate_tblock_idx_i( allocate_tblock_idx_i ),
+        .allocate_tblock_id_i ( allocate_tblock_id_i  ),
+
+        .tblock_done_o   ( tblock_done_o    ),
+        .tblock_done_id_o( tblock_done_id_o ),
 
         .ib_space_available_i( ib_space_available ),
 
@@ -225,10 +253,13 @@ module compute_unit import bgpu_pkg::*; #(
         .fe_act_mask_o( fe_to_ic_data_d.act_mask ),
         .fe_warp_id_o ( fe_to_ic_data_d.warp_id  ),
 
-        .dec_decoded_i         ( dec_to_fetch_decoded         ),
-        .dec_stop_warp_i       ( dec_to_fetch_stop_warp       ),
-        .dec_decoded_warp_id_i ( dec_to_fetch_decoded_warp_id ),
-        .dec_decoded_next_pc_i ( dec_to_fetch_decoded_next_pc )
+        .dec_decoded_i        ( dec_to_fetch_decoded         ),
+        .dec_stop_warp_i      ( dec_to_fetch_stop_warp       ),
+        .dec_decoded_warp_id_i( dec_to_fetch_decoded_warp_id ),
+        .dec_decoded_next_pc_i( dec_to_fetch_decoded_next_pc ),
+
+        .warp_dp_addr_o   ( fe_to_iu_warp_dp_addr    ),
+        .warp_tblock_idx_o( fe_to_iu_warp_tblock_idx )
     );
 
     // #######################################################################################
@@ -467,10 +498,15 @@ module compute_unit import bgpu_pkg::*; #(
         .RegWidth       ( RegWidth        ),
         .WarpWidth      ( WarpWidth       ),
         .OperandsPerInst( OperandsPerInst ),
-        .RegIdxWidth    ( RegIdxWidth     )
+        .RegIdxWidth    ( RegIdxWidth     ),
+        .AddressWidth   ( AddressWidth    ),
+        .TblockIdxBits  ( TblockIdxBits   )
     ) i_integer_unit (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
+
+        .fe_to_iu_warp_dp_addr_i   ( fe_to_iu_warp_dp_addr    ),
+        .fe_to_iu_warp_tblock_idx_i( fe_to_iu_warp_tblock_idx ),
 
         .eu_to_opc_ready_o   ( iu_to_opc_ready                ),
         .opc_to_eu_valid_i   ( opc_to_iu_valid                ),

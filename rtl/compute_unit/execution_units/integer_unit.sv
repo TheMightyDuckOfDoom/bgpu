@@ -17,17 +17,27 @@ module integer_unit import bgpu_pkg::*; #(
     parameter int unsigned OperandsPerInst = 2,
     /// How many registers can each warp access as operand or destination
     parameter int unsigned RegIdxWidth = 8,
+    // How many bits are used to index thread blocks inside a thread group?
+    parameter int unsigned TblockIdxBits = 4,
+    // Memory Address width in bits
+    parameter int unsigned AddressWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth    = $clog2(NumTags),
     parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type warp_data_t = logic [RegWidth * WarpWidth-1:0],
-    parameter type reg_idx_t   = logic [         RegIdxWidth-1:0],
-    parameter type iid_t       = logic [   TagWidth+WidWidth-1:0]
+    parameter type warp_data_t  = logic [RegWidth * WarpWidth-1:0],
+    parameter type reg_idx_t    = logic [         RegIdxWidth-1:0],
+    parameter type iid_t        = logic [   TagWidth+WidWidth-1:0],
+    parameter type addr_t       = logic [        AddressWidth-1:0],
+    parameter type tblock_idx_t = logic [       TblockIdxBits-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
     input logic rst_ni,
+
+    // From Fetcher
+    input  addr_t       [NumWarps-1:0] fe_to_iu_warp_dp_addr_i, // Data / Parameter address
+    input  tblock_idx_t [NumWarps-1:0] fe_to_iu_warp_tblock_idx_i, // Block index
 
     // From Operand Collector
     output logic        eu_to_opc_ready_o,
@@ -84,6 +94,15 @@ module integer_unit import bgpu_pkg::*; #(
             case (opc_to_eu_inst_sub_i)
                 IU_TID:  result[i] = i; // Thread ID
                 IU_WID:  result[i][WidWidth-1:0] = opc_to_eu_tag_i[WidWidth-1:0]; // Warp ID
+                IU_BID:  result[i][TblockIdxBits-1:0]
+                    = fe_to_iu_warp_tblock_idx_i[opc_to_eu_tag_i[WidWidth-1:0]]; // Block ID
+
+                // Thread ID inside thread block: BID * Width + TID
+                IU_TBID: result[i]
+                    = fe_to_iu_warp_tblock_idx_i[opc_to_eu_tag_i[WidWidth-1:0]] * WarpWidth + i;
+
+                IU_DPA:  result[i][AddressWidth-1:0]
+                    = fe_to_iu_warp_dp_addr_i[opc_to_eu_tag_i[WidWidth-1:0]]; // Data / Param Addr
 
                 IU_ADD, IU_ADDI: result[i] = operands[1][i] + operands[0][i]; // Add, immediate
                 IU_SUB, IU_SUBI: result[i] = operands[1][i] - operands[0][i]; // Subtract, immediate

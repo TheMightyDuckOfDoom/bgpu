@@ -12,19 +12,23 @@ typedef enum logic [1:0] {
 typedef enum logic [5:0] {
     IU_TID  = 'h00, // Get thread ID inside a warp
     IU_WID  = 'h01, // Get warp ID
+    IU_BID  = 'h02, // Get block ID
+    IU_TBID = 'h03, // Get thread id inside thread block -> BID * Width + TID
 
-    IU_ADD  = 'h02, // Add operands
-    IU_SUB  = 'h03, // Subtract operands
-    IU_AND  = 'h04, // Bitwise AND operands
-    IU_OR   = 'h05, // Bitwise OR operands
-    IU_XOR  = 'h06, // Bitwise XOR operands
+    IU_DPA  = 'h04, // Get Data / Parameter Address
 
-    IU_LDI  = 'h07, // Load immediate -> concatenate operands register index
-    IU_ADDI = 'h08, // Add immediate -> add immediate value to first operand
-    IU_SUBI = 'h09, // Subtract immediate -> subtract immediate value from first operand
+    IU_ADD  = 'h05, // Add operands
+    IU_SUB  = 'h06, // Subtract operands
+    IU_AND  = 'h07, // Bitwise AND operands
+    IU_OR   = 'h08, // Bitwise OR operands
+    IU_XOR  = 'h09, // Bitwise XOR operands
 
-    IU_SLL  = 'h0A, // Shift left logical
-    IU_SLLI = 'h0B  // Shift left logical immediate
+    IU_LDI  = 'h0A, // Load immediate -> concatenate operands register index
+    IU_ADDI = 'h0B, // Add immediate -> add immediate value to first operand
+    IU_SUBI = 'h0C, // Subtract immediate -> subtract immediate value from first operand
+
+    IU_SLL  = 'h0D, // Shift left logical
+    IU_SLLI = 'h0E  // Shift left logical immediate
 } iu_subtype_e;
 
 typedef enum logic [5:0] {
@@ -63,6 +67,8 @@ typedef struct packed {
     `define IU_VALID_SUBTYPES {\
         IU_TID,\
         IU_WID,\
+        IU_BID,\
+        IU_TBID,\
         IU_ADD,\
         IU_SUB,\
         IU_AND,\

@@ -16,23 +16,37 @@ module dummy_reconvergence_stack #(
     parameter int unsigned NumWarps = 32,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 32,
+    // How many bits are used to index thread blocks inside a thread group?
+    parameter int unsigned TblockIdxBits = 4,
+    // How many bits are used to identify a thread block?
+    parameter int unsigned TblockIdBits = 4,
+    // Memory Address width in bits
+    parameter int unsigned AddressWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type         wid_t      = logic [ WidWidth-1:0],
-    parameter type         pc_t       = logic [  PcWidth-1:0],
-    parameter type         act_mask_t = logic [WarpWidth-1:0]
+    parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
+    parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
+    parameter type tblock_id_t  = logic [ TblockIdBits-1:0],
+    parameter type addr_t       = logic [ AddressWidth-1:0],
+    parameter type wid_t        = logic [     WidWidth-1:0],
+    parameter type pc_t         = logic [      PcWidth-1:0],
+    parameter type act_mask_t   = logic [    WarpWidth-1:0]
 ) (
     /// Clock and reset
     input logic clk_i,
     input logic rst_ni,
 
-    /// Set Ready status
-    input logic set_ready_i,
+    // Interface to start a new thread block on this compute unit
+    output logic        warp_free_o, // The is atleas one free warp that can start a new block
+    input  logic        allocate_warp_i,
+    input  pc_t         allocate_pc_i,
+    input  addr_t       allocate_dp_addr_i, // Data / Parameter address
+    input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
+    input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
 
-    /// Which warps are still active or have stopped?
-    output logic [NumWarps-1:0] warp_active_o,
-    output logic [NumWarps-1:0] warp_stopped_o,
+    // Thread block completion
+    output logic       tblock_done_o,
+    output tblock_id_t tblock_done_id_o,
 
     /// From decode stage |-> is the instruction a branch or update normally to next instruction?
     input logic instruction_decoded_i,
@@ -44,7 +58,11 @@ module dummy_reconvergence_stack #(
     input  logic      [NumWarps-1:0] warp_selected_i,
     output logic      [NumWarps-1:0] warp_ready_o,
     output pc_t       [NumWarps-1:0] warp_pc_o,
-    output act_mask_t [NumWarps-1:0] warp_act_mask_o
+    output act_mask_t [NumWarps-1:0] warp_act_mask_o,
+
+    /// To Integer Unit
+    output addr_t       [NumWarps-1:0] warp_dp_addr_o,   // Data / Parameter address
+    output tblock_idx_t [NumWarps-1:0] warp_tblock_idx_o // Block index
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -52,11 +70,14 @@ module dummy_reconvergence_stack #(
 
     // Data per warp stored in the reconvergence stack
     typedef struct packed {
-        logic active;
-        logic stopped;
-        logic ready;
-        pc_t pc;
-        act_mask_t act_mask;
+        logic        occupied;
+        logic        finished;
+        logic        ready;
+        pc_t         pc;
+        act_mask_t   act_mask;
+        addr_t       dp_addr;    // Data / Parameter address
+        tblock_idx_t tblock_idx; // Block index -> used to calculate the thread id
+        tblock_id_t  tblock_id;  // Unique identifier for the block
     } warp_data_t;
 
     // #######################################################################################
@@ -75,13 +96,26 @@ module dummy_reconvergence_stack #(
         // Default
         warp_data_d[NumWarps-1:0] = warp_data_q[NumWarps-1:0];
 
-        // Set ready status
-        if (set_ready_i) begin
-            for(int i = 0; i < NumWarps; i++) begin
-                warp_data_d[i].active   = 1'b1;
-                warp_data_d[i].ready    = 1'b1;
-                warp_data_d[i].act_mask = '1;
-            end
+        tblock_done_o = 1'b0;
+        tblock_done_id_o = '0;
+
+        // Allocate a new warp
+        if (allocate_warp_i && warp_free_o) begin : allocate_warp
+            // Find the first free warp
+            for(int i = 0; i < NumWarps; i++) begin : find_free_warp
+                if (!warp_data_q[i].occupied) begin
+                    // Allocate the warp
+                    warp_data_d[i].occupied   = 1'b1;
+                    warp_data_d[i].finished   = 1'b0;
+                    warp_data_d[i].ready      = 1'b1; // Can start fetching immediately
+                    warp_data_d[i].act_mask   = '1; // All threads are active at the start
+                    warp_data_d[i].pc         = allocate_pc_i;
+                    warp_data_d[i].tblock_idx = allocate_tblock_idx_i;
+                    warp_data_d[i].tblock_id  = allocate_tblock_id_i;
+                    warp_data_d[i].dp_addr    = allocate_dp_addr_i;
+                    break;
+                end
+            end : find_free_warp
         end
 
         // Did we get an update from decode?
@@ -92,22 +126,34 @@ module dummy_reconvergence_stack #(
             // Mark the warp as ready
             warp_data_d[decode_wid_i].ready = 1'b1;
 
-            // If the warp is finished |-> mark if as stopped
+            // If the warp is finished |-> deallocate it and notify
             if (decode_stop_warp_i) begin
-                warp_data_d[decode_wid_i].stopped = 1'b1;
-                warp_data_d[decode_wid_i].active = 1'b0;
-                warp_data_d[decode_wid_i].ready = 1'b0;
+                warp_data_d[decode_wid_i].occupied = 1'b0;
+                warp_data_d[decode_wid_i].ready    = 1'b0;
+
+                tblock_done_o    = 1'b1;
+                tblock_done_id_o = warp_data_q[decode_wid_i].tblock_id;
             end
 
         end : decode_update
 
         for(int i = 0; i < NumWarps; i++) begin : select_update
             // If the warp is selected for fetching, mark it as not ready |-> wait until decode stage
-            if (warp_selected_i[i])
+            if (warp_selected_i[i]) begin
                 warp_data_d[i].ready = 1'b0;
-
+            end
         end : select_update
     end : next_pc_ready_logic
+
+    // We can allocate a new warp if there is at least one warp that is not active
+    always begin : warp_free
+        warp_free_o = 1'b0;
+        for(int i = 0; i < NumWarps; i++) begin : check
+            if(!warp_data_q[i].occupied) begin
+                warp_free_o = 1'b1;
+            end
+        end
+    end : warp_free
 
     // #######################################################################################
     // # Sequential Logic                                                                    #
@@ -122,12 +168,12 @@ module dummy_reconvergence_stack #(
     // #######################################################################################
 
     for(genvar i = 0; i < NumWarps; i++) begin : gen_assign_outputs
-        assign warp_active_o  [i] = warp_data_q[i].active;
-        assign warp_stopped_o [i] = warp_data_q[i].stopped;
-        assign warp_ready_o   [i] = warp_data_q[i].ready && warp_data_q[i].active
+        assign warp_ready_o     [i] = warp_data_q[i].ready && warp_data_q[i].occupied
             && (|warp_data_q[i].act_mask);
-        assign warp_pc_o      [i] = warp_data_q[i].pc;
-        assign warp_act_mask_o[i] = warp_data_q[i].act_mask;
+        assign warp_pc_o        [i] = warp_data_q[i].pc;
+        assign warp_act_mask_o  [i] = warp_data_q[i].act_mask;
+        assign warp_dp_addr_o   [i] = warp_data_q[i].dp_addr;
+        assign warp_tblock_idx_o[i] = warp_data_q[i].tblock_idx;
     end : gen_assign_outputs
 
     // #######################################################################################
@@ -138,22 +184,21 @@ module dummy_reconvergence_stack #(
         for (genvar i = 0; i < NumWarps; i++) begin : gen_asserts
             // Check that a ready warp has at least one active thread |-> otherwise we waste resources
             assert property (@(posedge clk_i) disable iff (!rst_ni)
-                (!warp_ready_o[i] || (warp_ready_o[i] && warp_act_mask_o[i] != '0
-                && !warp_stopped_o[i])))
+                (!warp_ready_o[i] || (warp_ready_o[i] && warp_act_mask_o[i] != '0)))
             else $error("Warp is marked as ready, but no thread is active");
 
             assert property (@(posedge clk_i) disable iff (!rst_ni)
-                (warp_selected_i[i] |-> warp_data_q[i].active))
-            else $error("Warp was selected for fetching, but is not active: %0d", i);
+                (warp_selected_i[i] |-> warp_data_q[i].occupied))
+            else $error("Warp was selected for fetching, but is not occupied: %0d", i);
 
             assert property (@(posedge clk_i) disable iff (!rst_ni)
-                (warp_selected_i[i] |-> warp_data_q[i].ready && !warp_data_q[i].stopped
+                (warp_selected_i[i] |-> warp_data_q[i].ready
                 && (|warp_data_q[i].act_mask)))
             else $error("Warp was selected for fetching, but is not ready: %0d", i);
 
             assert property (@(posedge clk_i) disable iff (!rst_ni)
-                (warp_selected_i[i] |-> !warp_data_q[i].stopped && (|warp_data_q[i].act_mask)))
-            else $error("Warp was selected for fetching, but is stopped: %0d", i);
+                (warp_selected_i[i] |-> (|warp_data_q[i].act_mask)))
+            else $error("Warp was selected for fetching, but is no thread is active: %0d", i);
 
             assert property (@(posedge clk_i) disable iff (!rst_ni)
                 (warp_selected_i[i] |-> |warp_data_q[i].act_mask))
@@ -167,20 +212,15 @@ module dummy_reconvergence_stack #(
         else $error("Warp was selected for fetching, but got decoded at the same time: %0d",
             decode_wid_i);
 
-        // Check that a warp that was decoded is active
+        // Check that a warp that was decoded is occupied
         assert property (@(posedge clk_i) disable iff (!rst_ni)
-            instruction_decoded_i |-> warp_data_q[decode_wid_i].active)
-        else $error("Warp was decoded, but is not active: %0d", decode_wid_i);
+            instruction_decoded_i |-> warp_data_q[decode_wid_i].occupied)
+        else $error("Warp was decoded, but is not occupied: %0d", decode_wid_i);
 
         // Check that a warp that was decoded is not ready
         assert property (@(posedge clk_i) disable iff (!rst_ni)
             instruction_decoded_i |-> !warp_data_q[decode_wid_i].ready)
         else $error("Warp was decoded, but is ready: %0d", decode_wid_i);
-
-        // Check that a warp that was decoded is not stopped
-        assert property (@(posedge clk_i) disable iff (!rst_ni)
-            instruction_decoded_i |-> !warp_data_q[decode_wid_i].stopped)
-        else $error("Warp was decoded, but is stopped: %0d", decode_wid_i);
     `endif
 
 endmodule : dummy_reconvergence_stack
