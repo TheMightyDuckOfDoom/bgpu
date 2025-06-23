@@ -14,7 +14,7 @@ jobs:
   # Main testbench for compute unit
   tb_compute_unit:
     runs-on: self-hosted
-    needs: [tb_tag_queue, tb_operand_collector, tb_register_opc_stage, tb_load_store_unit]
+    needs: [tb_instruction_cache, tb_tag_queue, tb_operand_collector, tb_register_opc_stage, tb_load_store_unit]
     steps:
       - name: Checkout
         uses: actions/checkout@master
@@ -23,7 +23,7 @@ jobs:
 
   gowin_tb_compute_unit:
     runs-on: self-hosted
-    needs: [tb_tag_queue, tb_operand_collector, gowin_tb_register_opc_stage, tb_load_store_unit]
+    needs: [gowin_tb_instruction_cache, tb_tag_queue, tb_operand_collector, gowin_tb_register_opc_stage, tb_load_store_unit]
     steps:
       - name: Checkout
         uses: actions/checkout@master
@@ -32,7 +32,7 @@ jobs:
 
   xilinx_tb_compute_unit:
     runs-on: self-hosted
-    needs: [tb_tag_queue, tb_operand_collector, xilinx_tb_register_opc_stage, tb_load_store_unit]
+    needs: [xilinx_tb_instruction_cache, tb_tag_queue, tb_operand_collector, xilinx_tb_register_opc_stage, tb_load_store_unit]
     steps:
       - name: Checkout
         uses: actions/checkout@master
