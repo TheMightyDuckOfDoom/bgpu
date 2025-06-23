@@ -9,7 +9,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     parameter int unsigned WatchdogTimeout  = 1000,
     parameter int unsigned InstsToComplete  = 1000,
     parameter int unsigned MaxMstWaitCycles = 0,
-    parameter int unsigned MaxSubWaitCycles = 0,
+    parameter int unsigned MaxSubWaitCycles = 1,
 
     // Simulation time parameters
     parameter time ClkPeriod = 10ns,

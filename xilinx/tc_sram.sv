@@ -60,7 +60,7 @@ module tc_sram #(
                                                     && ((DataWidth % SPWidth) != 0))
                                                     ? DataWidth % SPWidth : SPWidth;
 
-            localparam int unsigned ByteInColumn = ColumnWidth / 8;
+            localparam int unsigned ByteInColumn = (ColumnWidth + 7) / 8;
 
             // How many words does a bram with ColumWidth have?
             localparam int unsigned WordsPerBram      = BitsPerSP / SPWidth;
@@ -365,7 +365,7 @@ module tc_sram #(
     assert (NumWords  >= 32'd1) else $fatal(1, "NumWords has to be > 0");
     assert (NumWords == (1 << $clog2(NumWords))) else $fatal(1, "NumWords has to be a power of 2");
     assert (DataWidth >= 32'd1) else $fatal(1, "DataWidth has to be > 0");
-    assert (ByteWidth == 32'd8) else $fatal(1, "ByteWidth must be 8!");
+    assert (ByteWidth == 32'd8 || ByteWidth == 32'd1) else $fatal(1, "ByteWidth must be 1 or 8!");
     assert (NumPorts  == 32'd1) else $fatal(1, "The number of ports must be 1!");
     assert (Latency   == 32'd1) else $fatal(1, "The latency must be 1 cycle!");
   end

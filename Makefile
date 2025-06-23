@@ -25,8 +25,9 @@ TB_TOP             ?= tb_$(TOP)
 SRCS = $(wildcard rtl/**/*.sv)
 TB_SRCS = $($(BENDER) scripts flist -n )
 BENDER_DEPS:= Bender.lock Bender.yml
+TBS = $(basename $(notdir $(wildcard test/tb_*.sv)))
 
-.PHONY: lint asic xilinx gowin-yosys clean tb_%
+.PHONY: lint asic xilinx gowin-yosys clean tb_% tb-all
 
 ####################################################################################################
 # Linting
@@ -72,6 +73,10 @@ verilator/obj_dir/V%: verilator/obj_dir/V%.mk
 # Run the testbench
 tb_%: verilator/obj_dir/Vtb_%
 	./$<
+
+# Run all testbenches
+tb-all: $(TBS)
+	echo $(TBS)
 
 ####################################################################################################
 # Xilinx Synthesis

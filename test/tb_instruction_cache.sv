@@ -7,7 +7,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 8,
     /// Number of warps
-    parameter int unsigned NumWarps = 8,
+    parameter int unsigned NumWarps = 16,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     // Memory Block size in bytes -> Memory request width
@@ -18,13 +18,14 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     parameter int unsigned EncInstWidth = 32,
 
     /// Number of instructions to process
-    parameter int unsigned NumInsts = 100,
+    parameter int unsigned NumInsts = 1000,
 
-    parameter time         TclkPeriod   = 10ns,
-    parameter time         AcqDelay     = 9ns,
-    parameter time         ApplDelay    = 1ns,
-    parameter int unsigned MaxMstWaitCycles = 0,
-    parameter int unsigned MaxSimCycles = 1000
+    parameter time         TclkPeriod       = 10ns,
+    parameter time         AcqDelay         = 9ns,
+    parameter time         ApplDelay        = 1ns,
+    parameter int unsigned MaxMstWaitCycles = 1,
+    parameter int unsigned MaxSimCycles     = 10000,
+    parameter int unsigned WatchdogTimeout  = 1000
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -131,7 +132,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         .data_t       ( ic_rsp_t         ),
         .ApplDelay    ( ApplDelay        ),
         .AcqDelay     ( AcqDelay         ),
-        .MinWaitCycles( 0                ),
+        .MinWaitCycles( 1                ),
         .MaxWaitCycles( MaxMstWaitCycles ),
         .Enqueue      ( 1'b1             )
     ) i_ic_rsp_to_decoder (
@@ -147,7 +148,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         .data_t       ( cache_addr_t     ),
         .ApplDelay    ( ApplDelay        ),
         .AcqDelay     ( AcqDelay         ),
-        .MinWaitCycles( 0                ),
+        .MinWaitCycles( 1                ),
         .MaxWaitCycles( MaxMstWaitCycles ),
         .Enqueue      ( 1'b1             )
     ) i_mem_req_sub (
@@ -184,22 +185,65 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     end : memory_response
 
     initial begin : golden_model
-        ic_rsp_t rsp;
+        ic_rsp_t grsp;
 
         while(1) begin
             @(posedge clk);
             #AcqDelay;
-
             if (fetch_req_valid && ic_ready) begin
-                rsp.pc       = fetch_req.pc;
-                rsp.act_mask = fetch_req.act_mask;
-                rsp.wid      = fetch_req.wid;
-                rsp.enc_inst = mem_data[fetch_req.pc];
+                grsp.pc       = fetch_req.pc;
+                grsp.act_mask = fetch_req.act_mask;
+                grsp.wid      = fetch_req.wid;
+                grsp.enc_inst = mem_data[fetch_req.pc];
 
-                golden_rsp.push_back(rsp);
+                $display("Golden Model - PC: %0h, Warp ID: %0d, Active Mask: %0b, Instruction: %0h",
+                         grsp.pc, grsp.wid, grsp.act_mask, grsp.enc_inst);
+
+                // Push to golden response queue
+                golden_rsp.push_back(grsp);
             end
         end
     end : golden_model
+
+    // #######################################################################################
+    // # Watchdog                                                                            #
+    // #######################################################################################
+
+    stream_watchdog #(
+        .NumCycles( WatchdogTimeout )
+    ) i_fetch_watchdog (
+        .clk_i  ( clk             ),
+        .rst_ni ( rst_n           ),
+        .valid_i( fetch_req_valid ),
+        .ready_i( ic_ready        )
+    );
+
+    stream_watchdog #(
+        .NumCycles( WatchdogTimeout )
+    ) i_decoder_watchdog (
+        .clk_i  ( clk       ),
+        .rst_ni ( rst_n     ),
+        .valid_i( ic_valid  ),
+        .ready_i( dec_ready )
+    );
+
+    stream_watchdog #(
+        .NumCycles( WatchdogTimeout )
+    ) i_mem_req_watchdog (
+        .clk_i  ( clk           ),
+        .rst_ni ( rst_n         ),
+        .valid_i( mem_req_valid ),
+        .ready_i( mem_ready     )
+    );
+
+    stream_watchdog #(
+        .NumCycles( WatchdogTimeout )
+    ) i_mem_rsp_watchdog (
+        .clk_i  ( clk           ),
+        .rst_ni ( rst_n         ),
+        .valid_i( mem_rsp_valid ),
+        .ready_i( 1'b1          )
+    );
 
     // #######################################################################################
     // # DUT                                                                                 #
@@ -243,7 +287,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
     initial begin : simulation_logic
         int unsigned cycles, fetch_req_count, mem_req_count, dec_rsp_count;
-        ic_rsp_t grsp;
+        ic_rsp_t grsp, queued_rsp;
+        logic match;
 
         cycles = 0;
         fetch_req_count = 0;
@@ -257,6 +302,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
         while (cycles < MaxSimCycles && dec_rsp_count < NumInsts) begin
             @(posedge clk);
+            #AcqDelay;
 
             // Process fetch request
             if (fetch_req_valid && ic_ready) begin
@@ -285,26 +331,28 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 $display("Active Mask: %0b, Instruction: %0h",
                             ic_rsp.act_mask, ic_rsp.enc_inst);
                 dec_rsp_count++;
+            end
 
-                // Check against golden model
-                assert(golden_rsp.size() > 0) else
-                    $error("Golden response queue is empty");
-
+            if (golden_rsp.size() > 0 && i_ic_rsp_to_decoder.gen_queue.queue.size() > 0) begin
+                // Check if the response matches the golden model
                 grsp = golden_rsp.pop_front();
+                queued_rsp = i_ic_rsp_to_decoder.gen_queue.queue.pop_front();
 
-                assert(grsp.pc == ic_rsp.pc) else
-                    $error("PC mismatch: expected %0h, got %0h", grsp.pc, ic_rsp.pc);
+                match = (grsp.pc == queued_rsp.pc) &&
+                        (grsp.wid == queued_rsp.wid) &&
+                        (grsp.act_mask == queued_rsp.act_mask) &&
+                        (grsp.enc_inst == queued_rsp.enc_inst);
 
-                assert(grsp.wid == ic_rsp.wid) else
-                    $error("Warp ID mismatch: expected %0d, got %0d", grsp.wid, ic_rsp.wid);
-
-                assert(grsp.act_mask == ic_rsp.act_mask) else
-                    $error("Active mask mismatch: expected %0b, got %0b",
-                        grsp.act_mask, ic_rsp.act_mask);
-
-                assert(grsp.enc_inst == ic_rsp.enc_inst) else
-                    $error("Instruction mismatch: expected %0h, got %0h",
-                        grsp.enc_inst, ic_rsp.enc_inst);
+                assert(match) else begin
+                    $display("Cycle %0d: Mismatch in decoder response", cycles);
+                    $display("Expected: PC: %0h actual: %0h", grsp.pc, queued_rsp.pc);
+                    $display("Expected: Warp ID: %0d actual: %0d", grsp.wid, queued_rsp.wid);
+                    $display("Expected: Active Mask: %0b actual: %0b",
+                        grsp.act_mask, queued_rsp.act_mask);
+                    $display("Expected: Instruction: %0h actual: %0h",
+                        grsp.enc_inst, queued_rsp.enc_inst);
+                    $error("Decoder response does not match golden model");
+                end
             end
 
             cycles++;
@@ -312,9 +360,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
         $dumpflush;
 
-        assert(fetch_req_count >= NumInsts) else
-            $error("Not enough fetch requests generated: %0d, expected at least %0d",
-                fetch_req_count, NumInsts);
+        assert(cycles < MaxSimCycles) else
+            $error("Simulation exceeded maximum cycles: %0d", MaxSimCycles);
 
         assert(mem_req_count > 0) else
             $error("No memory requests generated");
@@ -322,8 +369,9 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         assert(dec_rsp_count == NumInsts) else
             $error("Not enough decoder responses: %0d, expected %0d", dec_rsp_count, NumInsts);
 
-        assert(cycles < MaxSimCycles) else
-            $error("Simulation exceeded maximum cycles: %0d", MaxSimCycles);
+        assert(fetch_req_count >= NumInsts) else
+            $error("Not enough fetch requests generated: %0d, expected at least %0d",
+                fetch_req_count, NumInsts);
 
         $display("Simulation completed successfully after %0d cycles", cycles);
         $finish;

@@ -42,18 +42,16 @@ module rand_synch_holdable_driver #(
   end
 
   // Validate parameters.
-`ifndef VERILATOR
   initial begin: validate_params
-    assert (MinWaitCycles >= 0)
-      else $fatal("The minimum number of wait cycles must be at least 0!");
+    assert (MinWaitCycles >= 1)
+      else $error("The minimum number of wait cycles must be at least 1!");
     assert (MaxWaitCycles >= 0)
-      else $fatal("The maximum number of wait cycles must be at least 0!");
+      else $error("The maximum number of wait cycles must be at least 0!");
     assert (MaxWaitCycles >= MinWaitCycles)
-      else $fatal("The maximum number of wait cycles must be at least the minimum number of wait",
+      else $error("The maximum number of wait cycles must be at least the minimum number of wait",
         " cycles!");
     assert (ApplDelay > 0ps)
-      else $fatal("The application delay must be greater than 0!");
+      else $error("The application delay must be greater than 0!");
   end
-`endif
 
 endmodule

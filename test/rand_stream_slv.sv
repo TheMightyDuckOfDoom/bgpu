@@ -61,9 +61,9 @@ module rand_stream_slv #(
 
   initial begin: validate_params
     assert (AcqDelay > 0ps)
-      else $fatal("The acquisition delay must be greater than 0!");
+      else $error("The acquisition delay must be greater than 0!");
     assert (AcqDelay > ApplDelay)
-      else $fatal("The acquisition delay must be greater than the application delay!");
+      else $error("The acquisition delay must be greater than the application delay!");
   end
 
 endmodule

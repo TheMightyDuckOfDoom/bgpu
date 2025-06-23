@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "common_cells/registers.svh"
+
 /// Instruction Cache
 // Simple direct mapped cache
 module instruction_cache #(
@@ -14,7 +16,7 @@ module instruction_cache #(
     /// Encoded instruction width
     parameter int unsigned EncInstWidth = 32,
     /// Encoded instructions per cacheline -> Also determines the memory interface width
-    parameter int unsigned CachelineIdxBits = 0,
+    parameter int unsigned CachelineIdxBits = 1,
     /// Number of cachelines in the instruction cache
     parameter int unsigned NumCachelines = 32,
 

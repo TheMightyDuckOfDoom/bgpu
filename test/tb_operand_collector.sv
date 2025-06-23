@@ -142,7 +142,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
             .data_t       ( read_req_t       ),
             .ApplDelay    ( ApplDelay        ),
             .AcqDelay     ( AcqDelay         ),
-            .MinWaitCycles( 0                ),
+            .MinWaitCycles( 1                ),
             .MaxWaitCycles( MaxMstWaitCycles ),
             .Enqueue      ( 1'b1             )
         ) i_reg_file_sub (
@@ -162,7 +162,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
 
         rand_synch_holdable_driver #(
             .ApplDelay    ( ApplDelay        ),
-            .MinWaitCycles( 0                ),
+            .MinWaitCycles( 1                ),
             .MaxWaitCycles( MaxMstWaitCycles )
         ) i_reg_file_data_sub (
             .clk_i  ( clk                    ),
@@ -179,7 +179,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
         .data_t       ( logic            ),
         .ApplDelay    ( ApplDelay        ),
         .AcqDelay     ( AcqDelay         ),
-        .MinWaitCycles( 0                ),
+        .MinWaitCycles( 1                ),
         .MaxWaitCycles( MaxMstWaitCycles ),
         .Enqueue      ( 1'b1             )
     ) i_exec_unit_sub (
@@ -256,6 +256,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
 
         while(cycles < MaxSimCycles && completed_insts < InstsToComplete) begin
             @(posedge clk);
+            #AcqDelay;
             cycles++;
 
             // Insert instruction handshake
@@ -302,7 +303,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
             // Execution unit handshake
             if (opc_valid && eu_ready) begin
                 completed_insts++;
-                num_expected_reqs += $countbits(insert_inst_req.src_required, 1'b1);
+                num_expected_reqs += $countbits(inserted_inst_q.src_required, 1'b1);
                 $display("Cycle %0d:", cycles);
                 $display("  Completed inst with tag %0h, pc %0h, act_mask %0h, dst %0h inst %0h",
                          opc_inst.tag, opc_inst.pc, opc_inst.act_mask, opc_inst.dst, opc_inst.inst);

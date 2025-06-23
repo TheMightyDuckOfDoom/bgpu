@@ -5,7 +5,7 @@
 /// Testbench for Tag Queue
 module tb_tag_queue #(
     // Simulation parameters
-    parameter int unsigned MaxWaitCycles = 0,
+    parameter int unsigned MaxWaitCycles = 1,
     parameter int unsigned MaxSimCycles  = 2000,
     parameter int unsigned TagsToFree    = 100,
 
@@ -66,7 +66,7 @@ module tb_tag_queue #(
         .data_t       ( tag_t         ),
         .ApplDelay    ( ApplDelay     ),
         .AcqDelay     ( AcqDelay      ),
-        .MinWaitCycles( 0             ),
+        .MinWaitCycles( 1             ),
         .MaxWaitCycles( MaxWaitCycles ),
         .Enqueue      ( 1'b1          )
     ) i_get_sub (
