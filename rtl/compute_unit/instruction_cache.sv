@@ -93,12 +93,6 @@ module instruction_cache #(
     // Cacheline select
     typedef logic [CacheSelectBits-1:0] cache_select_t;
 
-    // Valid Tag data
-    typedef struct packed {
-        logic       valid;
-        cache_tag_t cache_tag;
-    } valid_tag_t;
-
     // Cacheline data
     typedef enc_inst_t [(1 << CachelineIdxBits)-1:0] cache_data_t;
 
@@ -114,13 +108,17 @@ module instruction_cache #(
     cache_select_t cache_select; // Which cacheline to select
 
     logic cache_req, cache_we;
-    valid_tag_t write_cache_valid_tag;
+    cache_tag_t write_cache_tag;
 
     // Output from memories
-    valid_tag_t cache_valid_tag;
+    logic       cache_valid_q, cache_valid_d;
+    cache_tag_t cache_tag_q;
     cache_data_t cache_data;
 
     cache_data_t mem_data_q, mem_data_d;
+
+    // Valid bits
+    logic [NumCachelines-1:0] cache_valids_d, cache_valids_q;
 
     // #######################################################################################
     // # Combinational Logic                                                                 #
@@ -128,9 +126,11 @@ module instruction_cache #(
 
     always_comb begin : state_logic
         // Default
-        state_d      = state_q;
-        active_req_d = active_req_q;
-        mem_data_d   = mem_data_q;
+        state_d        = state_q;
+        active_req_d   = active_req_q;
+        mem_data_d     = mem_data_q;
+        cache_valids_d = cache_valids_q;
+        cache_valid_d  = cache_valid_q;
 
         // Memory request interface
         mem_req_o  = 1'b0;
@@ -168,6 +168,9 @@ module instruction_cache #(
                 cache_select = fe_pc_i[CacheSelectBits+CachelineIdxBits-1:
                                       CachelineIdxBits];
 
+                // Lookup valid bit
+                cache_valid_d = cache_valids_q[cache_select];
+
                 // Store the active request
                 active_req_d.pc       = fe_pc_i;
                 active_req_d.act_mask = fe_act_mask_i;
@@ -178,8 +181,8 @@ module instruction_cache #(
         // Handle instruction state
         else if (state_q == HANDLE_INSTR) begin : handle_instr_state
             // Cache hit
-            if (cache_valid_tag.valid
-                && cache_valid_tag.cache_tag == active_req_q.pc[PcWidth-1-:CacheTagBits])
+            if (cache_valid_q
+                && cache_tag_q == active_req_q.pc[PcWidth-1-:CacheTagBits])
             begin : cache_hit
                 // If the cache is valid and the tag matches
                 // -> Hit, send to decoder, check if we have a new request
@@ -206,6 +209,8 @@ module instruction_cache #(
                         cache_req = 1'b1;
                         cache_select = fe_pc_i[CacheSelectBits+CachelineIdxBits-1:
                                               CachelineIdxBits];
+                        // Lookup valid bit
+                        cache_valid_d = cache_valids_q[cache_select];
 
                         // Store the active request
                         active_req_d.pc       = fe_pc_i;
@@ -241,6 +246,9 @@ module instruction_cache #(
                 cache_select = active_req_q.pc[CacheSelectBits+CachelineIdxBits-1:
                                               CachelineIdxBits];
 
+                // Set valid bit
+                cache_valids_d[cache_select] = 1'b1;
+
                 // Store the write data
                 mem_data_d = mem_data_i;
 
@@ -273,6 +281,9 @@ module instruction_cache #(
                     cache_select = fe_pc_i[CacheSelectBits+CachelineIdxBits-1:
                                             CachelineIdxBits];
 
+                    // Lookup valid bit
+                    cache_valid_d = cache_valids_q[cache_select];
+
                     // Store the active request
                     active_req_d.pc       = fe_pc_i;
                     active_req_d.act_mask = fe_act_mask_i;
@@ -290,19 +301,18 @@ module instruction_cache #(
     // assign cache_select = active_req_q.pc[CacheSelectBits+CachelineIdxBits-1:
     //                                      CachelineIdxBits];
 
-    // Cache write valid and tag
-    assign write_cache_valid_tag.valid = 1'b1; // Valid bit is set
-    assign write_cache_valid_tag.cache_tag =   // Get the tag from pc of the active request
+    // Cache write tag
+    assign write_cache_tag =   // Get the tag from pc of the active request
         active_req_q.pc[PcWidth-1:CachelineIdxBits+CacheSelectBits];
 
     // #######################################################################################
     // # Memories                                                                            #
     // #######################################################################################
 
-    // Tag and Valid memory
+    // Tag memory
     tc_sram #(
         .NumWords   ( NumCachelines      ),
-        .DataWidth  ( $bits(valid_tag_t) ),
+        .DataWidth  ( $bits(cache_tag_t) ),
         .ByteWidth  ( 1                  ),
         .NumPorts   ( 1                  ),
         .Latency    ( 1                  ),
@@ -317,21 +327,17 @@ module instruction_cache #(
         .we_i   ( cache_we              ),
         .addr_i ( cache_select          ),
         // .wdata_i (),
-        .wdata_i( write_cache_valid_tag ),
+        .wdata_i( write_cache_tag ),
 
-        .rdata_o( cache_valid_tag ),
+        .rdata_o( cache_tag_q ),
 
         // Always write entire word
         .be_i ( '1 )
     );
 
-    // Valid bits have to be set to zero upon reset
-    // This might require special logic for ASIC implementations -> FFs array for valid bits
-    `ifndef SYNTHESIS
-    `ifdef TARGET_ASIC
-        initial $fatal("Instruction cache tag memory not implemented for ASIC targets.");
-    `endif
-    `endif
+    // Valid FFs
+    `FF(cache_valid_q,  cache_valid_d,  '0, clk_i, rst_ni);
+    `FF(cache_valids_q, cache_valids_d, '0, clk_i, rst_ni);
 
     // Instruction memory
     tc_sram #(
