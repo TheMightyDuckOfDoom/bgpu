@@ -34,18 +34,26 @@ module compute_unit import bgpu_pkg::*; #(
     parameter int unsigned BlockIdxBits = 4,
     // Width of the id for requests queue
     parameter int unsigned OutstandingReqIdxWidth = 3,
+    // Number of cache lines in the instruction cache
+    parameter int unsigned NumIClines = 8,
+    // Number of bits for the instruction cache line index
+    parameter int unsigned IClineIdxBits = 2,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned BlockAddrWidth  = AddressWidth - BlockIdxBits,
     parameter int unsigned BlockWidth      = 1 << BlockIdxBits, // In bytes
     parameter int unsigned ThreadIdxWidth  = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
-    parameter type pc_t         = logic  [             PcWidth-1:0],
-    parameter type block_addr_t = logic  [      BlockAddrWidth-1:0],
-    parameter type byte_t       = logic  [                     7:0],
-    parameter type block_data_t = byte_t [          BlockWidth-1:0],
-    parameter type block_idx_t  = logic  [        BlockIdxBits-1:0],
-    parameter type block_mask_t = logic  [          BlockWidth-1:0],
-    parameter type req_id_t     = logic  [OutstandingReqIdxWidth + ThreadIdxWidth-1:0]
+    parameter int unsigned ICAddrWidth     = IClineIdxBits > 0 ? PcWidth - IClineIdxBits : PcWidth,
+    parameter type imem_addr_t  = logic      [         ICAddrWidth-1:0],
+    parameter type enc_inst_t   = logic      [        EncInstWidth-1:0],
+    parameter type imem_data_t  = enc_inst_t [(1 << IClineIdxBits)-1:0],
+    parameter type pc_t         = logic      [             PcWidth-1:0],
+    parameter type block_addr_t = logic      [      BlockAddrWidth-1:0],
+    parameter type byte_t       = logic      [                     7:0],
+    parameter type block_data_t = byte_t     [          BlockWidth-1:0],
+    parameter type block_idx_t  = logic      [        BlockIdxBits-1:0],
+    parameter type block_mask_t = logic      [          BlockWidth-1:0],
+    parameter type req_id_t     = logic      [OutstandingReqIdxWidth + ThreadIdxWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -55,10 +63,14 @@ module compute_unit import bgpu_pkg::*; #(
     output [NumWarps-1:0] warp_active_o,
     output [NumWarps-1:0] warp_stopped_o,
 
-    // Dummy inputs / outputs
-    input  logic                    ic_write_i,
-    input  pc_t      ic_write_pc_i,
-    input  logic [EncInstWidth-1:0] ic_write_inst_i,
+    /// Instruction Memory Request
+    input  logic       imem_ready_i,
+    output logic       imem_req_valid_o,
+    output imem_addr_t imem_req_addr_o,
+
+    /// Instruction Memory Response
+    input  logic       imem_rsp_valid_i,
+    input  imem_data_t imem_rsp_data_i,
 
     /// Memory Request
     input  logic        mem_ready_i,
@@ -90,7 +102,6 @@ module compute_unit import bgpu_pkg::*; #(
     typedef logic [           WarpWidth-1:0] act_mask_t;
     typedef logic [RegWidth * WarpWidth-1:0] warp_data_t;
     typedef logic [    WidWidth-1:0] wid_t;
-    typedef logic [EncInstWidth-1:0] enc_inst_t;
 
     // Fetcher to Instruction Cache type
     typedef struct packed {
@@ -157,9 +168,8 @@ module compute_unit import bgpu_pkg::*; #(
     fe_to_ic_data_t fe_to_ic_data_d, fe_to_ic_data_q;
 
     /// Instruction Cache to Decoder
-    logic ic_to_dec_valid_d, ic_to_dec_valid_q;
-    logic dec_to_ic_ready_d, dec_to_ic_ready_q;
-    ic_to_dec_data_t ic_to_dec_data_d, ic_to_dec_data_q;
+    logic ic_to_dec_valid, dec_to_ic_ready;
+    ic_to_dec_data_t ic_to_dec_data;
 
     // Decoder to Fetcher
     logic dec_to_fetch_decoded;
@@ -246,17 +256,23 @@ module compute_unit import bgpu_pkg::*; #(
     // # Instruction Cache                                                                   #
     // #######################################################################################
 
-    dummy_instruction_cache #(
-        .MemorySize  ( 32        ),
-        .PcWidth     ( PcWidth   ),
-        .NumWarps    ( NumWarps  ),
-        .WarpWidth   ( WarpWidth ),
-        .EncInstWidth( 32        )
+    instruction_cache #(
+        .PcWidth         ( PcWidth       ),
+        .NumWarps        ( NumWarps      ),
+        .WarpWidth       ( WarpWidth     ),
+        .EncInstWidth    ( EncInstWidth  ),
+        .CachelineIdxBits( IClineIdxBits ),
+        .NumCachelines   ( NumIClines    )
     ) i_instruction_cache (
-        .clk_i        ( clk_i           ),
-        .mem_write_i  ( ic_write_i      ),
-        .mem_pc_i     ( ic_write_pc_i   ),
-        .mem_inst_i   ( ic_write_inst_i ),
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .mem_ready_i( imem_ready_i     ),
+        .mem_req_o  ( imem_req_valid_o ),
+        .mem_addr_o ( imem_req_addr_o  ),
+
+        .mem_valid_i( imem_rsp_valid_i ),
+        .mem_data_i ( imem_rsp_data_i  ),
 
         .ic_ready_o   ( ic_to_fe_ready_d         ),
         .fe_valid_i   ( fe_to_ic_valid_q         ),
@@ -264,33 +280,12 @@ module compute_unit import bgpu_pkg::*; #(
         .fe_act_mask_i( fe_to_ic_data_q.act_mask ),
         .fe_warp_id_i ( fe_to_ic_data_q.warp_id  ),
 
-        .dec_ready_i  ( dec_to_ic_ready_q         ),
-        .ic_valid_o   ( ic_to_dec_valid_d         ),
-        .ic_pc_o      ( ic_to_dec_data_d.pc       ),
-        .ic_act_mask_o( ic_to_dec_data_d.act_mask ),
-        .ic_warp_id_o ( ic_to_dec_data_d.warp_id  ),
-        .ic_inst_o    ( ic_to_dec_data_d.inst     )
-    );
-
-    // #######################################################################################
-    // # Instruction Cache to Decoder - Register                                             #
-    // #######################################################################################
-
-    stream_register #(
-        .T( ic_to_dec_data_t )
-    ) i_ic_to_dec_reg (
-        .clk_i     ( clk_i  ),
-        .rst_ni    ( rst_ni ),
-        .clr_i     ( 1'b0   ),
-        .testmode_i( 1'b0   ),
-
-        .valid_i( ic_to_dec_valid_d ),
-        .ready_o( dec_to_ic_ready_q ),
-        .data_i ( ic_to_dec_data_d  ),
-
-        .valid_o( ic_to_dec_valid_q ),
-        .ready_i( dec_to_ic_ready_d ),
-        .data_o ( ic_to_dec_data_q  )
+        .dec_ready_i  ( dec_to_ic_ready         ),
+        .ic_valid_o   ( ic_to_dec_valid         ),
+        .ic_pc_o      ( ic_to_dec_data.pc       ),
+        .ic_act_mask_o( ic_to_dec_data.act_mask ),
+        .ic_warp_id_o ( ic_to_dec_data.warp_id  ),
+        .ic_inst_o    ( ic_to_dec_data.inst     )
     );
 
     // #######################################################################################
@@ -305,12 +300,12 @@ module compute_unit import bgpu_pkg::*; #(
         .RegIdxWidth    ( RegIdxWidth     ),
         .OperandsPerInst( OperandsPerInst )
     ) i_decoder (
-        .dec_ready_o  ( dec_to_ic_ready_d         ),
-        .ic_valid_i   ( ic_to_dec_valid_q         ),
-        .ic_pc_i      ( ic_to_dec_data_q.pc       ),
-        .ic_act_mask_i( ic_to_dec_data_q.act_mask ),
-        .ic_warp_id_i ( ic_to_dec_data_q.warp_id  ),
-        .ic_inst_i    ( ic_to_dec_data_q.inst     ),
+        .dec_ready_o  ( dec_to_ic_ready         ),
+        .ic_valid_i   ( ic_to_dec_valid         ),
+        .ic_pc_i      ( ic_to_dec_data.pc       ),
+        .ic_act_mask_i( ic_to_dec_data.act_mask ),
+        .ic_warp_id_i ( ic_to_dec_data.warp_id  ),
+        .ic_inst_i    ( ic_to_dec_data.inst     ),
 
         .disp_ready_i           ( ib_to_dec_ready_q                  ),
         .dec_valid_o            ( dec_to_ib_valid_d                  ),

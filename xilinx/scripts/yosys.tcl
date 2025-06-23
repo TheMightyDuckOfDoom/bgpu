@@ -6,7 +6,7 @@ yosys read_slang --top $top_design -F xilinx/yosys.f \
 
 exec mkdir -p xilinx/out
 
-synth_xilinx -top $top_design -family xc7 -noiopad -nowidelut -abc9 -flatten -edif xilinx/out/$top_design.edif
+synth_xilinx -top $top_design -family xc7 -noclkbuf -noiopad -nowidelut -abc9 -flatten -edif xilinx/out/$top_design.edif
 
 write_verilog -simple-lhs -attr2comment -renameprefix gen xilinx/out/${top_design}_yosys.v
 stat -tech xilinx

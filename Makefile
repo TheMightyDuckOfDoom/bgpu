@@ -163,6 +163,8 @@ gowin-report:
 ####################################################################################################
 
 clean: asic-clean gowin-clean xilinx-clean verilator-clean
+	rm -f *.vcd
+	rm -f *.out
 
 verilator-clean:
 	rm -f  verilator/*.f

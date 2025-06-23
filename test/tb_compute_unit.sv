@@ -30,11 +30,16 @@ module tb_compute_unit import bgpu_pkg::*; #(
     parameter int unsigned AddressWidth = 32,
     // Width of the id for requests queue
     parameter int unsigned OutstandingReqIdxWidth = 3,
+    // Number of cache lines in the instruction cache
+    parameter int unsigned NumIClines = 8,
+    // Number of bits for the instruction cache line index
+    parameter int unsigned IClineIdxBits = 2,
 
     parameter int unsigned SimMemBlocks = 16,
 
     parameter time         TclkPeriod   = 10ns,
     parameter time         AcqDelay     = 1ns,
+    parameter time         ApplDelay    = 9ns,
     parameter int unsigned MaxSimCycles = 1000
 );
     // #######################################################################################
@@ -42,12 +47,14 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     localparam time TCLKHALF = TclkPeriod / 2;
-    localparam int WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
-    localparam int TagWidth = $clog2(InflightInstrPerWarp);
+    localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
+    localparam int unsigned TagWidth = $clog2(InflightInstrPerWarp);
 
-    localparam int BlockAddrWidth = AddressWidth - BlockIdxBits;
-    localparam int BlockWidth = 1 << BlockIdxBits;
-    localparam int ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
+    localparam int unsigned BlockAddrWidth = AddressWidth - BlockIdxBits;
+    localparam int unsigned BlockWidth = 1 << BlockIdxBits;
+    localparam int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
+
+    localparam int unsigned ICAddrWidth = IClineIdxBits > 0 ? PcWidth - IClineIdxBits : PcWidth;
 
     // #######################################################################################
     // # Type Definitions                                                                    #
@@ -62,6 +69,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     typedef logic  [   BlockAddrWidth-1:0] block_addr_t;
     typedef logic  [       BlockWidth-1:0] block_mask_t;
     typedef byte_t [       BlockWidth-1:0] block_data_t;
+    typedef logic  [      ICAddrWidth-1:0] imem_addr_t;
     typedef logic  [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
 
     typedef struct packed {
@@ -71,6 +79,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
         reg_idx_t      op1;
         reg_idx_t      op2;
     } enc_inst_t;
+
+    typedef enc_inst_t [(1 << IClineIdxBits)-1:0] imem_data_t;
 
     typedef struct packed {
         req_id_t     id;
@@ -119,19 +129,24 @@ module tb_compute_unit import bgpu_pkg::*; #(
         '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
         '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
         '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}  // reg0 = reg0 + 0
+        '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}  // STOP warps
     };
 
     // Clock and initialization signals
-    logic initialized, stop, clk, rst_n, set_ready_status;
+    logic stop, clk, rst_n, set_ready_status;
 
     // Status signals
     logic [NumWarps-1:0] warp_active, warp_stopped;
 
-    // Write to Instruction Cache
-    logic      ic_write;
-    pc_t       ic_write_pc;
-    enc_inst_t ic_write_inst;
+    // Instruction Cache requests
+    logic       imem_ready, imem_req_valid;
+    imem_addr_t imem_req_addr;
+
+    // Instruction Cache response
+    logic       imem_rsp_valid, imem_rsp_valid_q;
+    imem_data_t imem_rsp_data, imem_rsp_data_q;
+
+    imem_data_t imem_rsp_data_queue [$];
 
     // Memory
     block_data_t [SimMemBlocks-1:0] memory;
@@ -152,7 +167,6 @@ module tb_compute_unit import bgpu_pkg::*; #(
         rst_n = 1;
         @(posedge clk);
 
-        wait(initialized);
         $display("Starting reset...");
 
         rst_n = 0;
@@ -184,7 +198,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .RegWidth              ( RegWidth               ),
         .AddressWidth          ( AddressWidth           ),
         .BlockIdxBits          ( BlockIdxBits           ),
-        .OutstandingReqIdxWidth( OutstandingReqIdxWidth )
+        .OutstandingReqIdxWidth( OutstandingReqIdxWidth ),
+        .NumIClines            ( NumIClines             ),
+        .IClineIdxBits         ( IClineIdxBits          )
     `endif
     ) i_cu (
         .clk_i ( clk   ),
@@ -194,9 +210,12 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .warp_active_o ( warp_active      ),
         .warp_stopped_o( warp_stopped     ),
 
-        .ic_write_i     ( ic_write      ),
-        .ic_write_pc_i  ( ic_write_pc   ),
-        .ic_write_inst_i( ic_write_inst ),
+        .imem_ready_i    ( imem_ready     ),
+        .imem_req_valid_o( imem_req_valid ),
+        .imem_req_addr_o ( imem_req_addr  ),
+
+        .imem_rsp_valid_i( imem_rsp_valid_q ),
+        .imem_rsp_data_i ( imem_rsp_data_q  ),
 
         .mem_ready_i       ( mem_ready       ),
         .mem_req_valid_o   ( mem_req_valid   ),
@@ -214,36 +233,48 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // # Memory                                                                              #
     // #######################################################################################
 
-    // Initialize program
+    // Instruction memory request
     initial begin
-        int unsigned program_size;
-        initialized = 1'b0;
-        stop = 1'b0;
+        imem_data_t rsp;
+        imem_ready = 1'b1;
 
-        $timeformat(-9, 0, "ns", 12);
-        // configure VCD dump
-        $dumpfile("cu.vcd");
-        $dumpvars(1,i_cu);
-
-        $display("Initializing memory...");
-
-        @(posedge clk);
-
-        ic_write = 1'b1;
-        program_size = $bits(test_program) / $bits(enc_inst_t);
-        for(int i = 0; i < program_size; i++) begin
-            ic_write_pc = i[PcWidth-1:0];
-            ic_write_inst = test_program[i];
+        while(1) begin
             @(posedge clk);
+            #AcqDelay;
+            if (imem_req_valid && imem_ready) begin
+                rsp = '0;
+                for(int i = 0; i < (1 << IClineIdxBits); i++) begin
+                    if (i + imem_req_addr * (1 << IClineIdxBits) < $size(test_program)) begin
+                        // Fetch instruction from test program
+                        rsp[i] = test_program[i + imem_req_addr * (1 << IClineIdxBits)];
+                    end
+                end
+                $display("Instruction Cache request: Addr %0d Data %h",
+                    imem_req_addr, rsp);
+                imem_rsp_data_queue.push_back(rsp);
+            end
         end
-        ic_write_pc   = program_size[PcWidth-1:0];
-        ic_write_inst = '1;
-        @(posedge clk);
+    end
 
-        ic_write = 1'b0;
+    initial begin
+        while(1) begin
+            @(posedge clk);
+            #ApplDelay;
+            imem_rsp_valid = 1'b0;
+            if (imem_rsp_data_queue.size() > 0) begin
+                // Pop the first instruction from the queue
+                imem_rsp_data = imem_rsp_data_queue.pop_front();
+                imem_rsp_valid = 1'b1;
+                $display("Instruction Cache response: Addr %0d Data %h",
+                    imem_req_addr, imem_rsp_data);
+            end
+        end
+    end
 
-        initialized = 1'b1;
-        $display("Memory initialized.");
+    always_ff @(posedge clk) begin
+        // Instruction Cache response
+        imem_rsp_valid_q <= imem_rsp_valid;
+        imem_rsp_data_q  <= imem_rsp_data;
     end
 
     // Memory read/write
@@ -304,7 +335,11 @@ module tb_compute_unit import bgpu_pkg::*; #(
     int cycles;
     initial begin
         cycles = 0;
-        wait(initialized);
+
+        $timeformat(-9, 0, "ns", 12);
+        // configure VCD dump
+        $dumpfile("cu.vcd");
+        $dumpvars(1,i_cu);
 
         while(1) begin
             @(posedge clk);
@@ -357,7 +392,6 @@ module tb_compute_unit import bgpu_pkg::*; #(
     `ifndef POST
     for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_display_dispatcher
         initial begin
-            wait(initialized);
             while(1) begin
                 @(posedge clk);
                 $display("Warp %2d", warp);
@@ -438,7 +472,6 @@ module tb_compute_unit import bgpu_pkg::*; #(
         // Start time
         $fwrite(fd, "C=\t0\n");
 
-        wait(initialized);
         while(!stop) begin
             @(posedge clk);
             // Cycle
@@ -491,12 +524,12 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Decoder
-            if(i_cu.ic_to_dec_valid_q && i_cu.dec_to_ic_ready_d) begin
+            if(i_cu.ic_to_dec_valid && i_cu.dec_to_ic_ready) begin
                 // Get the instruction ID from the hashmap
-                insn_id_in_sim[PcWidth-1:0] = i_cu.ic_to_dec_data_q.pc;
-                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.ic_to_dec_data_q.act_mask;
+                insn_id_in_sim[PcWidth-1:0] = i_cu.ic_to_dec_data.pc;
+                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.ic_to_dec_data.act_mask;
                 insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
-                    i_cu.ic_to_dec_data_q.warp_id;
+                    i_cu.ic_to_dec_data.warp_id;
                 insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
 
                 // Decoder Stage

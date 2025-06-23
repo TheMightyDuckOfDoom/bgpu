@@ -17,7 +17,6 @@ sources:
       files:
           - rtl/compute_unit/dummy_reconvergence_stack.sv
           - rtl/compute_unit/fetcher.sv
-          - rtl/compute_unit/dummy_instruction_cache.sv
           - rtl/compute_unit/instruction_cache.sv
           - rtl/compute_unit/decoder.sv
       
