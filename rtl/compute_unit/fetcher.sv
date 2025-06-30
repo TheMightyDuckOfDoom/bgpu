@@ -49,8 +49,11 @@ module fetcher #(
     output logic       tblock_done_o,
     output tblock_id_t tblock_done_id_o,
 
-    /// From instruction buffer |-> which warp has space for a new instruction?
+    /// From instruction buffer
+    // Which warp has space for a new instruction?
     input  logic [NumWarps-1:0] ib_space_available_i,
+    // Are there any instructions in flight?
+    input  logic [NumWarps-1:0] ib_all_instr_finished_i,
 
     /// To/From instruction cache
     input  logic      ic_ready_i,
@@ -151,6 +154,8 @@ module fetcher #(
     ) i_reconvergence_stack (
         .clk_i             ( clk_i  ),
         .rst_ni            ( rst_ni ),
+
+        .ib_all_instr_finished_i( ib_all_instr_finished_i ),
 
         .warp_free_o          ( warp_free_o           ),
         .allocate_warp_i      ( allocate_warp_i       ),

@@ -38,10 +38,17 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     input  logic fe_handshake_i,
     input  wid_t fe_warp_id_i,
 
-    /// To fetcher |-> which warps have space for a new instruction?
+    /// To fetcher
+    // |-> which warps have space for a new instruction?
     output logic [NumWarps-1:0] ib_space_available_o,
+    // Are there any instructions in flight?
+    output logic [NumWarps-1:0] ib_all_instr_finished_o,
 
-    /// From decoder
+    /// From decoder -> stop warp decoded
+    input  logic dec_stop_decoded_i,
+    input  wid_t dec_stop_decoded_warp_id_i,
+
+    /// From decoder -> new instruction
     output logic      ib_ready_o,
     input  logic      dec_valid_i,
     input  pc_t       dec_pc_i,
@@ -98,6 +105,9 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     disp_data_t [NumWarps-1:0] arb_in_data;
     disp_data_t arb_sel_data;
 
+    // Stop decoded Demultiplexer
+    logic [NumWarps-1:0] dec_stop_decoded_warp;
+
     // #######################################################################################
     // # Dispatcher per warp                                                                 #
     // #######################################################################################
@@ -126,6 +136,12 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         eu_valid[eu_tag_i[WidWidth-1:0]] = eu_valid_i;
     end
 
+    // Stop Decoded Demultiplexer
+    always_comb begin
+        dec_stop_decoded_warp = '0;
+        dec_stop_decoded_warp[dec_stop_decoded_warp_id_i] = dec_stop_decoded_i;
+    end
+
     // Dispatcher per Warp
     for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
         dispatcher #(
@@ -139,8 +155,11 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
 
-            .fe_handshake_i      ( fe_handshake_warp[warp]    ),
-            .ib_space_available_o( ib_space_available_o[warp] ),
+            .fe_handshake_i         ( fe_handshake_warp      [warp] ),
+            .ib_space_available_o   ( ib_space_available_o   [warp] ),
+            .ib_all_instr_finished_o( ib_all_instr_finished_o[warp] ),
+
+            .dec_stop_decoded_i( dec_stop_decoded_warp[warp] ),
 
             .disp_ready_o           ( ib_ready_warp [warp]    ),
             .dec_valid_i            ( dec_valid_warp[warp]    ),

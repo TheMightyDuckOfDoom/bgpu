@@ -54,6 +54,10 @@ module dummy_reconvergence_stack #(
     input wid_t decode_wid_i,
     input pc_t  decode_next_pc_i,
 
+    /// From instruction buffer
+    // Are there any instructions in flight?
+    input  logic [NumWarps-1:0] ib_all_instr_finished_i,
+
     /// To/From Fetcher
     input  logic      [NumWarps-1:0] warp_selected_i,
     output logic      [NumWarps-1:0] warp_ready_o,
@@ -126,23 +130,33 @@ module dummy_reconvergence_stack #(
             // Mark the warp as ready
             warp_data_d[decode_wid_i].ready = 1'b1;
 
-            // If the warp is finished |-> deallocate it and notify
+            // If the warp is finished |-> mark it as finished,
+            // wait until all instructions are finished
             if (decode_stop_warp_i) begin
-                warp_data_d[decode_wid_i].occupied = 1'b0;
+                warp_data_d[decode_wid_i].finished = 1'b1;
                 warp_data_d[decode_wid_i].ready    = 1'b0;
-
-                tblock_done_o    = 1'b1;
-                tblock_done_id_o = warp_data_q[decode_wid_i].tblock_id;
             end
 
         end : decode_update
 
-        for(int i = 0; i < NumWarps; i++) begin : select_update
+        for(int i = 0; i < NumWarps; i++) begin : update
             // If the warp is selected for fetching, mark it as not ready |-> wait until decode stage
             if (warp_selected_i[i]) begin
                 warp_data_d[i].ready = 1'b0;
             end
-        end : select_update
+
+            // If the warp is finished and all instructions are finished |-> deallocate the warp and notify
+            if (warp_data_q[i].occupied && warp_data_q[i].finished
+                && ib_all_instr_finished_i[i] && (!tblock_done_o)) begin
+                // Deallocate the warp
+                warp_data_d[i].occupied = 1'b0;
+                warp_data_d[i].ready    = 1'b0;
+                warp_data_d[i].finished = 1'b0;
+
+                tblock_done_o    = 1'b1;
+                tblock_done_id_o = warp_data_q[i].tblock_id;
+            end
+        end : update
     end : next_pc_ready_logic
 
     // We can allocate a new warp if there is at least one warp that is not active

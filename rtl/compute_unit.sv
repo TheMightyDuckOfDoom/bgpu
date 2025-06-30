@@ -203,6 +203,7 @@ module compute_unit import bgpu_pkg::*; #(
 
     // Instruction Buffer to Fetcher
     logic [NumWarps-1:0] ib_space_available; // Which warp has space for a new instruction?
+    logic [NumWarps-1:0] ib_all_instr_finished; // Are there any instructions in flight?
 
     // Multi Warp Dispatcher to Register Operand Collector Stage
     logic disp_to_opc_valid, opc_to_disp_ready;
@@ -245,7 +246,8 @@ module compute_unit import bgpu_pkg::*; #(
         .tblock_done_o   ( tblock_done_o    ),
         .tblock_done_id_o( tblock_done_id_o ),
 
-        .ib_space_available_i( ib_space_available ),
+        .ib_space_available_i   ( ib_space_available    ),
+        .ib_all_instr_finished_i( ib_all_instr_finished ),
 
         .ic_ready_i   ( ic_to_fe_ready_q         ),
         .fe_valid_o   ( fe_to_ic_valid_d         ),
@@ -394,7 +396,11 @@ module compute_unit import bgpu_pkg::*; #(
         .fe_handshake_i( fe_to_ic_valid_d && ic_to_fe_ready_q ),
         .fe_warp_id_i  ( fe_to_ic_data_d.warp_id              ),
 
-        .ib_space_available_o( ib_space_available ),
+        .ib_space_available_o   ( ib_space_available    ),
+        .ib_all_instr_finished_o( ib_all_instr_finished ),
+
+        .dec_stop_decoded_i        ( dec_to_fetch_decoded && dec_to_fetch_stop_warp ),
+        .dec_stop_decoded_warp_id_i( dec_to_fetch_decoded_warp_id                   ),
 
         .ib_ready_o             ( ib_to_dec_ready_d                  ),
         .dec_valid_i            ( dec_to_ib_valid_q                  ),

@@ -39,9 +39,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // How many bits are used to identify a thread block?
     parameter int unsigned TblockIdBits = 8,
 
-    parameter int unsigned SimMemBlocks = 16,
+    parameter int unsigned SimMemBlocks = 33,
 
-    parameter int unsigned TblocksToLaunch = 10,
+    parameter int unsigned TblocksToLaunch = NumWarps * WaitBufferSizePerWarp + 1,
 
     parameter time         ClkPeriod    = 10ns,
     parameter time         AcqDelay     = 1ns,
@@ -282,7 +282,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
         while(tblocks_done < TblocksToLaunch) begin
             @(posedge clk);
-            #ApplDelay;
+            #AcqDelay;
             if(tblock_done) begin
                 $display("Thread block %0d done.", tblock_done_id);
                 tblocks_done++;
@@ -409,6 +409,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
         while(1) begin
             @(posedge clk);
+            #AcqDelay;
             $display("Cycle %4d Time %8d", cycles, $time);
             if(rst_n) begin
                 // Output from fetcher
@@ -447,6 +448,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         initial begin
             while(1) begin
                 @(posedge clk);
+                #AcqDelay;
                 $display("Warp %2d", warp);
                 $display("Register Table");
                 $display("Entry   Vld Dst Prod");
@@ -527,6 +529,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
         while(!stop) begin
             @(posedge clk);
+            #AcqDelay;
             // Cycle
             $fwrite(fd, "C\t1\n");
 
@@ -672,5 +675,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
         else
             $finish;
     end
+
+    initial assert(TblocksToLaunch < (1 << TblockIdxBits))
+    else $fatal("TblocksToLaunch (%0d) exceeds maximum number of thread blocks (%0d).",
+        TblocksToLaunch, (1 << TblockIdxBits));
 
 endmodule : tb_compute_unit

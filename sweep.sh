@@ -11,12 +11,15 @@ do
     for WaitBufferSizePerWarp in ${WaitBufferSizePerWarp_range[@]}
     do
         InflightInstructionsPerWarp=$((2 * WaitBufferSizePerWarp))
-        result=$(make tb_compute_unit VERILATOR_ARGS="-GNumWarps=$NumWarp -GWaitBufferSizePerWarp=$WaitBufferSizePerWarp -GInflightInstrPerWarp=$InflightInstructionsPerWarp -GMaxSimCycles=2000")
+        TblocksToLaunch=$((NumWarp * WaitBufferSizePerWarp + 1))
+        result=$(make tb_compute_unit VERILATOR_ARGS="-GNumWarps=$NumWarp -GWaitBufferSizePerWarp=$WaitBufferSizePerWarp -GInflightInstrPerWarp=$InflightInstructionsPerWarp -GTblocksToLaunch=$TblocksToLaunch -GMaxSimCycles=2000")
         if [ $? -eq 0 ]; then
-            echo "Simulation passed for NumWarp: $NumWarp, WaitBufferSizePerWarp: $WaitBufferSizePerWarp InflightInstructionsPerWarp: $InflightInstructionsPerWarp"
+            echo "Simulation passed for NumWarp: $NumWarp, WaitBufferSizePerWarp: $WaitBufferSizePerWarp InflightInstructionsPerWarp: $InflightInstructionsPerWarp TblocksToLaunch: $TblocksToLaunch"
+            echo "$result" | grep -A1 "All thread blocks done."
         else
-            echo "$result"
-            echo "Simulation failed for NumWarp: $NumWarp, WaitBufferSizePerWarp: $WaitBufferSizePerWarp InflightInstructionsPerWarp: $InflightInstructionsPerWarp"
+            echo "$result" > failure.log
+            cat failure.log
+            echo "Simulation failed for NumWarp: $NumWarp, WaitBufferSizePerWarp: $WaitBufferSizePerWarp InflightInstructionsPerWarp: $InflightInstructionsPerWarp TblocksToLaunch: $TblocksToLaunch"
             exit 1
         fi
     done

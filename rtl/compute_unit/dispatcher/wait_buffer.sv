@@ -44,7 +44,10 @@ module wait_buffer import bgpu_pkg::*; #(
     /// To fetcher |-> space for a new instruction?
     output logic ib_space_available_o,
 
-    /// From decoder
+    /// From decoder -> stop warp decoded
+    input  logic      dec_stop_decoded_i,
+
+    /// From decoder -> new instruction
     output logic      wb_ready_o,
     input  logic      dec_valid_i,
     input  pc_t       dec_pc_i,
@@ -115,13 +118,19 @@ module wait_buffer import bgpu_pkg::*; #(
     disp_data_t [WaitBufferSizePerWarp-1:0] arb_in_data;
     disp_data_t arb_sel_data;
 
+    logic inst_dispatched;
+    logic give_credit;
+
     // #######################################################################################
     // # Combinatorial Logic                                                                 #
     // #######################################################################################
 
     // Credit counter
     // Decremented when an instruction is fetched for the warp
-    // Incremented when the instruction get dispatched to the operand collector
+    // Incremented when the instruction get dispatched to the operand collector or a stop is decoded
+    assign inst_dispatched = (|arb_gnt) && disp_valid_o && opc_ready_i;
+    assign give_credit = inst_dispatched || dec_stop_decoded_i;
+
     credit_counter #(
         .NumCredits     ( WaitBufferSizePerWarp ),
         .InitCreditEmpty( 1'b0                  )
@@ -130,7 +139,7 @@ module wait_buffer import bgpu_pkg::*; #(
         .rst_ni( rst_ni ),
 
         .credit_take_i( fe_handshake_i ),
-        .credit_give_i( |arb_gnt && disp_valid_o && opc_ready_i ),
+        .credit_give_i( give_credit    ),
         .credit_init_i( 1'b0 ),
 
         .credit_left_o( ib_space_available_o ),

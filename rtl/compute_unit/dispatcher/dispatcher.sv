@@ -43,10 +43,17 @@ module dispatcher import bgpu_pkg::*; #(
     /// From fetcher |-> which warp gets fetched next
     input  logic fe_handshake_i,
 
-    /// To fetcher |-> which warps have space for a new instruction?
+    /// To fetcher
+    // which warps have space for a new instruction?
     output logic ib_space_available_o,
+    // Have all destination registers been written to the register file?
+    // -> All instructions finished
+    output logic ib_all_instr_finished_o,
 
-    /// From decoder
+    /// From decoder -> stop warp decoded
+    input  logic      dec_stop_decoded_i,
+
+    /// From decoder -> new instruction
     output logic      disp_ready_o,
     input  logic      dec_valid_i,
     input  pc_t       dec_pc_i,
@@ -137,6 +144,8 @@ module dispatcher import bgpu_pkg::*; #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
+        .all_dst_written_o( ib_all_instr_finished_o ),
+
         .space_available_o( reg_table_space_available ),
         .insert_i         ( insert                    ),
         .tag_i            ( dst_tag                   ),
@@ -167,6 +176,8 @@ module dispatcher import bgpu_pkg::*; #(
 
         .fe_handshake_i      ( fe_handshake_i       ),
         .ib_space_available_o( ib_space_available_o ),
+
+        .dec_stop_decoded_i( dec_stop_decoded_i ),
 
         .wb_ready_o             ( wb_ready                ),
         .dec_valid_i            ( insert                  ),

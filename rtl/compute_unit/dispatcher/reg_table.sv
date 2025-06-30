@@ -18,6 +18,10 @@ module reg_table #(
     input logic clk_i,
     input logic rst_ni,
 
+    // To Fetcher -> Are all registers written to register file?
+    // -> no pending instruction
+    output logic all_dst_written_o,
+
     // From Decoder
     output logic space_available_o,
     input logic insert_i,
@@ -60,6 +64,9 @@ module reg_table #(
     // Space available if not all entries are valid
     // |-> in theory we could even accept a new one if an existing dst is overwritten/updated
     assign space_available_o = !(&table_valid_q);
+
+    // All destination registers written if no entry is valid
+    assign all_dst_written_o = !(|table_valid_q);
 
     // Insert logic
     always_comb begin
