@@ -35,6 +35,9 @@ Articles / Papers:
 Websites:
 - GPGPU-Sim Wiki: http://gpgpu-sim.org/manual/index.php
 
+Introduction to GPU Roofline Performance Model
+- "Basic facts about GPUs": https://damek.github.io/random/basic-facts-about-gpus/
+
 ## License
 All code in this repository should have a permissive license. Hardware is licensed under Solderpad Hardware License 0.51 (see [`LICENSE-SHL`](LICENSE-SHL))
 
