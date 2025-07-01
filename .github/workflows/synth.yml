@@ -35,7 +35,7 @@ jobs:
             - name: Yosys Synthesis for Xilinx FPGA
               run: make xilinx-yosys
             - name: Report Area
-              run: make xilinx-yosys-report
+              run: tail -n 32 xilinx/yosys.log
             - name: Post Synthesis Simulation
               run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
 
