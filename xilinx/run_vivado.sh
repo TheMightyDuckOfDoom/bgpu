@@ -21,3 +21,7 @@ if [ $num_errors -gt 1 ]; then
     grep ERROR vivado.log
     exit 1
 fi
+
+period=$(grep create_clock dummy_constraints.xdc | awk '{print $6}')
+slack=$(grep slack vivado.log | tail -n1 | awk '{print $2}')
+python3 -c "print(f'Max frequency: {1000/(${period}-(${slack})):.2f} MHz')"

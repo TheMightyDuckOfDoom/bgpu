@@ -100,9 +100,9 @@ xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
 	echo "source xilinx/scripts/yosys.tcl" >> xilinx/run_yosys.tcl
 	yosys -c xilinx/run_yosys.tcl -l xilinx/yosys.log -t
 
-# Show Yosys report
-xilinx-yosys-report:
-	tail -n 32 xilinx/yosys.log
+# Yosys report using Vivado
+xilinx-yosys-report: xilinx/scripts/vivado_report.tcl xilinx/dummy_constraints.xdc xilinx/run_vivado_report.sh
+	time ./xilinx/run_vivado_report.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
 ####################################################################################################
 # ASIC Synthesis

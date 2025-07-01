@@ -8,7 +8,7 @@ package:
         - "Tobias Senti <git@tsenti.li>"
 
 dependencies:
-    common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.37.0 }
+    common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.38.0 }
 
 sources:
     - rtl/bgpu_pkg.sv
