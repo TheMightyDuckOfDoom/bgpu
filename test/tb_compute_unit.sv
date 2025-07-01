@@ -10,10 +10,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
     parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
-    /// Wait buffer size per warp
-    parameter int unsigned WaitBufferSizePerWarp = 4,
     /// Number of inflight instructions per warp
-    parameter int unsigned InflightInstrPerWarp = WaitBufferSizePerWarp * 2,
+    parameter int unsigned InflightInstrPerWarp = 4,
     /// Number of banks in the register file
     parameter int unsigned NumBanks = 4,
     /// Number of operand collectors
@@ -39,9 +37,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // How many bits are used to identify a thread block?
     parameter int unsigned TblockIdBits = 8,
 
-    parameter int unsigned SimMemBlocks = 33,
+    parameter int unsigned SimMemBlocks = 65,
 
-    parameter int unsigned TblocksToLaunch = NumWarps * WaitBufferSizePerWarp + 1,
+    parameter int unsigned TblocksToLaunch = 33,
 
     parameter time         ClkPeriod    = 10ns,
     parameter time         AcqDelay     = 1ns,
@@ -190,12 +188,11 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // Instantiate Compute Unit
     compute_unit #(
     `ifndef POST
-        .NumTags               ( InflightInstrPerWarp   ),
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),
         .WarpWidth             ( WarpWidth              ),
         .EncInstWidth          ( $bits(enc_inst_t)      ),
-        .WaitBufferSizePerWarp ( WaitBufferSizePerWarp  ),
+        .InflightInstrPerWarp  ( InflightInstrPerWarp   ),
         .RegIdxWidth           ( RegIdxWidth            ),
         .OperandsPerInst       ( OperandsPerInst        ),
         .NumBanks              ( NumBanks               ),
@@ -471,7 +468,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
                     $write("  Rdy Tag Op%1d", operand);
                 end
                 $display();
-                for(int wbentry = 0; wbentry < WaitBufferSizePerWarp; wbentry++) begin
+                for(int wbentry = 0; wbentry < InflightInstrPerWarp; wbentry++) begin
                     $write("WB[%2d]: %1d   %1d %4d  %2d %2d",
                         wbentry,
                         i_cu.i_warp_dispatcher.gen_dispatcher[warp]
@@ -591,6 +588,14 @@ module tb_compute_unit import bgpu_pkg::*; #(
                 // Decoder Stage
                 $fwrite(fd, "S\t%0d\t0\tD\n",
                     insn_id_in_file);
+
+                // Stop the warp -> retire this instruction
+                if(i_cu.dec_to_fetch_stop_warp) begin
+                    // Retire
+                    $fwrite(fd, "R\t%0d\t%0d\t0\n",
+                        insn_id_in_file, retire_id);
+                    retire_id++;
+                end
             end
 
             // Start Dispatcher Stage
@@ -676,8 +681,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
             $finish;
     end
 
-    initial assert(TblocksToLaunch < (1 << TblockIdxBits))
-    else $fatal("TblocksToLaunch (%0d) exceeds maximum number of thread blocks (%0d).",
+    initial assert(TblocksToLaunch <= (1 << TblockIdxBits))
+    else $error("TblocksToLaunch (%0d) exceeds maximum number of thread blocks (%0d).",
         TblocksToLaunch, (1 << TblockIdxBits));
 
 endmodule : tb_compute_unit

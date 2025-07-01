@@ -210,8 +210,8 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     `ifndef SYNTHESIS
-        initial assert(NumTags > WaitBufferSizePerWarp)
-        else $error(1, "NumTags must be greater than WaitBufferSizePerWarp");
+        initial assert(NumTags >= WaitBufferSizePerWarp)
+        else $error(1, "NumTags must be >= WaitBufferSizePerWarp");
 
         assert property(@(posedge clk_i) disable iff(rst_ni) eu_valid_i |-> tag_queue_ready)
         else $error(1, "Tag queue must be ready to receive execution unit tags");

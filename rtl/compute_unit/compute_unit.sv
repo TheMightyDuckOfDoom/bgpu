@@ -12,10 +12,8 @@ module compute_unit import bgpu_pkg::*; #(
     parameter int unsigned WarpWidth = 4,
     /// Encoded instruction width
     parameter int unsigned EncInstWidth = 32,
-    /// How many instructions that wait on previous results can be buffered per warp
-    parameter int unsigned WaitBufferSizePerWarp = 4,
     /// Number of inflight instructions per warp
-    parameter int unsigned NumTags = WaitBufferSizePerWarp * 2,
+    parameter int unsigned InflightInstrPerWarp = 4,
     /// How many registers can each warp access as operand or destination
     parameter int unsigned RegIdxWidth = 8,
     /// How many operands each instruction can have
@@ -104,8 +102,9 @@ module compute_unit import bgpu_pkg::*; #(
     // # Local Parameters                                                                    #
     // #######################################################################################
 
+    localparam int unsigned NumTags  = InflightInstrPerWarp;
     localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
-    localparam int unsigned TagWidth = NumTags  > 1 ? $clog2( NumTags) : 1;
+    localparam int unsigned TagWidth = NumTags > 1  ? $clog2(NumTags)  : 1;
 
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -386,7 +385,7 @@ module compute_unit import bgpu_pkg::*; #(
         .PcWidth              ( PcWidth               ),
         .NumWarps             ( NumWarps              ),
         .WarpWidth            ( WarpWidth             ),
-        .WaitBufferSizePerWarp( WaitBufferSizePerWarp ),
+        .WaitBufferSizePerWarp( InflightInstrPerWarp  ),
         .RegIdxWidth          ( RegIdxWidth           ),
         .OperandsPerInst      ( OperandsPerInst       )
     ) i_warp_dispatcher (
