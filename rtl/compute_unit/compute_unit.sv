@@ -73,6 +73,7 @@ module compute_unit import bgpu_pkg::*; #(
     input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
+    input  logic       tblock_done_ready_i,
     output logic       tblock_done_o,
     output tblock_id_t tblock_done_id_o,
 
@@ -175,7 +176,6 @@ module compute_unit import bgpu_pkg::*; #(
     // # Signals                                                                             #
     // #######################################################################################
 
-
     // Fetcher to Instruction Cache
     logic fe_to_ic_valid_d, fe_to_ic_valid_q;
     logic ic_to_fe_ready_d, ic_to_fe_ready_q;
@@ -242,8 +242,9 @@ module compute_unit import bgpu_pkg::*; #(
         .allocate_tblock_idx_i( allocate_tblock_idx_i ),
         .allocate_tblock_id_i ( allocate_tblock_id_i  ),
 
-        .tblock_done_o   ( tblock_done_o    ),
-        .tblock_done_id_o( tblock_done_id_o ),
+        .tblock_done_ready_i( tblock_done_ready_i ),
+        .tblock_done_o      ( tblock_done_o       ),
+        .tblock_done_id_o   ( tblock_done_id_o    ),
 
         .ib_space_available_i   ( ib_space_available    ),
         .ib_all_instr_finished_i( ib_all_instr_finished ),

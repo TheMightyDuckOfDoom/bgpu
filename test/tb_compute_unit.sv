@@ -42,8 +42,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
     parameter int unsigned TblocksToLaunch = 33,
 
     parameter time         ClkPeriod    = 10ns,
-    parameter time         AcqDelay     = 1ns,
-    parameter time         ApplDelay    = 9ns,
+    parameter time         AcqDelay     = 9ns,
+    parameter time         ApplDelay    = 1ns,
     parameter int unsigned MaxSimCycles = 1000
 );
     // #######################################################################################
@@ -217,8 +217,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .allocate_tblock_idx_i( warp_insert.tblock_idx ),
         .allocate_tblock_id_i ( warp_insert.tblock_id  ),
 
-        .tblock_done_o   ( tblock_done    ),
-        .tblock_done_id_o( tblock_done_id ),
+        .tblock_done_ready_i( 1'b1           ),
+        .tblock_done_o      ( tblock_done    ),
+        .tblock_done_id_o   ( tblock_done_id ),
 
         .imem_ready_i    ( imem_ready     ),
         .imem_req_valid_o( imem_req_valid ),

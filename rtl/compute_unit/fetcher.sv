@@ -46,6 +46,7 @@ module fetcher #(
     input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
+    input  logic       tblock_done_ready_i,
     output logic       tblock_done_o,
     output tblock_id_t tblock_done_id_o,
 
@@ -164,8 +165,9 @@ module fetcher #(
         .allocate_tblock_idx_i( allocate_tblock_idx_i ),
         .allocate_tblock_id_i ( allocate_tblock_id_i  ),
 
-        .tblock_done_o   ( tblock_done_o    ),
-        .tblock_done_id_o( tblock_done_id_o ),
+        .tblock_done_ready_i( tblock_done_ready_i ),
+        .tblock_done_o      ( tblock_done_o       ),
+        .tblock_done_id_o   ( tblock_done_id_o    ),
 
         .instruction_decoded_i( dec_decoded_i         ),
         .decode_stop_warp_i   ( dec_stop_warp_i       ),

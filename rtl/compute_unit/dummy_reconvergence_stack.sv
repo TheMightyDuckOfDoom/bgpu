@@ -45,6 +45,7 @@ module dummy_reconvergence_stack #(
     input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
+    input  logic       tblock_done_ready_i,
     output logic       tblock_done_o,
     output tblock_id_t tblock_done_id_o,
 
@@ -148,13 +149,16 @@ module dummy_reconvergence_stack #(
             // If the warp is finished and all instructions are finished |-> deallocate the warp and notify
             if (warp_data_q[i].occupied && warp_data_q[i].finished
                 && ib_all_instr_finished_i[i] && (!tblock_done_o)) begin
-                // Deallocate the warp
-                warp_data_d[i].occupied = 1'b0;
-                warp_data_d[i].ready    = 1'b0;
-                warp_data_d[i].finished = 1'b0;
 
                 tblock_done_o    = 1'b1;
                 tblock_done_id_o = warp_data_q[i].tblock_id;
+
+                // Deallocate the warp upon handshake
+                if (tblock_done_ready_i) begin
+                    warp_data_d[i].occupied = 1'b0;
+                    warp_data_d[i].ready    = 1'b0;
+                    warp_data_d[i].finished = 1'b0;
+                end
             end
         end : update
     end : next_pc_ready_logic

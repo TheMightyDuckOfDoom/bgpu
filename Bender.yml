@@ -42,11 +42,15 @@ sources:
 
           - rtl/compute_unit/compute_unit.sv
 
+          - rtl/compute_cluster/imem_to_axi.sv
+          - rtl/compute_cluster/compute_cluster.sv
+
     - target: any(sim, gowin_sim, xilinx_sim)
       files:
-          - test/rand_stream_mst.sv
-          - test/rand_synch_holdable_driver.sv
-          - test/rand_stream_slv.sv
+          - test/util/rand_stream_mst.sv
+          - test/util/rand_synch_holdable_driver.sv
+          - test/util/rand_stream_slv.sv
+          - test/util/axi_sim_mem.sv
 
     - target: sim
       files:
@@ -64,6 +68,8 @@ sources:
           - test/tb_instruction_cache.sv
 
           - test/tb_compute_unit.sv
+
+          - test/tb_compute_cluster.sv
 
     - target: asic
       files:

@@ -38,8 +38,6 @@ jobs:
             .vscode/*
             asic/*
             gowin/*
-            test/rand_stream_mst.sv
-            test/rand_stream_slv.sv
-            test/rand_synch_holdable_driver.sv
+            test/util/*
             verilator/*
             xilinx/*

@@ -1,50 +1,94 @@
 name: Synthesis
 on: [push, pull_request, workflow_dispatch]
 jobs:
-    gowin-yosys:
+    cu-gowin-yosys:
         runs-on: self-hosted
         steps:
             - name: Checkout
               uses: actions/checkout@master
             - name: Yosys Synthesis for Gowin FPGA
-              run: make gowin-yosys
+              run: make gowin-yosys TOP=compute_unit
             - name: Report Area
               run: make gowin-report
+            - name: Generating report...
+              run: DISPLAY=:1.0 make gowin-yosys-gen-report TOP=compute_unit
+            - name: Show report
+              run: make gowin-yosys-report TOP=compute_unit
             - name: Post Synthesis Simulation
               run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
-            - name: Generating report...
-              run: DISPLAY=:1.0 make gowin-yosys-gen-report
-            - name: Show report
-              run: make gowin-yosys-report
 
-    gowin-eda:
+    cu-gowin-eda:
         runs-on: self-hosted
         steps:
             - name: Checkout
               uses: actions/checkout@master
             - name: Gowin EDA Synthesis for Gowin FPGA
-              run: DISPLAY=:1.0 make gowin-eda
+              run: DISPLAY=:1.0 make gowin-eda TOP=compute_unit
             - name: Show report
-              run: make gowin-eda-report
+              run: make gowin-eda-report TOP=compute_unit
 
-    xilinx-yosys:
+    cu-xilinx-yosys:
         runs-on: self-hosted
         steps:
             - name: Checkout
               uses: actions/checkout@master
             - name: Yosys Synthesis for Xilinx FPGA
-              run: make xilinx-yosys
+              run: make xilinx-yosys TOP=compute_unit
             - name: Report Area
               run: tail -n 32 xilinx/yosys.log
             - name: Post Synthesis Simulation
               run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
 
-    asic:
+    cu-asic:
         runs-on: self-hosted
         steps:
             - name: Checkout
               uses: actions/checkout@master
             - name: Synthesis for ASIC
-              run: make asic
+              run: make asic TOP=compute_unit
             - name: Report Area
-              run: make asic-report
+              run: make asic-report TOP=compute_unit
+
+    cc-gowin-yosys:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Yosys Synthesis for Gowin FPGA
+              run: make gowin-yosys TOP=compute_cluster
+            - name: Report Area
+              run: make gowin-report TOP=compute_cluster
+            - name: Generating report...
+              run: DISPLAY=:1.0 make gowin-yosys-gen-report TOP=compute_cluster
+            - name: Show report
+              run: make gowin-yosys-report TOP=compute_cluster
+
+    cc-gowin-eda:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Gowin EDA Synthesis for Gowin FPGA
+              run: DISPLAY=:1.0 make gowin-eda TOP=compute_cluster
+            - name: Show report
+              run: make gowin-eda-report TOP=compute_cluster
+
+    cc-xilinx-yosys:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Yosys Synthesis for Xilinx FPGA
+              run: make xilinx-yosys TOP=compute_cluster
+            - name: Report Area
+              run: tail -n 32 xilinx/yosys.log
+
+    cc-asic:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Synthesis for ASIC
+              run: make asic TOP=compute_cluster
+            - name: Report Area
+              run: make asic-report TOP=compute_cluster

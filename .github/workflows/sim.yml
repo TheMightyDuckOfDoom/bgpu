@@ -11,6 +11,15 @@ jobs:
       - name: Sweep Parameters in Testbench
         run: ./sweep.sh
 
+  # Main testbench for compute cluster
+  tb_compute_cluster:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_compute_cluster
+
   # Main testbench for compute unit
   tb_compute_unit:
     runs-on: self-hosted
