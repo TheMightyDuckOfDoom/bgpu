@@ -128,7 +128,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     mem_rsp_t mem_rsp_q,       mem_rsp_d;
 
     // Test program
-    enc_inst_t test_program [12] = {
+    enc_inst_t test_program [7] = {
         // Calculate byte offset from thread ID and warp ID
         '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
 
@@ -146,11 +146,6 @@ module tb_compute_unit import bgpu_pkg::*; #(
         '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 5, op1: 0, op2: 2}, // [reg0] = reg4
 
         // NOPs
-        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
-        '{eu: EU_IU,  subtype: IU_ADDI,        dst: 0, op1: 0, op2: 0}, // reg0 = reg0 + 0
         '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}  // STOP warps
     };
 

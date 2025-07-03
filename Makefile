@@ -165,6 +165,7 @@ gowin-report:
 clean: asic-clean gowin-clean xilinx-clean verilator-clean
 	rm -f *.vcd
 	rm -f *.out
+	rm -f *.log
 
 verilator-clean:
 	rm -f  verilator/*.f

@@ -27,7 +27,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // Memory Block size in bytes -> Memory request width
     parameter int unsigned BlockIdxBits = 4,
     /// Width of a memory address
-    parameter int unsigned AddressWidth = 32,
+    parameter int unsigned AddressWidth = 24,
     // Width of the id for requests queue
     parameter int unsigned OutstandingReqIdxWidth = 3,
     // Number of cache lines in the instruction cache
@@ -40,10 +40,11 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     parameter int unsigned TblockIdBits = 8,
 
     parameter int unsigned TblocksToLaunch = 33,
-    parameter time         ClkPeriod    = 10ns,
-    parameter time         AcqDelay     = 9ns,
-    parameter time         ApplDelay    = 1ns,
-    parameter int unsigned MaxSimCycles = 1000
+    parameter int unsigned SimMemBlocks    = 65,
+    parameter time         ClkPeriod       = 10ns,
+    parameter time         ApplDelay       = 1ns,
+    parameter time         AcqDelay        = 9ns,
+    parameter int unsigned MaxSimCycles    = 1000
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -61,26 +62,25 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // Unique ID for each compute unit
     localparam int unsigned ImemAxiIdWidth = ComputeUnits > 1 ? $clog2(ComputeUnits) + 1 : 1;
     // Unique ID for each compute unit + Outstanding request idx width
-    localparam int unsigned MemAxiIdWidth = ImemAxiIdWidth + OutstandingReqIdxWidth;
+    localparam int unsigned MemAxiIdWidth = $clog2(ComputeUnits) + OutstandingReqIdxWidth
+                                            + ThreadIdxWidth;
 
     // #######################################################################################
     // # Type Definitions                                                                    #
     // #######################################################################################
 
-    typedef logic [7:0] byte_t;
-
-    typedef logic  [          PcWidth-1:0] pc_t;
-    typedef logic  [        WarpWidth-1:0] act_mask_t;
-    typedef logic  [      RegIdxWidth-1:0] reg_idx_t;
-    typedef logic  [WidWidth+TagWidth-1:0] iid_t;
-    typedef logic  [   BlockAddrWidth-1:0] block_addr_t;
-    typedef logic  [       BlockWidth-1:0] block_mask_t;
-    typedef byte_t [       BlockWidth-1:0] block_data_t;
-    typedef logic  [      ICAddrWidth-1:0] imem_addr_t;
-    typedef logic  [     AddressWidth-1:0] addr_t;
-    typedef logic  [    TblockIdxBits-1:0] tblock_idx_t;
-    typedef logic  [     TblockIdBits-1:0] tblock_id_t;
-    typedef logic  [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
+    typedef logic [          PcWidth-1:0] pc_t;
+    typedef logic [        WarpWidth-1:0] act_mask_t;
+    typedef logic [      RegIdxWidth-1:0] reg_idx_t;
+    typedef logic [WidWidth+TagWidth-1:0] iid_t;
+    typedef logic [   BlockAddrWidth-1:0] block_addr_t;
+    typedef logic [       BlockWidth-1:0] block_mask_t;
+    typedef logic [  BlockWidth * 8 -1:0] block_data_t;
+    typedef logic [      ICAddrWidth-1:0] imem_addr_t;
+    typedef logic [     AddressWidth-1:0] addr_t;
+    typedef logic [    TblockIdxBits-1:0] tblock_idx_t;
+    typedef logic [     TblockIdBits-1:0] tblock_id_t;
+    typedef logic [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
 
     typedef struct packed {
         eu_e           eu;
@@ -125,10 +125,9 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     tblock_id_t tblock_done_id;
 
     // Test program
-    enc_inst_t test_program [8] = {
+    enc_inst_t test_program [7] = {
         // Calculate byte offset from thread ID and warp ID
         '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
-        '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}, // STOP thread
 
         // Load data from memory
         '{eu: EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 1, op1: 0, op2: 0}, // reg1 = [reg0]
@@ -152,6 +151,10 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // Instruction Memory AXI interface
     imem_axi_req_t  imem_axi_req;
     imem_axi_resp_t imem_axi_rsp;
+
+    // Memory AXI interface
+    mem_axi_req_t  mem_axi_req;
+    mem_axi_resp_t mem_axi_rsp;
 
     // #######################################################################################
     // # Clock generation                                                                    #
@@ -192,7 +195,10 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         .TblockIdBits          ( TblockIdBits           ),
 
         .imem_axi_req_t ( imem_axi_req_t  ),
-        .imem_axi_resp_t( imem_axi_resp_t )
+        .imem_axi_resp_t( imem_axi_resp_t ),
+
+        .mem_axi_req_t ( mem_axi_req_t  ),
+        .mem_axi_resp_t( mem_axi_resp_t )
     `endif
     ) i_cc (
         .clk_i ( clk   ),
@@ -210,7 +216,10 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         .tblock_done_id_o   ( tblock_done_id ),
 
         .imem_req_o( imem_axi_req ),
-        .imem_rsp_i( imem_axi_rsp )
+        .imem_rsp_i( imem_axi_rsp ),
+
+        .mem_req_o ( mem_axi_req ),
+        .mem_rsp_i ( mem_axi_rsp )
     );
 
     // #######################################################################################
@@ -272,7 +281,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // # Memory                                                                              #
     // #######################################################################################
 
-    // Initialize memory
+    // Initialize instruction memory
     initial begin : init_imem
         enc_inst_t inst;
         $display("Initializing instruction memory with %0d instructions.", $size(test_program));
@@ -294,7 +303,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         .axi_req_t        ( imem_axi_req_t     ),
         .axi_rsp_t        ( imem_axi_resp_t    ),
         .WarnUninitialized( 1'b1               ),
-        .UninitializedData( "ones"             ),
+        .UninitializedData( "ones"             ), // Stops threads if they fetch uninitialized data
         .ClearErrOnAccess ( 1'b0               ),
         .ApplDelay        ( ApplDelay          ),
         .AcqDelay         ( AcqDelay           )
@@ -305,21 +314,102 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         .axi_req_i( imem_axi_req ),
         .axi_rsp_o( imem_axi_rsp ),
 
-        .mon_w_valid_o(),
-        .mon_w_addr_o(),
-        .mon_w_data_o(),
-        .mon_w_id_o(),
-        .mon_w_user_o(),
-        .mon_w_beat_count_o(),
-        .mon_w_last_o(),
+        .mon_w_valid_o     ( /* Unused */ ),
+        .mon_w_addr_o      ( /* Unused */ ),
+        .mon_w_data_o      ( /* Unused */ ),
+        .mon_w_id_o        ( /* Unused */ ),
+        .mon_w_user_o      ( /* Unused */ ),
+        .mon_w_beat_count_o( /* Unused */ ),
+        .mon_w_last_o      ( /* Unused */ ),
 
-        .mon_r_valid_o(),
-        .mon_r_addr_o(),
-        .mon_r_data_o(),
-        .mon_r_id_o(),
-        .mon_r_user_o(),
-        .mon_r_beat_count_o(),
-        .mon_r_last_o()
+        .mon_r_valid_o     ( /* Unused */ ),
+        .mon_r_addr_o      ( /* Unused */ ),
+        .mon_r_data_o      ( /* Unused */ ),
+        .mon_r_id_o        ( /* Unused */ ),
+        .mon_r_user_o      ( /* Unused */ ),
+        .mon_r_beat_count_o( /* Unused */ ),
+        .mon_r_last_o      ( /* Unused */ )
+    );
+
+    // Instruction Memory Monitor
+    axi_dumper #(
+        .BusName   ( "imem"          ),
+        .LogAW     ( 1'b1            ),
+        .LogAR     ( 1'b1            ),
+        .LogW      ( 1'b1            ),
+        .LogB      ( 1'b1            ),
+        .LogR      ( 1'b1            ),
+        .axi_req_t ( imem_axi_req_t  ),
+        .axi_resp_t( imem_axi_resp_t )
+    ) i_imem_monitor (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
+
+        .axi_req_i ( imem_axi_req ),
+        .axi_resp_i( imem_axi_rsp )
+    );
+
+    // Initialize data memory
+    initial begin : init_mem
+        for(int unsigned i = 0; i < SimMemBlocks * BlockWidth; i++) begin
+            i_mem.mem[addr_t'(i)] = i[7:0];
+        end
+    end : init_mem
+
+    // Data Memory
+    axi_sim_mem #(
+        .AddrWidth        ( AddressWidth        ),
+        .DataWidth        ( BlockWidth * 8      ),
+        .IdWidth          ( MemAxiIdWidth       ),
+        .UserWidth        ( 1                   ),
+        .NumPorts         ( 1                   ),
+        .axi_req_t        ( mem_axi_req_t       ),
+        .axi_rsp_t        ( mem_axi_resp_t      ),
+        .WarnUninitialized( 1'b1                ),
+        .UninitializedData( "ones"              ),
+        .ClearErrOnAccess ( 1'b0                ),
+        .ApplDelay        ( ApplDelay           ),
+        .AcqDelay         ( AcqDelay            )
+    ) i_mem (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
+
+        .axi_req_i( mem_axi_req ),
+        .axi_rsp_o( mem_axi_rsp ),
+
+        .mon_w_valid_o     ( /* Unused */ ),
+        .mon_w_addr_o      ( /* Unused */ ),
+        .mon_w_data_o      ( /* Unused */ ),
+        .mon_w_id_o        ( /* Unused */ ),
+        .mon_w_user_o      ( /* Unused */ ),
+        .mon_w_beat_count_o( /* Unused */ ),
+        .mon_w_last_o      ( /* Unused */ ),
+
+        .mon_r_valid_o     ( /* Unused */ ),
+        .mon_r_addr_o      ( /* Unused */ ),
+        .mon_r_data_o      ( /* Unused */ ),
+        .mon_r_id_o        ( /* Unused */ ),
+        .mon_r_user_o      ( /* Unused */ ),
+        .mon_r_beat_count_o( /* Unused */ ),
+        .mon_r_last_o      ( /* Unused */ )
+    );
+
+    // Memory Monitor
+    axi_dumper #(
+        .BusName   ( "mem"          ),
+        .LogAW     ( 1'b1           ),
+        .LogAR     ( 1'b1           ),
+        .LogW      ( 1'b1           ),
+        .LogB      ( 1'b1           ),
+        .LogR      ( 1'b1           ),
+        .axi_req_t ( mem_axi_req_t  ),
+        .axi_resp_t( mem_axi_resp_t )
+    ) i_mem_monitor (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
+
+        .axi_req_i ( mem_axi_req ),
+        .axi_resp_i( mem_axi_rsp )
     );
 
     // ########################################################################################
@@ -358,9 +448,19 @@ module tb_compute_cluster import bgpu_pkg::*; #(
 
     // Stop simulation
     initial begin
+        block_data_t block_data;
+
         wait(stop);
+
         $display("Stopping simulation...");
         $dumpflush;
+
+        for(int block = 0; block < SimMemBlocks; block++) begin
+            for(int b = 0; b < BlockWidth; b++) begin
+                block_data[b * 8 +: 8] = i_mem.mem[addr_t'(block * BlockWidth + b)];
+            end
+            $display("Memory block[%0d]: %h", block, block_data);
+        end
 
         if (error)
             $fatal(1);

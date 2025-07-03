@@ -11,7 +11,6 @@
 
 /* verilator lint_off WIDTHEXPAND */
 /* verilator lint_off WIDTHTRUNC  */
-/* verilator lint_off INITIALDLY  */
 
 /// Infinite (Simulation-Only) Memory with AXI Slave Port
 ///
@@ -329,34 +328,34 @@ module axi_sim_mem #(
       wait (rst_ni);
       forever begin
         @(posedge clk_i);
-        mon_w_valid_o[i] <= #(ApplDelay) mon_w[i].valid;
-        mon_w_addr_o[i] <= #(ApplDelay) mon_w[i].addr;
-        mon_w_data_o[i] <= #(ApplDelay) mon_w[i].data;
-        mon_w_id_o[i] <= #(ApplDelay) mon_w[i].id;
-        mon_w_user_o[i] <= #(ApplDelay) mon_w[i].user;
-        mon_w_beat_count_o[i] <= #(ApplDelay) mon_w[i].beat_count;
-        mon_w_last_o[i] <= #(ApplDelay) mon_w[i].last;
-        mon_r_valid_o[i] <= #(ApplDelay) mon_r[i].valid;
-        mon_r_addr_o[i] <= #(ApplDelay) mon_r[i].addr;
-        mon_r_data_o[i] <= #(ApplDelay) mon_r[i].data;
-        mon_r_id_o[i] <= #(ApplDelay) mon_r[i].id;
-        mon_r_user_o[i] <= #(ApplDelay) mon_r[i].user;
-        mon_r_beat_count_o[i] <= #(ApplDelay) mon_r[i].beat_count;
-        mon_r_last_o[i] <= #(ApplDelay) mon_r[i].last;
+        #ApplDelay;
+        mon_w_valid_o[i] = mon_w[i].valid;
+        mon_w_addr_o[i] = mon_w[i].addr;
+        mon_w_data_o[i] = mon_w[i].data;
+        mon_w_id_o[i] = mon_w[i].id;
+        mon_w_user_o[i] = mon_w[i].user;
+        mon_w_beat_count_o[i] = mon_w[i].beat_count;
+        mon_w_last_o[i] = mon_w[i].last;
+        mon_r_valid_o[i] = mon_r[i].valid;
+        mon_r_addr_o[i] = mon_r[i].addr;
+        mon_r_data_o[i] = mon_r[i].data;
+        mon_r_id_o[i] = mon_r[i].id;
+        mon_r_user_o[i] = mon_r[i].user;
+        mon_r_beat_count_o[i] = mon_r[i].beat_count;
+        mon_r_last_o[i] = mon_r[i].last;
       end
     end
   end
 
   // Parameter Assertions
   initial begin
-    assert (AddrWidth != 0) else $fatal("AddrWidth must be non-zero!", 1);
-    assert (DataWidth != 0) else $fatal("DataWidth must be non-zero!", 1);
-    assert (IdWidth != 0) else $fatal("IdWidth must be non-zero!", 1);
-    assert (UserWidth != 0) else $fatal("UserWidth must be non-zero!", 1);
+    assert (AddrWidth != 0) else $error("AddrWidth must be non-zero!", 1);
+    assert (DataWidth != 0) else $error("DataWidth must be non-zero!", 1);
+    assert (IdWidth != 0) else $error("IdWidth must be non-zero!", 1);
+    assert (UserWidth != 0) else $error("UserWidth must be non-zero!", 1);
   end
 
 endmodule
 
 /* verilator lint_off WIDTHEXPAND */
 /* verilator lint_off WIDTHTRUNC  */
-/* verilator lint_off INITIALDLY  */

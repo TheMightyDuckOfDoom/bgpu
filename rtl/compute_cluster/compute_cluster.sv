@@ -51,6 +51,10 @@ module compute_cluster #(
     parameter type imem_axi_req_t  = logic,
     parameter type imem_axi_resp_t = logic,
 
+    // Memory AXI Request and Response types
+    parameter type mem_axi_req_t  = logic,
+    parameter type mem_axi_resp_t = logic,
+
     /// Dependent parameter, do **not** overwrite.
     parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
     parameter type tblock_id_t  = logic [ TblockIdBits-1:0],
@@ -76,7 +80,11 @@ module compute_cluster #(
 
     /// Instruction Memory AXI Request and Response
     output imem_axi_req_t  imem_req_o,
-    input  imem_axi_resp_t imem_rsp_i
+    input  imem_axi_resp_t imem_rsp_i,
+
+    // Memory AXI Request and Response
+    output mem_axi_req_t  mem_req_o,
+    input  mem_axi_resp_t mem_rsp_i
 );
 
     // I-Cacheline width in bits
@@ -90,9 +98,26 @@ module compute_cluster #(
     // AXI ID width for the Compute Unit IMEM
     localparam int unsigned ImemCcAxiIdWidth = ComputeUnits > 1 ? $clog2(ComputeUnits) + 1 : 1;
 
+    // Widht of the data block address -> blockwise address
+    localparam int unsigned BlockAddrWidth = AddressWidth - BlockIdxBits;
+    // Width of the data block in bytes
+    localparam int unsigned BlockWidth     = 1 << BlockIdxBits;
+
+    // Width of the thread idx inside a warp
+    localparam int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
+
+    // Width of the memory axi id
+    localparam int unsigned MemCcAxiIdWidth = $clog2(ComputeUnits) + OutstandingReqIdxWidth
+                                                + ThreadIdxWidth;
+
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
+
+    typedef logic [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
+    typedef logic [BlockAddrWidth-1:0] block_addr_t;
+    typedef logic [    BlockWidth-1:0] block_mask_t;
+    typedef logic [BlockWidth * 8-1:0] block_data_t;
 
     typedef logic [ImemAddrWidth-1:0] imem_addr_t;
     typedef logic [ImemDataWidth-1:0] imem_data_t;
@@ -107,6 +132,11 @@ module compute_cluster #(
     `AXI_TYPEDEF_ALL(cc_imem_axi, imem_axi_addr_t, imem_cc_axi_id_t, imem_data_t, imem_data_strb_t,
         logic)
 
+    typedef logic [MemCcAxiIdWidth-1:0] mem_cc_axi_id_t;
+
+    `AXI_TYPEDEF_ALL(cu_mem_axi, addr_t, req_id_t,        block_data_t, block_mask_t, logic)
+    `AXI_TYPEDEF_ALL(cc_mem_axi, addr_t, mem_cc_axi_id_t, block_data_t, block_mask_t, logic)
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
@@ -118,46 +148,120 @@ module compute_cluster #(
     logic       [ComputeUnits-1:0] cu_done_ready, cu_done;
     tblock_id_t [ComputeUnits-1:0] cu_done_id;
 
-    // IMEM AXI
+    // Compute Unit Instruction Memory Interface
     cu_imem_axi_req_t  [ComputeUnits-1:0] cu_imem_axi_req;
     cu_imem_axi_resp_t [ComputeUnits-1:0] cu_imem_axi_rsp;
 
-    // Compute Unit IMEM
     logic       [ComputeUnits-1:0] imem_req_valid, imem_ready, imem_rsp_valid;
     imem_addr_t [ComputeUnits-1:0] imem_req_addr;
     imem_data_t [ComputeUnits-1:0] imem_rsp_data;
 
+    // Compute Unit Memory Interface
+    cu_mem_axi_req_t  [ComputeUnits-1:0] cu_mem_axi_req;
+    cu_mem_axi_resp_t [ComputeUnits-1:0] cu_mem_axi_rsp;
+
+    logic        [ComputeUnits-1:0] mem_req_valid, mem_ready, mem_rsp_valid;
+    req_id_t     [ComputeUnits-1:0] mem_req_id, mem_rsp_id;
+    block_addr_t [ComputeUnits-1:0] mem_req_addr;
+    block_mask_t [ComputeUnits-1:0] mem_req_we_mask;
+    block_data_t [ComputeUnits-1:0] mem_req_wdata, mem_rsp_data;
+
     // #######################################################################################
-    // # Data Cache and AXI Adapter                                                          #
+    // # Compute Units MEM to AXI - Adapter and Multiplexer                                  #
     // #######################################################################################
+
+    axi_mux #(
+        .SlvAxiIDWidth( $bits(req_id_t)      ),
+        .slv_aw_chan_t( cu_mem_axi_aw_chan_t ),
+        .mst_aw_chan_t( cc_mem_axi_aw_chan_t ),
+        .w_chan_t     ( cu_mem_axi_w_chan_t  ),
+        .slv_b_chan_t ( cu_mem_axi_b_chan_t  ),
+        .mst_b_chan_t ( cc_mem_axi_b_chan_t  ),
+        .slv_ar_chan_t( cu_mem_axi_ar_chan_t ),
+        .mst_ar_chan_t( cc_mem_axi_ar_chan_t ),
+        .slv_r_chan_t ( cu_mem_axi_r_chan_t  ),
+        .mst_r_chan_t ( cc_mem_axi_r_chan_t  ),
+        .slv_req_t    ( cu_mem_axi_req_t     ),
+        .slv_resp_t   ( cu_mem_axi_resp_t    ),
+        .mst_req_t    ( cc_mem_axi_req_t     ),
+        .mst_resp_t   ( cc_mem_axi_resp_t    ),
+        .NoSlvPorts   ( ComputeUnits         ),
+        .MaxWTrans    ( ComputeUnits         ), // This might need adjustment
+        .FallThrough  ( 1'b1                 ),
+        .SpillAw      ( 1'b0                 ),
+        .SpillW       ( 1'b0                 ),
+        .SpillB       ( 1'b0                 ),
+        .SpillAr      ( 1'b0                 ),
+        .SpillR       ( 1'b0                 )
+    ) i_mem_mux (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+        .test_i( 1'b0   ),
+
+        .slv_reqs_i ( cu_mem_axi_req ),
+        .slv_resps_o( cu_mem_axi_rsp ),
+
+        .mst_req_o ( mem_req_o ),
+        .mst_resp_i( mem_rsp_i )
+    );
+
+    for(genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_mem_to_axi
+        mem_to_axi #(
+            .axi_req_t ( cu_mem_axi_req_t  ),
+            .axi_rsp_t ( cu_mem_axi_resp_t ),
+            .axi_addr_t( addr_t            ),
+
+            .req_id_t    ( req_id_t     ),
+            .block_addr_t( block_addr_t ),
+            .block_mask_t( block_mask_t ),
+            .block_data_t( block_data_t )
+        ) i_mem_to_axi (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .mem_ready_o      ( mem_ready      [cu] ),
+            .mem_req_valid_i  ( mem_req_valid  [cu] ),
+            .mem_req_id_i     ( mem_req_id     [cu] ),
+            .mem_req_addr_i   ( mem_req_addr   [cu] ),
+            .mem_req_we_mask_i( mem_req_we_mask[cu] ),
+            .mem_req_wdata_i  ( mem_req_wdata  [cu] ),
+
+            .mem_rsp_valid_o( mem_rsp_valid[cu] ),
+            .mem_rsp_id_o   ( mem_rsp_id   [cu] ),
+            .mem_rsp_data_o ( mem_rsp_data [cu] ),
+
+            .axi_req_o( cu_mem_axi_req[cu] ),
+            .axi_rsp_i( cu_mem_axi_rsp[cu] )
+        );
+    end : gen_mem_to_axi
 
     // #######################################################################################
     // # Compute Units IMEM to AXI - Adapter and Multiplexer                                 #
     // #######################################################################################
 
     axi_mux #(
-        .SlvAxiIDWidth ( 1                      ),
-        .slv_aw_chan_t ( cu_imem_axi_aw_chan_t  ),
-        .mst_aw_chan_t ( cc_imem_axi_aw_chan_t  ),
-        .w_chan_t      ( cu_imem_axi_w_chan_t   ),
-        .slv_b_chan_t  ( cu_imem_axi_b_chan_t   ),
-        .mst_b_chan_t  ( cc_imem_axi_b_chan_t   ),
-        .slv_ar_chan_t ( cu_imem_axi_ar_chan_t  ),
-        .mst_ar_chan_t ( cc_imem_axi_ar_chan_t  ),
-        .slv_r_chan_t  ( cu_imem_axi_r_chan_t   ),
-        .mst_r_chan_t  ( cc_imem_axi_r_chan_t   ),
-        .slv_req_t     ( cu_imem_axi_req_t      ),
-        .slv_resp_t    ( cu_imem_axi_resp_t     ),
-        .mst_req_t     ( cc_imem_axi_req_t      ),
-        .mst_resp_t    ( cc_imem_axi_resp_t     ),
-        .NoSlvPorts    ( ComputeUnits           ),
-        .MaxWTrans     ( 1                      ),
-        .FallThrough   ( 1'b1                   ),
-        .SpillAw       ( 1'b0                   ),
-        .SpillW        ( 1'b0                   ),
-        .SpillB        ( 1'b0                   ),
-        .SpillAr       ( 1'b0                   ),
-        .SpillR        ( 1'b0                   )
+        .SlvAxiIDWidth( 1                     ),
+        .slv_aw_chan_t( cu_imem_axi_aw_chan_t ),
+        .mst_aw_chan_t( cc_imem_axi_aw_chan_t ),
+        .w_chan_t     ( cu_imem_axi_w_chan_t  ),
+        .slv_b_chan_t ( cu_imem_axi_b_chan_t  ),
+        .mst_b_chan_t ( cc_imem_axi_b_chan_t  ),
+        .slv_ar_chan_t( cu_imem_axi_ar_chan_t ),
+        .mst_ar_chan_t( cc_imem_axi_ar_chan_t ),
+        .slv_r_chan_t ( cu_imem_axi_r_chan_t  ),
+        .mst_r_chan_t ( cc_imem_axi_r_chan_t  ),
+        .slv_req_t    ( cu_imem_axi_req_t     ),
+        .slv_resp_t   ( cu_imem_axi_resp_t    ),
+        .mst_req_t    ( cc_imem_axi_req_t     ),
+        .mst_resp_t   ( cc_imem_axi_resp_t    ),
+        .NoSlvPorts   ( ComputeUnits          ),
+        .MaxWTrans    ( 1                     ),
+        .FallThrough  ( 1'b1                  ),
+        .SpillAw      ( 1'b0                  ),
+        .SpillW       ( 1'b0                  ),
+        .SpillB       ( 1'b0                  ),
+        .SpillAr      ( 1'b0                  ),
+        .SpillR       ( 1'b0                  )
     ) i_imem_mux (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
@@ -177,7 +281,7 @@ module compute_cluster #(
             .axi_addr_t ( imem_axi_addr_t    ),
             .imem_addr_t( imem_addr_t        ),
             .imem_data_t( imem_data_t        )
-        ) i_imem_to_obi (
+        ) i_imem_to_axi (
             .imem_ready_o    ( imem_ready    [cu] ),
             .imem_req_valid_i( imem_req_valid[cu] ),
             .imem_req_addr_i ( imem_req_addr [cu] ),
@@ -275,16 +379,16 @@ module compute_cluster #(
             .imem_rsp_valid_i( imem_rsp_valid[cu] ),
             .imem_rsp_data_i ( imem_rsp_data [cu] ),
 
-            .mem_ready_i      (  ),
-            .mem_req_valid_o  (  ),
-            .mem_req_id_o     (  ),
-            .mem_req_addr_o   (  ),
-            .mem_req_we_mask_o(  ),
-            .mem_req_wdata_o  (  ),
+            .mem_ready_i      ( mem_ready      [cu] ),
+            .mem_req_valid_o  ( mem_req_valid  [cu] ),
+            .mem_req_id_o     ( mem_req_id     [cu] ),
+            .mem_req_addr_o   ( mem_req_addr   [cu] ),
+            .mem_req_we_mask_o( mem_req_we_mask[cu] ),
+            .mem_req_wdata_o  ( mem_req_wdata  [cu] ),
 
-            .mem_rsp_valid_i(  ),
-            .mem_rsp_id_i   (  ),
-            .mem_rsp_data_i (  )
+            .mem_rsp_valid_i( mem_rsp_valid[cu] ),
+            .mem_rsp_id_i   ( mem_rsp_id   [cu] ),
+            .mem_rsp_data_i ( mem_rsp_data [cu] )
         );
     end : gen_compute_units
 
