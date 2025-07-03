@@ -55,13 +55,13 @@ jobs:
             - name: Checkout
               uses: actions/checkout@master
             - name: Yosys Synthesis for Gowin FPGA
-              run: make gowin-yosys TOP=compute_cluster
+              run: make gowin-yosys TOP=compute_cluster_synth_wrapper
             - name: Report Area
-              run: make gowin-report TOP=compute_cluster
+              run: make gowin-report TOP=compute_cluster_synth_wrapper
             - name: Generating report...
-              run: DISPLAY=:1.0 make gowin-yosys-gen-report TOP=compute_cluster
+              run: DISPLAY=:1.0 make gowin-yosys-gen-report TOP=compute_cluster_synth_wrapper
             - name: Show report
-              run: make gowin-yosys-report TOP=compute_cluster
+              run: make gowin-yosys-report TOP=compute_cluster_synth_wrapper
 
     cc-gowin-eda:
         runs-on: self-hosted
@@ -69,9 +69,9 @@ jobs:
             - name: Checkout
               uses: actions/checkout@master
             - name: Gowin EDA Synthesis for Gowin FPGA
-              run: DISPLAY=:1.0 make gowin-eda TOP=compute_cluster
+              run: DISPLAY=:1.0 make gowin-eda TOP=compute_cluster_synth_wrapper
             - name: Show report
-              run: make gowin-eda-report TOP=compute_cluster
+              run: make gowin-eda-report TOP=compute_cluster_synth_wrapper
 
     cc-xilinx-yosys:
         runs-on: self-hosted
@@ -79,7 +79,7 @@ jobs:
             - name: Checkout
               uses: actions/checkout@master
             - name: Yosys Synthesis for Xilinx FPGA
-              run: make xilinx-yosys TOP=compute_cluster
+              run: make xilinx-yosys TOP=compute_cluster_synth_wrapper
             - name: Report Area
               run: tail -n 32 xilinx/yosys.log
 
@@ -89,6 +89,6 @@ jobs:
             - name: Checkout
               uses: actions/checkout@master
             - name: Synthesis for ASIC
-              run: make asic TOP=compute_cluster
+              run: make asic TOP=compute_cluster_synth_wrapper
             - name: Report Area
-              run: make asic-report TOP=compute_cluster
+              run: make asic-report TOP=compute_cluster_synth_wrapper

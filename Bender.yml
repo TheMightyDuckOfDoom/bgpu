@@ -45,6 +45,7 @@ sources:
           - rtl/compute_cluster/imem_to_axi.sv
           - rtl/compute_cluster/mem_to_axi.sv
           - rtl/compute_cluster/compute_cluster.sv
+          - rtl/compute_cluster/compute_cluster_synth_wrapper.sv
 
     - target: any(sim, gowin_sim, xilinx_sim)
       files:
