@@ -57,7 +57,7 @@ module decoder import bgpu_pkg::*; #(
     assign dec_warp_id_o  = ic_warp_id_i;
 
     // Instruction was decoded if a handshake between Decoder and Dispatcher happend
-    assign dec_decoded_o         = ic_valid_i && dec_stop_warp_o || dec_valid_o && disp_ready_i;
+    assign dec_decoded_o         = ((ic_valid_i && dec_stop_warp_o) || dec_valid_o) && disp_ready_i;
     assign dec_decoded_warp_id_o = dec_warp_id_o;
     assign dec_decoded_next_pc_o = dec_pc_o + 'd1;
 
@@ -66,7 +66,7 @@ module decoder import bgpu_pkg::*; #(
     // Decode instruction
     always_comb begin : decode
         // Default
-        dec_valid_o       = ic_valid_i && !dec_stop_warp_o;
+        dec_valid_o       = ic_valid_i && (!dec_stop_warp_o);
         dec_inst_o        = inst_t'(ic_inst_i[31:24]);
         dec_dst_o         = ic_inst_i[23:16];
 
