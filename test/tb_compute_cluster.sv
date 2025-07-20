@@ -5,7 +5,7 @@
 /// Testbench for Compute Cluster
 module tb_compute_cluster import bgpu_pkg::*; #(
     /// Number of Compute Units in the cluster
-    parameter int unsigned ComputeUnits = 2,
+    parameter int unsigned ComputeUnits = 4,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -24,7 +24,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     parameter int unsigned RegIdxWidth = 8,
     /// Width of a register
     parameter int unsigned RegWidth = 32,
-    // Memory Block size in bytes -> Memory request width
+    // Memory Block index width -> Memory request width is 2^BlockIdxBits bytes
     parameter int unsigned BlockIdxBits = 4,
     /// Width of a memory address
     parameter int unsigned AddressWidth = 24,
@@ -39,7 +39,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // How many bits are used to identify a thread block?
     parameter int unsigned TblockIdBits = 8,
 
-    parameter int unsigned TblocksToLaunch = 33,
+    parameter int unsigned TblocksToLaunch = 255,
     parameter int unsigned SimMemBlocks    = 65,
     parameter time         ClkPeriod       = 10ns,
     parameter time         ApplDelay       = 1ns,

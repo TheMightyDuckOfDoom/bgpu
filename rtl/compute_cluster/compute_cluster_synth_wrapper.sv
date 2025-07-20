@@ -33,7 +33,7 @@ module compute_cluster_synth_wrapper #(
     parameter int unsigned RegWidth = 32,
     // Memory Address width in bits
     parameter int unsigned AddressWidth = 32,
-    // Memory Block size in bytes -> Memory request width
+    // Memory Block index width -> Memory request width is 2^BlockIdxBits bytes
     parameter int unsigned BlockIdxBits = 4,
     // Width of the id for requests queue
     parameter int unsigned OutstandingReqIdxWidth = 3,
@@ -328,7 +328,7 @@ module compute_cluster_synth_wrapper #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .warp_free_o          ( warp_free_i           ),
+        .warp_free_o          ( warp_free_o           ),
         .allocate_warp_i      ( allocate_warp_i       ),
         .allocate_pc_i        ( allocate_pc_i         ),
         .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
@@ -336,8 +336,8 @@ module compute_cluster_synth_wrapper #(
         .allocate_tblock_id_i ( allocate_tblock_id_i  ),
 
         .tblock_done_ready_i( tblock_done_ready_i ),
-        .tblock_done_o      ( tblock_done_i       ),
-        .tblock_done_id_o   ( tblock_done_id_i    ),
+        .tblock_done_o      ( tblock_done_o       ),
+        .tblock_done_id_o   ( tblock_done_id_o    ),
 
         .imem_req_o( imem_axi_req ),
         .imem_rsp_i( imem_axi_rsp ),

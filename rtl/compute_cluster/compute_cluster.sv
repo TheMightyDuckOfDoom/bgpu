@@ -34,7 +34,7 @@ module compute_cluster #(
     parameter int unsigned RegWidth = 32,
     // Memory Address width in bits
     parameter int unsigned AddressWidth = 32,
-    // Memory Block size in bytes -> Memory request width
+    // Memory Block index width -> Memory request width is 2^BlockIdxBits bytes
     parameter int unsigned BlockIdxBits = 4,
     // Width of the id for requests queue
     parameter int unsigned OutstandingReqIdxWidth = 3,
@@ -98,7 +98,7 @@ module compute_cluster #(
     // AXI ID width for the Compute Unit IMEM
     localparam int unsigned ImemCcAxiIdWidth = ComputeUnits > 1 ? $clog2(ComputeUnits) + 1 : 1;
 
-    // Widht of the data block address -> blockwise address
+    // Width of the data block address -> blockwise address
     localparam int unsigned BlockAddrWidth = AddressWidth - BlockIdxBits;
     // Width of the data block in bytes
     localparam int unsigned BlockWidth     = 1 << BlockIdxBits;
