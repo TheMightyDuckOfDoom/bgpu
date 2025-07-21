@@ -135,7 +135,7 @@ gowin-eda: gowin/gowin-eda.f $(SRCS) gowin/scripts/eda.tcl
 	echo "source gowin/scripts/eda.tcl" >> gowin/run_eda.tcl
 	mkdir -p gowin/out
 	morty -f gowin/gowin-eda.f -D SYNTHESIS --top $(TOP) > gowin/out/pickled.sv
-	LD_LIBRARY_PATH=${GOWIN_EDA}/lib ${GOWIN_EDA}/bin/gw_sh gowin/run_eda.tcl
+	gowin/run_eda.sh ${GOWIN_EDA} gowin/run_eda.tcl
 
 gowin-eda-report:
 	lynx gowin/out/$(TOP)/impl/gwsynthesis/$(TOP)_syn.rpt.html -dump -width 256 > gowin/gowin_eda_report.rpt
@@ -147,7 +147,7 @@ gowin-yosys-gen-report: gowin/scripts/yosys_timing_eda.tcl
 	echo "set top_design $(TOP)"  >  gowin/run_timing.tcl
 	echo "source gowin/scripts/yosys_timing_eda.tcl" >> gowin/run_timing.tcl
 	mkdir -p gowin/out
-	LD_LIBRARY_PATH=${GOWIN_EDA}/lib ${GOWIN_EDA}/bin/gw_sh gowin/run_timing.tcl
+	gowin/run_eda.sh ${GOWIN_EDA} gowin/run_timing.tcl
 
 gowin-yosys-report:
 	lynx gowin/out/$(TOP)_yosys/impl/gwsynthesis/$(TOP)_yosys_syn.rpt.html -dump -width 256 > gowin/gowin_yosys_report.rpt
