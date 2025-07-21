@@ -7,6 +7,7 @@
 /// Compute Cluster
 // Contains:
 // - Multiple Compute Units
+// - Compute Unit to AXI adapters
 module compute_cluster #(
     /// Number of Compute Units in the cluster
     parameter int unsigned ComputeUnits = 1,
@@ -187,12 +188,12 @@ module compute_cluster #(
         .mst_resp_t   ( cc_mem_axi_resp_t    ),
         .NoSlvPorts   ( ComputeUnits         ),
         .MaxWTrans    ( ComputeUnits         ), // This might need adjustment
-        .FallThrough  ( 1'b1                 ),
-        .SpillAw      ( 1'b0                 ),
-        .SpillW       ( 1'b0                 ),
-        .SpillB       ( 1'b0                 ),
-        .SpillAr      ( 1'b0                 ),
-        .SpillR       ( 1'b0                 )
+        .FallThrough  ( 1'b0                 ),
+        .SpillAw      ( 1'b1                 ),
+        .SpillW       ( 1'b1                 ),
+        .SpillB       ( 1'b1                 ),
+        .SpillAr      ( 1'b1                 ),
+        .SpillR       ( 1'b1                 )
     ) i_mem_mux (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
