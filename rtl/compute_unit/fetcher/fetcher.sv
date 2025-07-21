@@ -145,7 +145,7 @@ module fetcher #(
     // # Reconvergence Stack                                                                 #
     // #######################################################################################
 
-    dummy_reconvergence_stack #(
+    multi_warp_reconvergence_stack #(
         .PcWidth      ( PcWidth       ),
         .NumWarps     ( NumWarps      ),
         .WarpWidth    ( WarpWidth     ),

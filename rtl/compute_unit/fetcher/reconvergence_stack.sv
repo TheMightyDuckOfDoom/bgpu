@@ -24,9 +24,10 @@ module reconvergence_stack #(
     input pc_t  init_pc_i,
 
     // To / From Fetcher
-    input  logic selected_for_fetch_i,
-    output logic ready_for_fetch_o,
-    output pc_t  fetch_pc_o,
+    input  logic      selected_for_fetch_i,
+    output logic      ready_for_fetch_o,
+    output pc_t       fetch_pc_o,
+    output act_mask_t fetch_active_mask_o,
 
     // From Decoder
     input logic instruction_decoded_i,
@@ -141,8 +142,12 @@ module reconvergence_stack #(
 
     // Ready for fetching
     assign ready_for_fetch_o = ready_for_fetch_q;
+
     // Next PC for fetching -> PC of the current stack entry
-    assign fetch_pc_o        = stack_q[stack_ptr_q].pc;
+    assign fetch_pc_o = stack_q[stack_ptr_q].pc;
+
+    // Active mask for fetching -> active mask of the current stack entry
+    assign fetch_active_mask_o = stack_q[stack_ptr_q].active_mask;
 
     // #######################################################################################
     // # Sequential Logic                                                                    #
