@@ -17,8 +17,9 @@ sources:
 
     - target: not(any(post_synth, post_layout))
       files:
-          - rtl/compute_unit/dummy_reconvergence_stack.sv
-          - rtl/compute_unit/fetcher.sv
+          - rtl/compute_unit/fetcher/dummy_reconvergence_stack.sv
+          - rtl/compute_unit/fetcher/fetcher.sv
+
           - rtl/compute_unit/instruction_cache.sv
           - rtl/compute_unit/decoder.sv
       
