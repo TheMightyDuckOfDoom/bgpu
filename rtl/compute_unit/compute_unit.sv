@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "common_cells/registers.svh"
+
 /// Compute Unit
 module compute_unit import bgpu_pkg::*; #(
     /// Width of the Program Counter
@@ -191,11 +193,11 @@ module compute_unit import bgpu_pkg::*; #(
     ic_to_dec_data_t ic_to_dec_data;
 
     // Decoder to Fetcher
-    logic dec_to_fetch_decoded;
-    logic dec_to_fetch_stop_warp;
-    logic dec_to_fetch_decoded_branch;
-    wid_t dec_to_fetch_decoded_warp_id;
-    pc_t  dec_to_fetch_decoded_next_pc;
+    logic dec_to_fetch_decoded,         dec_to_fetch_decoded_q;
+    logic dec_to_fetch_stop_warp,       dec_to_fetch_stop_warp_q;
+    logic dec_to_fetch_decoded_branch,  dec_to_fetch_decoded_branch_q;
+    wid_t dec_to_fetch_decoded_warp_id, dec_to_fetch_decoded_warp_id_q;
+    pc_t  dec_to_fetch_decoded_next_pc, dec_to_fetch_decoded_next_pc_q;
 
     // Decoder to Instruction Buffer
     logic dec_to_ib_valid_d, dec_to_ib_valid_q;
@@ -266,11 +268,11 @@ module compute_unit import bgpu_pkg::*; #(
         .fe_act_mask_o( fe_to_ic_data_d.act_mask ),
         .fe_warp_id_o ( fe_to_ic_data_d.warp_id  ),
 
-        .dec_decoded_i        ( dec_to_fetch_decoded         ),
-        .dec_stop_warp_i      ( dec_to_fetch_stop_warp       ),
-        .dec_decoded_branch_i ( dec_to_fetch_decoded_branch  ),
-        .dec_decoded_warp_id_i( dec_to_fetch_decoded_warp_id ),
-        .dec_decoded_next_pc_i( dec_to_fetch_decoded_next_pc ),
+        .dec_decoded_i        ( dec_to_fetch_decoded_q         ),
+        .dec_stop_warp_i      ( dec_to_fetch_stop_warp_q       ),
+        .dec_decoded_branch_i ( dec_to_fetch_decoded_branch_q  ),
+        .dec_decoded_warp_id_i( dec_to_fetch_decoded_warp_id_q ),
+        .dec_decoded_next_pc_i( dec_to_fetch_decoded_next_pc_q ),
 
         .warp_dp_addr_o   ( fe_to_iu_warp_dp_addr    ),
         .warp_tblock_idx_o( fe_to_iu_warp_tblock_idx ),
@@ -280,6 +282,12 @@ module compute_unit import bgpu_pkg::*; #(
         .bru_branching_mask_i( bru_branching_mask ),
         .bru_inactive_pc_i   ( bru_inactive_pc    )
     );
+
+    `FF(dec_to_fetch_decoded_q,         dec_to_fetch_decoded,         '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_stop_warp_q,       dec_to_fetch_stop_warp,       '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_branch_q,  dec_to_fetch_decoded_branch,  '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_warp_id_q, dec_to_fetch_decoded_warp_id, '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_next_pc_q, dec_to_fetch_decoded_next_pc, '0, clk_i, rst_ni)
 
     // #######################################################################################
     // # Fetcher to Instruction Cache - Register                                             #

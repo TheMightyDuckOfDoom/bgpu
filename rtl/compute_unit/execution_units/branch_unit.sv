@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "common_cells/registers.svh"
+
 /// Branch Unit
 module branch_unit import bgpu_pkg::*; #(
     /// Number of inflight instructions per warp
@@ -83,6 +85,11 @@ module branch_unit import bgpu_pkg::*; #(
 
     eu_to_opc_t eu_to_opc_d, eu_to_opc_q;
 
+    logic      bru_branch_d, bru_branch_q;
+    wid_t      bru_branch_wid_d, bru_branch_wid_q;
+    act_mask_t bru_branching_mask_d, bru_branching_mask_q;
+    pc_t       bru_inactive_pc_d, bru_inactive_pc_q;
+
     // #######################################################################################
     // # Combinational Logic                                                                 #
     // #######################################################################################
@@ -117,24 +124,38 @@ module branch_unit import bgpu_pkg::*; #(
     // Handle branch instruction
     always_comb begin : handle_branch
         // Default
-        bru_branch_o         = 1'b0;
-        bru_branching_mask_o = '0;
-        bru_inactive_pc_o    = opc_to_eu_pc_i + 'd1;
-        bru_branch_wid_o     = opc_to_eu_tag_i[WidWidth-1:0]; // Warp ID
+        bru_branch_d         = 1'b0;
+        bru_branching_mask_d = '0;
+        bru_inactive_pc_d    = opc_to_eu_pc_i + 'd1;
+        bru_branch_wid_d     = opc_to_eu_tag_i[WidWidth-1:0]; // Warp ID
 
         // Handshake
         if (eu_to_opc_ready_o && opc_to_eu_valid_i) begin
             if (opc_to_eu_inst_sub_i == BRU_BNZ) begin
                 // New branch instruction
-                bru_branch_o = 1'b1;
+                bru_branch_d = 1'b1;
 
                 for(int unsigned i = 0; i < WarpWidth; i++) begin
                     // Set active mask for threads that are not zero
-                    bru_branching_mask_o[i] = opc_to_eu_act_mask_i[i] && (operands[1][i] != '0);
+                    bru_branching_mask_d[i] = opc_to_eu_act_mask_i[i] && (operands[1][i] != '0);
                 end
             end
         end
     end : handle_branch
+
+    // #######################################################################################
+    // # Register Signals to Fetcher                                                         #
+    // #######################################################################################
+
+    `FF(bru_branch_q,         bru_branch_d,         '0, clk_i, rst_ni)
+    `FF(bru_branch_wid_q,     bru_branch_wid_d,     '0, clk_i, rst_ni)
+    `FF(bru_branching_mask_q, bru_branching_mask_d, '0, clk_i, rst_ni)
+    `FF(bru_inactive_pc_q,    bru_inactive_pc_d,    '0, clk_i, rst_ni)
+
+    assign bru_branch_o         = bru_branch_q;
+    assign bru_branch_wid_o     = bru_branch_wid_q;
+    assign bru_branching_mask_o = bru_branching_mask_q;
+    assign bru_inactive_pc_o    = bru_inactive_pc_q;
 
     // #######################################################################################
     // # Output Register                                                                     #
