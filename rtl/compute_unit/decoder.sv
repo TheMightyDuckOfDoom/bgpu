@@ -59,7 +59,6 @@ module decoder import bgpu_pkg::*; #(
     // Instruction was decoded if a handshake between Decoder and Dispatcher happend
     assign dec_decoded_o         = ((ic_valid_i && dec_stop_warp_o) || dec_valid_o) && disp_ready_i;
     assign dec_decoded_warp_id_o = dec_warp_id_o;
-    assign dec_decoded_next_pc_o = dec_pc_o + 'd1;
 
     assign dec_stop_warp_o = ic_inst_i[31:24] == '1;
 
@@ -70,7 +69,13 @@ module decoder import bgpu_pkg::*; #(
         dec_inst_o        = inst_t'(ic_inst_i[31:24]);
         dec_dst_o         = ic_inst_i[23:16];
 
+        // By default, increment the PC by one
+        dec_decoded_next_pc_o = dec_pc_o + 'd1;
+
+        // By default, all operands are immediate values
         dec_operands_required_o = '0;
+
+        // Integer Unit
         if (dec_inst_o.eu == EU_IU) begin : decode_iu
             // Two register operands
             if (dec_inst_o.subtype inside {
@@ -86,6 +91,8 @@ module decoder import bgpu_pkg::*; #(
                 dec_operands_required_o[1] = 1'b1;
             end
         end : decode_iu
+
+        // Load Store Unit
         else if (dec_inst_o.eu == EU_LSU) begin : decode_lsu
             // LSU instructions always have two operands register operands
             // Operand 0 is the address
@@ -93,6 +100,14 @@ module decoder import bgpu_pkg::*; #(
             dec_operands_required_o[0] = 1'b1;
             dec_operands_required_o[1] = 1'b1;
         end : decode_lsu
+
+        // Branch Unit
+        else if (dec_inst_o.eu == EU_BRU) begin : decode_bru
+            if (dec_inst_o.subtype == BRU_JMP) begin
+                // Both operands are immediate values forming the offset
+                dec_decoded_next_pc_o = dec_pc_o + ic_inst_i[15:0];
+            end
+        end : decode_bru
 
         dec_operands_o[0] = ic_inst_i[15:8];
         dec_operands_o[1] = ic_inst_i[7:0];

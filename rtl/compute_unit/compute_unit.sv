@@ -212,13 +212,16 @@ module compute_unit import bgpu_pkg::*; #(
     logic opc_to_eu_valid,  eu_to_opc_ready;
     logic opc_to_iu_valid,  iu_to_opc_ready;
     logic opc_to_lsu_valid, lsu_to_opc_ready;
+    logic opc_to_bru_valid, bru_to_opc_ready;
     opc_to_eu_data_t opc_to_eu_data;
 
     // Execution Units to Register Operand Collector Stage
     logic eu_to_opc_valid, opc_to_eu_ready;
     logic iu_to_rc_valid,  rc_to_iu_ready;
     logic lsu_to_rc_valid, rc_to_lsu_ready;
-    eu_to_opc_data_t eu_to_opc_data, iu_to_rc_data, lsu_to_rc_data;
+    logic bru_to_rc_valid, rc_to_bru_ready;
+
+    eu_to_opc_data_t eu_to_opc_data, iu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
 
     // #######################################################################################
     // # Fetcher                                                                             #
@@ -476,20 +479,20 @@ module compute_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     stream_demux #(
-        .N_OUP(2)
+        .N_OUP(3)
     ) i_eu_demux (
         .inp_valid_i( opc_to_eu_valid ),
         .inp_ready_o( eu_to_opc_ready ),
 
-        .oup_sel_i( opc_to_eu_data.inst.eu[0] ),
+        .oup_sel_i( opc_to_eu_data.inst.eu ),
 
-        .oup_valid_o({ opc_to_lsu_valid, opc_to_iu_valid }),
-        .oup_ready_i({ lsu_to_opc_ready, iu_to_opc_ready })
+        .oup_valid_o({ opc_to_bru_valid, opc_to_lsu_valid, opc_to_iu_valid }),
+        .oup_ready_i({ bru_to_opc_ready, lsu_to_opc_ready, iu_to_opc_ready })
     );
 
     `ifndef SYNTHESIS
         assert property (@(posedge clk_i) opc_to_eu_valid
-            |-> opc_to_eu_data.inst.eu inside {EU_IU, EU_LSU})
+            |-> opc_to_eu_data.inst.eu inside {EU_IU, EU_LSU, EU_BRU})
             else $error("Invalid execution unit type: %0d", opc_to_eu_data.inst.eu);
     `endif
 
@@ -568,24 +571,54 @@ module compute_unit import bgpu_pkg::*; #(
         .mem_rsp_data_i   ( mem_rsp_data_i    )
     );
 
+    // Branch Unit
+    branch_unit #(
+        .NumTags        ( NumTags         ),
+        .NumWarps       ( NumWarps        ),
+        .RegWidth       ( RegWidth        ),
+        .WarpWidth      ( WarpWidth       ),
+        .OperandsPerInst( OperandsPerInst ),
+        .RegIdxWidth    ( RegIdxWidth     ),
+        .AddressWidth   ( AddressWidth    ),
+        .PcWidth        ( PcWidth         )
+    ) i_branch_unit (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .eu_to_opc_ready_o   ( bru_to_opc_ready                ),
+        .opc_to_eu_valid_i   ( opc_to_bru_valid                ),
+        .opc_to_eu_tag_i     ( opc_to_eu_data.tag              ),
+        .opc_to_eu_pc_i      ( opc_to_eu_data.pc               ),
+        .opc_to_eu_inst_sub_i( opc_to_eu_data.inst.subtype.bru ),
+        .opc_to_eu_dst_i     ( opc_to_eu_data.dst              ),
+        .opc_to_eu_operands_i( opc_to_eu_data.operands         ),
+
+        .rc_to_eu_ready_i( rc_to_bru_ready     ),
+        .eu_to_rc_valid_o( bru_to_rc_valid     ),
+        .eu_to_rc_tag_o  ( bru_to_rc_data.tag  ),
+        .eu_to_rc_dst_o  ( bru_to_rc_data.dst  ),
+        .eu_to_rc_data_o ( bru_to_rc_data.data )
+    );
+
     // #######################################################################################
     // # Execution Unit Result Collector                                                     #
     // #######################################################################################
 
     stream_arbiter #(
         .DATA_T ( eu_to_opc_data_t ),
-        .N_INP  ( 2                ),
+        .N_INP  ( 3                ),
         .ARBITER( "rr"             )
     ) i_result_collector (
-        .clk_i        ( clk_i           ),
-        .rst_ni       ( rst_ni          ),
-        .inp_data_i   ({ iu_to_rc_data,  lsu_to_rc_data  }),
-        .inp_valid_i  ({ iu_to_rc_valid, lsu_to_rc_valid }),
-        .inp_ready_o  ({ rc_to_iu_ready, rc_to_lsu_ready }),
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
 
-        .oup_data_o   ( eu_to_opc_data   ),
-        .oup_valid_o  ( eu_to_opc_valid  ),
-        .oup_ready_i  ( opc_to_eu_ready  )
+        .inp_data_i ({ iu_to_rc_data,  lsu_to_rc_data,  bru_to_rc_data  }),
+        .inp_valid_i({ iu_to_rc_valid, lsu_to_rc_valid, bru_to_rc_valid }),
+        .inp_ready_o({ rc_to_iu_ready, rc_to_lsu_ready, rc_to_bru_ready }),
+
+        .oup_data_o ( eu_to_opc_data  ),
+        .oup_valid_o( eu_to_opc_valid ),
+        .oup_ready_i( opc_to_eu_ready )
     );
 
 endmodule : compute_unit

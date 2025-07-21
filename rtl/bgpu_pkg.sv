@@ -6,7 +6,8 @@ package bgpu_pkg;
 
 typedef enum logic [1:0] {
     EU_IU  = 'd0,
-    EU_LSU = 'd1
+    EU_LSU = 'd1,
+    EU_BRU = 'd2
 } eu_e;
 
 typedef enum logic [5:0] {
@@ -22,12 +23,11 @@ typedef enum logic [5:0] {
     IU_AND  = 'h07, // Bitwise AND operands
     IU_OR   = 'h08, // Bitwise OR operands
     IU_XOR  = 'h09, // Bitwise XOR operands
+    IU_SLL  = 'h0A, // Shift left logical
 
-    IU_LDI  = 'h0A, // Load immediate -> concatenate operands register index
-    IU_ADDI = 'h0B, // Add immediate -> add immediate value to first operand
-    IU_SUBI = 'h0C, // Subtract immediate -> subtract immediate value from first operand
-
-    IU_SLL  = 'h0D, // Shift left logical
+    IU_LDI  = 'h0B, // Load immediate -> concatenate operands register index
+    IU_ADDI = 'h0C, // Add immediate -> add immediate value to first operand
+    IU_SUBI = 'h0D, // Subtract immediate -> subtract immediate value from first operand
     IU_SLLI = 'h0E  // Shift left logical immediate
 } iu_subtype_e;
 
@@ -40,9 +40,14 @@ typedef enum logic [5:0] {
     LSU_STORE_WORD = 'h05  // Store word to memory
 } lsu_subtype_e;
 
+typedef enum logic [5:0] {
+    BRU_JMP = 'h00 // Jump to address
+} bru_subtype_e;
+
 typedef union packed {
     iu_subtype_e  iu;
     lsu_subtype_e lsu;
+    bru_subtype_e bru;
 } inst_subtype_t;
 
 typedef struct packed {
@@ -74,11 +79,15 @@ typedef struct packed {
         IU_AND,\
         IU_OR,\
         IU_XOR,\
+        IU_SLL,\
         IU_LDI,\
         IU_ADDI,\
         IU_SUBI,\
-        IU_SLL,\
         IU_SLLI\
+    }
+
+    `define BRU_VALID_SUBTYPES {\
+        BRU_JMP\
     }
 `endif
 
