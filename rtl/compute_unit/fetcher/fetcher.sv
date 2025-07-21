@@ -66,12 +66,19 @@ module fetcher #(
     /// From Decoder
     input logic dec_decoded_i,
     input logic dec_stop_warp_i,
+    input logic dec_decoded_branch_i,
     input wid_t dec_decoded_warp_id_i,
     input pc_t  dec_decoded_next_pc_i,
 
     /// To Integer Unit
-    output addr_t       [NumWarps-1:0] warp_dp_addr_o,   // Data / Parameter address
-    output tblock_idx_t [NumWarps-1:0] warp_tblock_idx_o // Block index
+    output addr_t       [NumWarps-1:0] warp_dp_addr_o,    // Data / Parameter address
+    output tblock_idx_t [NumWarps-1:0] warp_tblock_idx_o, // Block index
+
+    // From Branch Unit
+    input logic      bru_branch_i,      // New branch instruction
+    input wid_t      bru_branch_wid_i,  // Which warp is the branch for?
+    input act_mask_t bru_branching_mask_i, // Active threads for the branch
+    input pc_t       bru_inactive_pc_i  // PC to execute for inactive threads
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -172,6 +179,7 @@ module fetcher #(
         .instruction_decoded_i( dec_decoded_i         ),
         .decode_stop_warp_i   ( dec_stop_warp_i       ),
         .decode_wid_i         ( dec_decoded_warp_id_i ),
+        .decode_branch_i      ( dec_decoded_branch_i  ),
         .decode_next_pc_i     ( dec_decoded_next_pc_i ),
 
         .warp_selected_i( arb_gnt & rr_warp_ready ),
@@ -180,7 +188,12 @@ module fetcher #(
         .warp_act_mask_o( rs_warp_act_mask        ),
 
         .warp_dp_addr_o   ( warp_dp_addr_o    ),
-        .warp_tblock_idx_o( warp_tblock_idx_o )
+        .warp_tblock_idx_o( warp_tblock_idx_o ),
+
+        .bru_branch_i        ( bru_branch_i         ),
+        .bru_branch_wid_i    ( bru_branch_wid_i     ),
+        .bru_branching_mask_i( bru_branching_mask_i ),
+        .bru_inactive_pc_i   ( bru_inactive_pc_i    )
     );
 
     // #######################################################################################

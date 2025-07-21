@@ -37,10 +37,10 @@ sources:
 
           - rtl/compute_unit/execution_units/integer_unit.sv
 
-          - rtl/compute_unit/execution_units/load_store/coalesce_comparator.sv
-          - rtl/compute_unit/execution_units/load_store/coalesce_splitter.sv
-          - rtl/compute_unit/execution_units/load_store/wdata_assembler.sv
-          - rtl/compute_unit/execution_units/load_store_unit.sv
+          - rtl/compute_unit/execution_units/load_store_unit/coalesce_comparator.sv
+          - rtl/compute_unit/execution_units/load_store_unit/coalesce_splitter.sv
+          - rtl/compute_unit/execution_units/load_store_unit/wdata_assembler.sv
+          - rtl/compute_unit/execution_units/load_store_unit/load_store_unit.sv
 
           - rtl/compute_unit/execution_units/branch_unit.sv
 

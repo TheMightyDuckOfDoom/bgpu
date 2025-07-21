@@ -41,7 +41,8 @@ typedef enum logic [5:0] {
 } lsu_subtype_e;
 
 typedef enum logic [5:0] {
-    BRU_JMP = 'h00 // Jump to address
+    BRU_JMP = 'h00, // Jump to address
+    BRU_BNZ = 'h01  // Branch if not zero
 } bru_subtype_e;
 
 typedef union packed {
@@ -87,7 +88,8 @@ typedef struct packed {
     }
 
     `define BRU_VALID_SUBTYPES {\
-        BRU_JMP\
+        BRU_JMP,\
+        BRU_BNZ\
     }
 `endif
 

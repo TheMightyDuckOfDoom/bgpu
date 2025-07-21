@@ -74,6 +74,7 @@ module load_store_unit import bgpu_pkg::*; #(
     // To Result Collector
     input  logic       rc_to_eu_ready_i,
     output logic       eu_to_rc_valid_o,
+    output act_mask_t  eu_to_rc_act_mask_o,
     output iid_t       eu_to_rc_tag_o,
     output reg_idx_t   eu_to_rc_dst_o,
     output warp_data_t eu_to_rc_data_o
@@ -123,9 +124,10 @@ module load_store_unit import bgpu_pkg::*; #(
 
     // Buffer entry
     typedef struct packed {
-        iid_t     tag;
-        reg_idx_t dst;
-        width_t   load_width;
+        act_mask_t act_mask;
+        iid_t      tag;
+        reg_idx_t  dst;
+        width_t    load_width;
         logic         [WarpWidth-1:0] thread_waiting;
         logic         [WarpWidth-1:0] thread_ready;
         thread_data_t [WarpWidth-1:0] thread_data;
@@ -237,6 +239,7 @@ module load_store_unit import bgpu_pkg::*; #(
             buffer_d[insert_buff_id].tag        = opc_to_eu_tag_i;
             buffer_d[insert_buff_id].dst        = opc_to_eu_dst_i;
             buffer_d[insert_buff_id].load_width = opc_to_eu_width;
+            buffer_d[insert_buff_id].act_mask   = opc_to_eu_act_mask_i;
 
             // Mark inactive threads as ready
             buffer_d[insert_buff_id].thread_waiting = '0;
@@ -320,8 +323,9 @@ module load_store_unit import bgpu_pkg::*; #(
     );
 
     // Build output for Result Collector
-    assign eu_to_rc_tag_o  = selected_buffer_entry.tag;
-    assign eu_to_rc_dst_o  = selected_buffer_entry.dst;
+    assign eu_to_rc_tag_o      = selected_buffer_entry.tag;
+    assign eu_to_rc_dst_o      = selected_buffer_entry.dst;
+    assign eu_to_rc_act_mask_o = selected_buffer_entry.act_mask;
 
     always_comb begin : build_warp_data_for_rc
         // Default to zero

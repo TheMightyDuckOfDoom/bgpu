@@ -168,6 +168,7 @@ module compute_unit import bgpu_pkg::*; #(
     // Execution Units to Register Operand Collector Stage type
     typedef struct packed {
         iid_t       tag;
+        act_mask_t  act_mask;
         reg_idx_t   dst;
         warp_data_t data;
     } eu_to_opc_data_t;
@@ -192,6 +193,7 @@ module compute_unit import bgpu_pkg::*; #(
     // Decoder to Fetcher
     logic dec_to_fetch_decoded;
     logic dec_to_fetch_stop_warp;
+    logic dec_to_fetch_decoded_branch;
     wid_t dec_to_fetch_decoded_warp_id;
     pc_t  dec_to_fetch_decoded_next_pc;
 
@@ -222,6 +224,12 @@ module compute_unit import bgpu_pkg::*; #(
     logic bru_to_rc_valid, rc_to_bru_ready;
 
     eu_to_opc_data_t eu_to_opc_data, iu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
+
+    // Branch Unit to Fetcher
+    logic      bru_branch;
+    wid_t      bru_branch_wid;
+    act_mask_t bru_branching_mask;
+    pc_t       bru_inactive_pc;
 
     // #######################################################################################
     // # Fetcher                                                                             #
@@ -260,11 +268,17 @@ module compute_unit import bgpu_pkg::*; #(
 
         .dec_decoded_i        ( dec_to_fetch_decoded         ),
         .dec_stop_warp_i      ( dec_to_fetch_stop_warp       ),
+        .dec_decoded_branch_i ( dec_to_fetch_decoded_branch  ),
         .dec_decoded_warp_id_i( dec_to_fetch_decoded_warp_id ),
         .dec_decoded_next_pc_i( dec_to_fetch_decoded_next_pc ),
 
         .warp_dp_addr_o   ( fe_to_iu_warp_dp_addr    ),
-        .warp_tblock_idx_o( fe_to_iu_warp_tblock_idx )
+        .warp_tblock_idx_o( fe_to_iu_warp_tblock_idx ),
+
+        .bru_branch_i        ( bru_branch         ),
+        .bru_branch_wid_i    ( bru_branch_wid     ),
+        .bru_branching_mask_i( bru_branching_mask ),
+        .bru_inactive_pc_i   ( bru_inactive_pc    )
     );
 
     // #######################################################################################
@@ -355,6 +369,7 @@ module compute_unit import bgpu_pkg::*; #(
 
         .dec_decoded_o         ( dec_to_fetch_decoded         ),
         .dec_stop_warp_o       ( dec_to_fetch_stop_warp       ),
+        .dec_decoded_branch_o  ( dec_to_fetch_decoded_branch  ),
         .dec_decoded_warp_id_o ( dec_to_fetch_decoded_warp_id ),
         .dec_decoded_next_pc_o ( dec_to_fetch_decoded_next_pc )
     );
@@ -467,11 +482,12 @@ module compute_unit import bgpu_pkg::*; #(
         .opc_dst_o         ( opc_to_eu_data.dst      ),
         .opc_operand_data_o( opc_to_eu_data.operands ),
 
-        .opc_to_eu_ready_o( opc_to_eu_ready     ),
-        .eu_valid_i       ( eu_to_opc_valid     ),
-        .eu_tag_i         ( eu_to_opc_data.tag  ),
-        .eu_dst_i         ( eu_to_opc_data.dst  ),
-        .eu_data_i        ( eu_to_opc_data.data )
+        .opc_to_eu_ready_o( opc_to_eu_ready         ),
+        .eu_valid_i       ( eu_to_opc_valid         ),
+        .eu_act_mask_i    ( eu_to_opc_data.act_mask ),
+        .eu_tag_i         ( eu_to_opc_data.tag      ),
+        .eu_dst_i         ( eu_to_opc_data.dst      ),
+        .eu_data_i        ( eu_to_opc_data.data     )
     );
 
     // #######################################################################################
@@ -519,16 +535,18 @@ module compute_unit import bgpu_pkg::*; #(
 
         .eu_to_opc_ready_o   ( iu_to_opc_ready                ),
         .opc_to_eu_valid_i   ( opc_to_iu_valid                ),
+        .opc_to_eu_act_mask_i( opc_to_eu_data.act_mask        ),
         .opc_to_eu_tag_i     ( opc_to_eu_data.tag             ),
         .opc_to_eu_inst_sub_i( opc_to_eu_data.inst.subtype.iu ),
         .opc_to_eu_dst_i     ( opc_to_eu_data.dst             ),
         .opc_to_eu_operands_i( opc_to_eu_data.operands        ),
 
-        .rc_to_eu_ready_i( rc_to_iu_ready     ),
-        .eu_to_rc_valid_o( iu_to_rc_valid     ),
-        .eu_to_rc_tag_o  ( iu_to_rc_data.tag  ),
-        .eu_to_rc_dst_o  ( iu_to_rc_data.dst  ),
-        .eu_to_rc_data_o ( iu_to_rc_data.data )
+        .rc_to_eu_ready_i   ( rc_to_iu_ready         ),
+        .eu_to_rc_valid_o   ( iu_to_rc_valid         ),
+        .eu_to_rc_act_mask_o( iu_to_rc_data.act_mask ),
+        .eu_to_rc_tag_o     ( iu_to_rc_data.tag      ),
+        .eu_to_rc_dst_o     ( iu_to_rc_data.dst      ),
+        .eu_to_rc_data_o    ( iu_to_rc_data.data     )
     );
 
     // Load Store Unit
@@ -553,11 +571,12 @@ module compute_unit import bgpu_pkg::*; #(
         .opc_to_eu_dst_i     ( opc_to_eu_data.dst              ),
         .opc_to_eu_operands_i( opc_to_eu_data.operands         ),
 
-        .rc_to_eu_ready_i( rc_to_lsu_ready     ),
-        .eu_to_rc_valid_o( lsu_to_rc_valid     ),
-        .eu_to_rc_tag_o  ( lsu_to_rc_data.tag  ),
-        .eu_to_rc_dst_o  ( lsu_to_rc_data.dst  ),
-        .eu_to_rc_data_o ( lsu_to_rc_data.data ),
+        .rc_to_eu_ready_i   ( rc_to_lsu_ready         ),
+        .eu_to_rc_valid_o   ( lsu_to_rc_valid         ),
+        .eu_to_rc_act_mask_o( lsu_to_rc_data.act_mask ),
+        .eu_to_rc_tag_o     ( lsu_to_rc_data.tag      ),
+        .eu_to_rc_dst_o     ( lsu_to_rc_data.dst      ),
+        .eu_to_rc_data_o    ( lsu_to_rc_data.data     ),
 
         .mem_ready_i      ( mem_ready_i       ),
         .mem_req_valid_o  ( mem_req_valid_o   ),
@@ -587,17 +606,24 @@ module compute_unit import bgpu_pkg::*; #(
 
         .eu_to_opc_ready_o   ( bru_to_opc_ready                ),
         .opc_to_eu_valid_i   ( opc_to_bru_valid                ),
+        .opc_to_eu_act_mask_i( opc_to_eu_data.act_mask         ),
         .opc_to_eu_tag_i     ( opc_to_eu_data.tag              ),
         .opc_to_eu_pc_i      ( opc_to_eu_data.pc               ),
         .opc_to_eu_inst_sub_i( opc_to_eu_data.inst.subtype.bru ),
         .opc_to_eu_dst_i     ( opc_to_eu_data.dst              ),
         .opc_to_eu_operands_i( opc_to_eu_data.operands         ),
 
-        .rc_to_eu_ready_i( rc_to_bru_ready     ),
-        .eu_to_rc_valid_o( bru_to_rc_valid     ),
-        .eu_to_rc_tag_o  ( bru_to_rc_data.tag  ),
-        .eu_to_rc_dst_o  ( bru_to_rc_data.dst  ),
-        .eu_to_rc_data_o ( bru_to_rc_data.data )
+        .rc_to_eu_ready_i   ( rc_to_bru_ready         ),
+        .eu_to_rc_valid_o   ( bru_to_rc_valid         ),
+        .eu_to_rc_act_mask_o( bru_to_rc_data.act_mask ),
+        .eu_to_rc_tag_o     ( bru_to_rc_data.tag      ),
+        .eu_to_rc_dst_o     ( bru_to_rc_data.dst      ),
+        .eu_to_rc_data_o    ( bru_to_rc_data.data     ),
+
+        .bru_branch_o        ( bru_branch         ),
+        .bru_branch_wid_o    ( bru_branch_wid     ),
+        .bru_branching_mask_o( bru_branching_mask ),
+        .bru_inactive_pc_o   ( bru_inactive_pc    )
     );
 
     // #######################################################################################

@@ -29,7 +29,8 @@ module integer_unit import bgpu_pkg::*; #(
     parameter type reg_idx_t    = logic [         RegIdxWidth-1:0],
     parameter type iid_t        = logic [   TagWidth+WidWidth-1:0],
     parameter type addr_t       = logic [        AddressWidth-1:0],
-    parameter type tblock_idx_t = logic [       TblockIdxBits-1:0]
+    parameter type tblock_idx_t = logic [       TblockIdxBits-1:0],
+    parameter type act_mask_t   = logic [           WarpWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -43,6 +44,7 @@ module integer_unit import bgpu_pkg::*; #(
     output logic        eu_to_opc_ready_o,
     input  logic        opc_to_eu_valid_i,
     input  iid_t        opc_to_eu_tag_i,
+    input  act_mask_t   opc_to_eu_act_mask_i,
     input  iu_subtype_e opc_to_eu_inst_sub_i,
     input  reg_idx_t    opc_to_eu_dst_i,
     input  warp_data_t  [OperandsPerInst-1:0] opc_to_eu_operands_i,
@@ -50,6 +52,7 @@ module integer_unit import bgpu_pkg::*; #(
     // To Result Collector
     input  logic       rc_to_eu_ready_i,
     output logic       eu_to_rc_valid_o,
+    output act_mask_t  eu_to_rc_act_mask_o,
     output iid_t       eu_to_rc_tag_o,
     output reg_idx_t   eu_to_rc_dst_o,
     output warp_data_t eu_to_rc_data_o
@@ -65,6 +68,7 @@ module integer_unit import bgpu_pkg::*; #(
         iid_t       tag;
         reg_idx_t   dst;
         warp_data_t data;
+        act_mask_t  act_mask;
     } eu_to_opc_t;
 
     // #######################################################################################
@@ -130,9 +134,10 @@ module integer_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Build data to store in register
-    assign eu_to_opc_d.tag  = opc_to_eu_tag_i;
-    assign eu_to_opc_d.dst  = opc_to_eu_dst_i;
-    assign eu_to_opc_d.data = result;
+    assign eu_to_opc_d.tag      = opc_to_eu_tag_i;
+    assign eu_to_opc_d.dst      = opc_to_eu_dst_i;
+    assign eu_to_opc_d.data     = result;
+    assign eu_to_opc_d.act_mask = opc_to_eu_act_mask_i;
 
     // Pipeline register
     stream_register #(
@@ -153,9 +158,10 @@ module integer_unit import bgpu_pkg::*; #(
     );
 
     // Assign outputs
-    assign eu_to_rc_tag_o  = eu_to_opc_q.tag;
-    assign eu_to_rc_dst_o  = eu_to_opc_q.dst;
-    assign eu_to_rc_data_o = eu_to_opc_q.data;
+    assign eu_to_rc_tag_o      = eu_to_opc_q.tag;
+    assign eu_to_rc_dst_o      = eu_to_opc_q.dst;
+    assign eu_to_rc_data_o     = eu_to_opc_q.data;
+    assign eu_to_rc_act_mask_o = eu_to_opc_q.act_mask;
 
     // #######################################################################################
     // # Assertions                                                                          #

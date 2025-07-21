@@ -25,7 +25,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// How many registers can each warp access as operand or destination
-    parameter int unsigned RegIdxWidth = 6,
+    parameter int unsigned RegIdxWidth = 8,
     /// How many operands each instruction can have
     parameter int unsigned OperandsPerInst = 2,
     /// How many Banks are in the register file
@@ -81,6 +81,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
 
     typedef struct packed {
         iid_t      tag;
+        act_mask_t act_mask;
         reg_idx_t  dst;
         reg_data_t data;
     } eu_rsp_t;
@@ -217,6 +218,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
         // From Execution units
         .opc_to_eu_ready_o( opc_to_eu_ready ),
         .eu_valid_i       ( eu_valid        ),
+        .eu_act_mask_i    ( eu_rsp.act_mask ),
         .eu_tag_i         ( eu_rsp.tag      ),
         .eu_dst_i         ( eu_rsp.dst      ),
         .eu_data_i        ( eu_rsp.data     )
@@ -378,6 +380,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
                 eu_valid = 1'b1;
                 eu_rsp.tag[WidWidth-1:0] = wid[WidWidth-1:0];
                 eu_rsp.dst               = reg_idx[RegIdxWidth-1:0];
+                eu_rsp.act_mask          = '1; // Write all threads
 
                 reg_file[wid][reg_idx]   = randomize_ram_data();
                 eu_rsp.data              = reg_file[wid][reg_idx];

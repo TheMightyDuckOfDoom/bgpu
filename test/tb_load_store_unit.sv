@@ -71,7 +71,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
     typedef struct packed {
         iid_t       tag;
         pc_t        pc;
-        act_mask_t  active_mask;
+        act_mask_t  act_mask;
         inst_t      inst;
         reg_idx_t   dst;
         warp_data_t [OperandsPerInst-1:0] src_data;
@@ -79,6 +79,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
 
     typedef struct packed {
         iid_t       tag;
+        act_mask_t  act_mask;
         reg_idx_t   dst;
         warp_data_t data;
     } eu_rsp_t;
@@ -305,7 +306,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
     assign inst = INSTS[eu_req.inst.subtype % 6];
 
     act_mask_t non_zero_mask;
-    assign non_zero_mask = (eu_req.active_mask != '0) ? eu_req.active_mask : '1;
+    assign non_zero_mask = (eu_req.act_mask != '0) ? eu_req.act_mask : '1;
 
     load_store_unit #(
         .RegWidth ( RegWidth ),
@@ -339,11 +340,12 @@ module tb_load_store_unit import bgpu_pkg::*; #(
         .opc_to_eu_dst_i     ( eu_req.dst      ),
         .opc_to_eu_operands_i( eu_req.src_data ),
 
-        .rc_to_eu_ready_i ( eu_rsp_ready ),
-        .eu_to_rc_valid_o ( eu_rsp_valid ),
-        .eu_to_rc_tag_o   ( eu_rsp.tag   ),
-        .eu_to_rc_dst_o   ( eu_rsp.dst   ),
-        .eu_to_rc_data_o  ( eu_rsp.data  )
+        .rc_to_eu_ready_i   ( eu_rsp_ready    ),
+        .eu_to_rc_valid_o   ( eu_rsp_valid    ),
+        .eu_to_rc_act_mask_o( eu_rsp.act_mask ),
+        .eu_to_rc_tag_o     ( eu_rsp.tag      ),
+        .eu_to_rc_dst_o     ( eu_rsp.dst      ),
+        .eu_to_rc_data_o    ( eu_rsp.data     )
     );
 
     // ########################################################################################
@@ -375,9 +377,10 @@ module tb_load_store_unit import bgpu_pkg::*; #(
             end
 
             // Build response
-            rsp.tag = eu_req.tag;
-            rsp.dst = eu_req.dst;
-            rsp.data = '0;
+            rsp.tag      = eu_req.tag;
+            rsp.dst      = eu_req.dst;
+            rsp.act_mask = non_zero_mask;
+            rsp.data     = '0;
 
             $display("Golden Model: Req: Tag=%0d, PC=%0h, Active Mask=%b, Inst=%0h, Dst=%0d",
                      rsp.tag, eu_req.pc, non_zero_mask, eu_req.inst.subtype, rsp.dst);
@@ -512,16 +515,17 @@ module tb_load_store_unit import bgpu_pkg::*; #(
 
             dut_rsp = i_result_sub.gen_queue.queue.pop_front();
 
-            $display("Checking response: Tag=%0d, Dst=%0d, Data=%h",
-                     dut_rsp.tag, dut_rsp.dst, dut_rsp.data);
+            $display("Checking response: Tag=%0d, Dst=%0d, Data=%h, Mask=%b",
+                     dut_rsp.tag, dut_rsp.dst, dut_rsp.data, dut_rsp.act_mask);
 
             found = 1'b0;
             for (int i = 0; i < golden_responses.size(); i++) begin
                 golden_rsp = golden_responses[i];
                 if (dut_rsp.tag == golden_rsp.tag && dut_rsp.dst == golden_rsp.dst) begin
-                    $display("Found possible golden response: Tag=%0d, Dst=%0d, Data=%h",
-                             golden_rsp.tag, golden_rsp.dst, golden_rsp.data);
-                    if (dut_rsp.data == golden_rsp.data) begin
+                    $display("Found possible golden response: Tag=%0d, Dst=%0d, Data=%h, Mask=%b",
+                             golden_rsp.tag, golden_rsp.dst, golden_rsp.data, golden_rsp.act_mask);
+                    if (dut_rsp.data == golden_rsp.data && dut_rsp.act_mask == golden_rsp.act_mask)
+                    begin
                         found = 1'b1;
                         // Remove from golden responses to avoid duplicates
                         golden_responses.delete(i);
@@ -539,18 +543,31 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                         end
                         $error();
                     end
+                    assert(dut_rsp.act_mask == golden_rsp.act_mask) else begin
+                        $warning("Active mask mismatch: DUT=%b, Golden=%b", dut_rsp.act_mask,
+                            golden_rsp.act_mask);
+                        $display("Might need to increase the RegIdxWidth to have more unique",
+                            " requests!");
+                        $display("Available golden responses:");
+                        for (int i = 0; i < golden_responses.size(); i++) begin
+                            golden_rsp = golden_responses[i];
+                            $display("\tTag=%0d, Dst=%0d, Data=%h", golden_rsp.tag, golden_rsp.dst,
+                                golden_rsp.data);
+                        end
+                        $error();
+                    end
                 end
             end
 
             assert(found) else begin
-                $warning("No matching golden rsp found for DUT response: Tag=%0d, Dst=%0d, Data=%h",
-                       dut_rsp.tag, dut_rsp.dst, dut_rsp.data);
+                $warning("No matching golden rsp found for rsp: Tag=%0d, Dst=%0d, Data=%h Mask=%b",
+                         dut_rsp.tag, dut_rsp.dst, dut_rsp.data, dut_rsp.act_mask);
 
                 $display("Available golden responses:");
                 for (int i = 0; i < golden_responses.size(); i++) begin
                     golden_rsp = golden_responses[i];
-                    $display("\tTag=%0d, Dst=%0d, Data=%h", golden_rsp.tag, golden_rsp.dst,
-                        golden_rsp.data);
+                    $display("\tTag=%0d, Dst=%0d, Data=%h, Mask=%b", golden_rsp.tag, golden_rsp.dst,
+                        golden_rsp.data, golden_rsp.act_mask);
                 end
                 $error();
             end
@@ -625,8 +642,8 @@ module tb_load_store_unit import bgpu_pkg::*; #(
             if (eu_rsp_valid && eu_rsp_ready) begin
                 insts_completed++;
                 $display("Cycle %0d", cycles);
-                $display("\tCompleted instruction: Tag=%0d, Dst=%0d, Data=%h",
-                         eu_rsp.tag, eu_rsp.dst, eu_rsp.data);
+                $display("\tCompleted instruction: Tag=%0d, Dst=%0d, Data=%h, Mask=%b",
+                         eu_rsp.tag, eu_rsp.dst, eu_rsp.data, eu_rsp.act_mask);
                 if (cycles >= InstsToComplete) begin
                     $display("Completed %0d instructions, stopping simulation.", InstsToComplete);
                 end

@@ -49,6 +49,7 @@ module multi_warp_reconvergence_stack #(
     input logic instruction_decoded_i,
     input logic decode_stop_warp_i,
     input wid_t decode_wid_i,
+    input logic decode_branch_i,
     input pc_t  decode_next_pc_i,
 
     /// From instruction buffer
@@ -62,8 +63,14 @@ module multi_warp_reconvergence_stack #(
     output act_mask_t [NumWarps-1:0] warp_act_mask_o,
 
     /// To Integer Unit
-    output addr_t       [NumWarps-1:0] warp_dp_addr_o,   // Data / Parameter address
-    output tblock_idx_t [NumWarps-1:0] warp_tblock_idx_o // Block index
+    output addr_t       [NumWarps-1:0] warp_dp_addr_o,    // Data / Parameter address
+    output tblock_idx_t [NumWarps-1:0] warp_tblock_idx_o, // Block index,
+
+    // From Branch Unit
+    input logic      bru_branch_i,      // New branch instruction
+    input wid_t      bru_branch_wid_i,  // Which warp is the branch for?
+    input act_mask_t bru_branching_mask_i, // Active threads for the branch
+    input pc_t       bru_inactive_pc_i  // PC to execute for inactive threads
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -151,7 +158,7 @@ module multi_warp_reconvergence_stack #(
     always begin : warp_free
         warp_free_o = 1'b0;
         for(int i = 0; i < NumWarps; i++) begin : check
-            if(!warp_data_q[i].occupied) begin
+            if (!warp_data_q[i].occupied) begin
                 warp_free_o = 1'b1;
             end
         end
@@ -180,16 +187,21 @@ module multi_warp_reconvergence_stack #(
 
             // From decode stage
             .instruction_decoded_i        ( instruction_decoded_i && (decode_wid_i == warp) ),
-            .is_branch_i                  ( 1'b0             ), // TODO
-            .next_pc_or_reconvergence_pc_i( decode_next_pc_i ),
+            .is_branch_i                  ( decode_branch_i                                 ),
+            .next_pc_or_reconvergence_pc_i( decode_next_pc_i                                ),
 
             // From fetcher
             .selected_for_fetch_i( warp_selected_i[warp] ),
 
             // Stack outputs
-            .ready_for_fetch_o  ( warp_ready     [warp] ),
-            .fetch_pc_o         ( warp_pc_o      [warp] ),
-            .fetch_active_mask_o( warp_act_mask_o[warp] )
+            .ready_for_fetch_o( warp_ready     [warp] ),
+            .fetch_pc_o       ( warp_pc_o      [warp] ),
+            .fetch_act_mask_o ( warp_act_mask_o[warp] ),
+
+            // From branch unit
+            .bru_branch_i        ( bru_branch_i && (bru_branch_wid_i == warp) ),
+            .bru_branching_mask_i( bru_branching_mask_i                       ),
+            .bru_inactive_pc_i   ( bru_inactive_pc_i                          )
         );
     end : gen_reconvergence_stack
 

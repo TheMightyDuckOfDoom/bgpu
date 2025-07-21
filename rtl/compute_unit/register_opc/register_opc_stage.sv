@@ -63,6 +63,7 @@ module register_opc_stage import bgpu_pkg::*; #(
     /// From Execution Units
     output logic       opc_to_eu_ready_o,
     input  logic       eu_valid_i,
+    input  act_mask_t  eu_act_mask_i,
     input  iid_t       eu_tag_i,
     input  reg_idx_t   eu_dst_i,
     input  warp_data_t eu_data_i
@@ -99,6 +100,7 @@ module register_opc_stage import bgpu_pkg::*; #(
     } opc_inst_t;
 
     typedef struct packed {
+        act_mask_t      act_mask; // Write enable for each thread
         bank_reg_addr_t addr; // Address in the bank
         warp_data_t     data; // Data to write
     } bank_write_req_t;
@@ -257,7 +259,8 @@ module register_opc_stage import bgpu_pkg::*; #(
         .bank_reg_addr_o( eu_write_req.addr      )
     );
 
-    assign eu_write_req.data = eu_data_i;
+    assign eu_write_req.data     = eu_data_i;
+    assign eu_write_req.act_mask = eu_act_mask_i;
 
     stream_xbar #(
         .NumInp     ( 1                ),
@@ -296,16 +299,18 @@ module register_opc_stage import bgpu_pkg::*; #(
     // Register Banks are each RegWidth wide |-> store a register for a full warp
     for(genvar i = 0; i < NumBanks; i++) begin : gen_register_banks
         register_file_bank #(
-            .DataWidth   ( RegWidth * WarpWidth  ),
-            .NumRegisters( RegistersPerBank      ),
-            .DualPort    ( DualPortRegisterBanks ),
-            .tag_t       ( opc_tag_t             )
+            .RegisterWidth( RegWidth              ),
+            .WarpWidth    ( WarpWidth             ),
+            .NumRegisters ( RegistersPerBank      ),
+            .DualPort     ( DualPortRegisterBanks ),
+            .tag_t        ( opc_tag_t             )
         ) i_register_file_bank (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
 
             // Write port
             .write_valid_i( banks_write_req_valid[i]      ),
+            .write_mask_i ( banks_write_req[i].act_mask   ),
             .write_addr_i ( banks_write_req      [i].addr ),
             .write_data_i ( banks_write_req      [i].data ),
             .write_ready_o( banks_write_req_ready[i]      ),

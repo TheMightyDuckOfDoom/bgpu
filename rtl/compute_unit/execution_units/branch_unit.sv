@@ -28,7 +28,9 @@ module branch_unit import bgpu_pkg::*; #(
     parameter type reg_idx_t    = logic [         RegIdxWidth-1:0],
     parameter type iid_t        = logic [   TagWidth+WidWidth-1:0],
     parameter type addr_t       = logic [        AddressWidth-1:0],
-    parameter type pc_t         = logic [             PcWidth-1:0]
+    parameter type pc_t         = logic [             PcWidth-1:0],
+    parameter type act_mask_t   = logic [           WarpWidth-1:0],
+    parameter type wid_t        = logic [            WidWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -37,6 +39,7 @@ module branch_unit import bgpu_pkg::*; #(
     // From Operand Collector
     output logic         eu_to_opc_ready_o,
     input  logic         opc_to_eu_valid_i,
+    input  act_mask_t    opc_to_eu_act_mask_i,
     input  iid_t         opc_to_eu_tag_i,
     input  pc_t          opc_to_eu_pc_i,
     input  bru_subtype_e opc_to_eu_inst_sub_i,
@@ -46,9 +49,16 @@ module branch_unit import bgpu_pkg::*; #(
     // To Result Collector
     input  logic       rc_to_eu_ready_i,
     output logic       eu_to_rc_valid_o,
+    output act_mask_t  eu_to_rc_act_mask_o,
     output iid_t       eu_to_rc_tag_o,
     output reg_idx_t   eu_to_rc_dst_o,
-    output warp_data_t eu_to_rc_data_o
+    output warp_data_t eu_to_rc_data_o,
+
+    // To Fetcher
+    output logic      bru_branch_o,      // New branch instruction
+    output wid_t      bru_branch_wid_o,  // Branching warp ID
+    output act_mask_t bru_branching_mask_o, // Active threads for the branch
+    output pc_t       bru_inactive_pc_o  // PC to execute for inactive threads
 );
     // #######################################################################################
     // # Type Definitions                                                                    #
@@ -61,6 +71,7 @@ module branch_unit import bgpu_pkg::*; #(
         iid_t       tag;
         reg_idx_t   dst;
         warp_data_t data;
+        act_mask_t  act_mask;
     } eu_to_opc_t;
 
     // #######################################################################################
@@ -92,6 +103,10 @@ module branch_unit import bgpu_pkg::*; #(
                     result[i][PcWidth-1:0] = opc_to_eu_pc_i;
                 end
 
+                BRU_BNZ: begin // Branch if not zero
+                    result[i] = operands[1][i] != '0 ? 'd1 : '0;
+                end
+
                 default: begin
                     result[i] = '1; // Default case, should not happen
                 end
@@ -99,14 +114,37 @@ module branch_unit import bgpu_pkg::*; #(
         end : calc_result
     end : gen_result
 
+    // Handle branch instruction
+    always_comb begin : handle_branch
+        // Default
+        bru_branch_o         = 1'b0;
+        bru_branching_mask_o = '0;
+        bru_inactive_pc_o    = opc_to_eu_pc_i + 'd1;
+        bru_branch_wid_o     = opc_to_eu_tag_i[WidWidth-1:0]; // Warp ID
+
+        // Handshake
+        if (eu_to_opc_ready_o && opc_to_eu_valid_i) begin
+            if (opc_to_eu_inst_sub_i == BRU_BNZ) begin
+                // New branch instruction
+                bru_branch_o = 1'b1;
+
+                for(int unsigned i = 0; i < WarpWidth; i++) begin
+                    // Set active mask for threads that are not zero
+                    bru_branching_mask_o[i] = opc_to_eu_act_mask_i[i] && (operands[1][i] != '0);
+                end
+            end
+        end
+    end : handle_branch
+
     // #######################################################################################
     // # Output Register                                                                     #
     // #######################################################################################
 
     // Build data to store in register
-    assign eu_to_opc_d.tag  = opc_to_eu_tag_i;
-    assign eu_to_opc_d.dst  = opc_to_eu_dst_i;
-    assign eu_to_opc_d.data = result;
+    assign eu_to_opc_d.tag      = opc_to_eu_tag_i;
+    assign eu_to_opc_d.dst      = opc_to_eu_dst_i;
+    assign eu_to_opc_d.data     = result;
+    assign eu_to_opc_d.act_mask = opc_to_eu_act_mask_i;
 
     // Pipeline register
     stream_register #(
@@ -127,9 +165,10 @@ module branch_unit import bgpu_pkg::*; #(
     );
 
     // Assign outputs
-    assign eu_to_rc_tag_o  = eu_to_opc_q.tag;
-    assign eu_to_rc_dst_o  = eu_to_opc_q.dst;
-    assign eu_to_rc_data_o = eu_to_opc_q.data;
+    assign eu_to_rc_tag_o      = eu_to_opc_q.tag;
+    assign eu_to_rc_dst_o      = eu_to_opc_q.dst;
+    assign eu_to_rc_data_o     = eu_to_opc_q.data;
+    assign eu_to_rc_act_mask_o = eu_to_opc_q.act_mask;
 
     // #######################################################################################
     // # Assertions                                                                          #

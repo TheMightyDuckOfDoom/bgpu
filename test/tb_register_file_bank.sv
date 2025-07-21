@@ -15,18 +15,21 @@ module tb_register_file_bank #(
     parameter time         AcqDelay  = 9ns,
 
     // Register file configuration
-    parameter int unsigned NumRegisters = 256,
-    parameter int unsigned DataWidth    = 32,
-    parameter int unsigned TagWidth     = 8,
-    parameter bit          DualPort     = 1'b0
+    parameter int unsigned NumRegisters  = 256,
+    parameter int unsigned WarpWidth     = 2,
+    parameter int unsigned RegisterWidth = 16,
+    parameter int unsigned TagWidth      = 8,
+    parameter bit          DualPort      = 1'b0
 ) ();
     // #######################################################################################
     // # Type definitions                                                                    #
     // #######################################################################################
 
-    typedef logic [$clog2(NumRegisters)-1:0] addr_t;
-    typedef logic [           DataWidth-1:0] data_t;
-    typedef logic [            TagWidth-1:0] tag_t;
+    typedef logic  [$clog2(NumRegisters)-1:0] addr_t;
+    typedef logic  [       RegisterWidth-1:0] data_t;
+    typedef data_t [           WarpWidth-1:0] warp_data_t;
+    typedef logic  [            TagWidth-1:0] tag_t;
+    typedef logic  [           WarpWidth-1:0] we_mask_t;
 
     typedef struct packed {
         addr_t addr;
@@ -35,7 +38,8 @@ module tb_register_file_bank #(
 
     typedef struct packed {
         addr_t addr;
-        data_t data;
+        warp_data_t data;
+        we_mask_t we_mask;
     } write_req_t;
 
     // #######################################################################################
@@ -49,32 +53,34 @@ module tb_register_file_bank #(
     logic write_valid_mst, write_valid_sub, write_ready_mst, write_ready_sub;
     write_req_t write_req;
     addr_t write_addr_rand, write_addr;
-    data_t write_data;
+    warp_data_t write_data;
 
     // Read port
     logic read_valid, read_ready, read_out_valid;
     read_req_t read_req;
     addr_t read_addr_rand, read_addr;
     tag_t read_tag, read_out_tag;
-    data_t read_out_data;
+    warp_data_t read_out_data;
 
     // #######################################################################################
     // # DUT instantiation                                                                  #
     // #######################################################################################
 
     register_file_bank #(
-        .DataWidth   ( DataWidth    ),
-        .NumRegisters( NumRegisters ),
-        .DualPort    ( DualPort     ),
-        .tag_t       ( tag_t        )
+        .RegisterWidth( RegisterWidth ),
+        .WarpWidth    ( WarpWidth     ),
+        .NumRegisters ( NumRegisters  ),
+        .DualPort     ( DualPort      ),
+        .tag_t        ( tag_t         )
     ) i_register_file_bank (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
 
-        .write_valid_i( write_valid_sub ),
-        .write_ready_o( write_ready_sub ),
-        .write_addr_i ( write_addr      ),
-        .write_data_i ( write_data      ),
+        .write_valid_i( write_valid_sub   ),
+        .write_ready_o( write_ready_sub   ),
+        .write_mask_i ( write_req.we_mask ),
+        .write_addr_i ( write_addr        ),
+        .write_data_i ( write_data        ),
 
         .read_valid_i( read_valid ),
         .read_ready_o( read_ready ),
@@ -156,13 +162,13 @@ module tb_register_file_bank #(
     // #######################################################################################
 
     // Golden memory contents
-    data_t [NumRegisters-1:0] golden_mem;
+    warp_data_t [NumRegisters-1:0] golden_mem;
 
     // Golden read port
-    logic  golden_read_valid;
-    addr_t golden_read_addr;
-    data_t golden_read_data;
-    tag_t  golden_read_tag;
+    logic       golden_read_valid;
+    addr_t      golden_read_addr;
+    warp_data_t golden_read_data;
+    tag_t       golden_read_tag;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -172,7 +178,10 @@ module tb_register_file_bank #(
         end else begin
             // Write handshake
             if (write_valid_sub && write_ready_sub)
-                golden_mem[write_addr] <= write_data;
+                for (int unsigned i = 0; i < WarpWidth; i++) begin
+                    if (write_req.we_mask[i])
+                        golden_mem[write_addr][i] <= write_data[i];
+                end
 
             // Read handshake
             if (read_valid && read_ready) begin
@@ -266,7 +275,7 @@ module tb_register_file_bank #(
 
         $display("Testbench for Register File Bank");
         $display(" with %0d ports, %0d registers, %0d bits per register", DualPort ? 2 : 1,
-            NumRegisters, DataWidth);
+            NumRegisters, RegisterWidth);
 
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump

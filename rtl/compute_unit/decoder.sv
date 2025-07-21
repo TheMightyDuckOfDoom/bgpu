@@ -47,6 +47,7 @@ module decoder import bgpu_pkg::*; #(
     // To Fetcher |-> tells it what the next PC is
     output logic dec_decoded_o,
     output logic dec_stop_warp_o,
+    output logic dec_decoded_branch_o,
     output wid_t dec_decoded_warp_id_o,
     output pc_t  dec_decoded_next_pc_o
 );
@@ -71,6 +72,7 @@ module decoder import bgpu_pkg::*; #(
 
         // By default, increment the PC by one
         dec_decoded_next_pc_o = dec_pc_o + 'd1;
+        dec_decoded_branch_o  = 1'b0;
 
         // By default, all operands are immediate values
         dec_operands_required_o = '0;
@@ -103,10 +105,32 @@ module decoder import bgpu_pkg::*; #(
 
         // Branch Unit
         else if (dec_inst_o.eu == EU_BRU) begin : decode_bru
-            if (dec_inst_o.subtype == BRU_JMP) begin
+            if (dec_inst_o.subtype == BRU_JMP) begin : jump_instruction
                 // Both operands are immediate values forming the offset
-                dec_decoded_next_pc_o = dec_pc_o + ic_inst_i[15:0];
-            end
+
+                // Sign extend the offset and add it to the PC
+                if (PcWidth > 16)
+                    dec_decoded_next_pc_o = dec_pc_o
+                        + {{(PcWidth-16){ic_inst_i[15]}}, ic_inst_i[15:0]};
+                else
+                    dec_decoded_next_pc_o = dec_pc_o + ic_inst_i[15:0];
+            end : jump_instruction
+            else begin : branch_instruction
+                dec_operands_required_o[0] = 1'b0; // Operand 1 is the offset
+                dec_operands_required_o[1] = 1'b1; // Operand 2 is the condition
+
+                // Sign extend the offset and add it to the PC
+                dec_decoded_next_pc_o = dec_pc_o + {{(PcWidth-8){ic_inst_i[15]}}, ic_inst_i[15:8]};
+
+                `ifndef SYNTHESIS
+                    if(ic_inst_i[15]) begin
+                        $display("Branch offset is negative!");
+                        $error("Not yet implemented! Reconvergenece PC will be set wrong!");
+                    end
+                `endif
+
+                dec_decoded_branch_o = 1'b1; // Is a branch instruction
+            end : branch_instruction
         end : decode_bru
 
         dec_operands_o[0] = ic_inst_i[15:8];
