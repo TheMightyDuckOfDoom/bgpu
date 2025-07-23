@@ -1,0 +1,2 @@
+overrides:
+    tech_cells_generic: { git: "https://github.com/TheMightyDuckOfDoom/tech_cells_generic", rev: master }

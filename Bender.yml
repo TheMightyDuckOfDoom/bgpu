@@ -8,8 +8,9 @@ package:
         - "Tobias Senti <git@tsenti.li>"
 
 dependencies:
-    axi:          { git: "https://github.com/pulp-platform/axi",          version: 0.39.8 }
-    common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.38.0 }
+    axi:                { git: "https://github.com/pulp-platform/axi",                version: 0.39.8 }
+    common_cells:       { git: "https://github.com/pulp-platform/common_cells",       version: 1.38.0 }
+    tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic", version: 0.2.13 }
     # hpdcache:     { git: "https://github.com/openhwgroup/cv-hpdcache",    rev: 724dcede54123f69bfac64842d8ee52833d4fd77 }
 
 sources:
