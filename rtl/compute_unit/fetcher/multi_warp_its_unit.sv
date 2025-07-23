@@ -116,7 +116,7 @@ module multi_warp_its_unit #(
         // Allocate a new warp
         if (allocate_warp_i && warp_free_o) begin : allocate_new_warp
             // Find the first free warp
-            for(int i = 0; i < NumWarps; i++) begin : find_free_warp
+            for (int i = 0; i < NumWarps; i++) begin : find_free_warp
                 if (!warp_data_q[i].occupied) begin
                     // Allocate the warp
                     allocate_warp[i] = 1'b1;
@@ -141,7 +141,7 @@ module multi_warp_its_unit #(
             end
         end : decode_update
 
-        for(int i = 0; i < NumWarps; i++) begin : update
+        for (int i = 0; i < NumWarps; i++) begin : update
             // If the warp is finished and all instructions are finished |-> deallocate the warp and notify
             if (warp_data_q[i].occupied && warp_data_q[i].finished
                 && ib_all_instr_finished_i[i] && (!tblock_done_o)) begin
@@ -161,7 +161,7 @@ module multi_warp_its_unit #(
     // We can allocate a new warp if there is at least one warp that is not active
     always begin : warp_free
         warp_free_o = 1'b0;
-        for(int i = 0; i < NumWarps; i++) begin : check
+        for (int i = 0; i < NumWarps; i++) begin : check
             if (!warp_data_q[i].occupied) begin
                 warp_free_o = 1'b1;
             end
@@ -178,7 +178,7 @@ module multi_warp_its_unit #(
     // # Per Warp ITS units                                                                  #
     // #######################################################################################
 
-    for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_its_unit
+    for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_its_unit
         warp_its_unit #(
             .PcWidth  ( PcWidth   ),
             .WarpWidth( WarpWidth )
@@ -215,7 +215,7 @@ module multi_warp_its_unit #(
     // # Outputs                                                                             #
     // #######################################################################################
 
-    for(genvar i = 0; i < NumWarps; i++) begin : gen_assign_outputs
+    for (genvar i = 0; i < NumWarps; i++) begin : gen_assign_outputs
         assign warp_ready_o     [i] = warp_ready[i] && warp_data_q[i].occupied
             && (|warp_act_mask_o[i]) && !warp_data_q[i].finished;
         assign warp_dp_addr_o   [i] = warp_data_q[i].dp_addr;

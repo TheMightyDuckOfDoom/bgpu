@@ -158,7 +158,7 @@ module register_opc_stage import bgpu_pkg::*; #(
     // # Read Request Interconnect between Operand Collectors and Register Banks             #
     // #######################################################################################
 
-    for(genvar i = 0; i < NumOPCRequestPorts; i++) begin : gen_read_indexer
+    for (genvar i = 0; i < NumOPCRequestPorts; i++) begin : gen_read_indexer
         register_indexer #(
             .NumWarps        ( NumWarps         ),
             .RegIdxWidth     ( RegIdxWidth      ),
@@ -297,7 +297,7 @@ module register_opc_stage import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Register Banks are each RegWidth wide |-> store a register for a full warp
-    for(genvar i = 0; i < NumBanks; i++) begin : gen_register_banks
+    for (genvar i = 0; i < NumBanks; i++) begin : gen_register_banks
         register_file_bank #(
             .RegisterWidth( RegWidth              ),
             .WarpWidth    ( WarpWidth             ),
@@ -335,7 +335,7 @@ module register_opc_stage import bgpu_pkg::*; #(
     // Distribute the instruction to a ready Operand Collector
     always_comb begin : select_operand_collector_for_insert
         opc_insert_valid = '0;
-        for(int i = 0; i < NumOperandCollectors; i++) begin : check_operand_collector_ready
+        for (int i = 0; i < NumOperandCollectors; i++) begin : check_operand_collector_ready
             if (opc_insert_ready[i]) begin
                 opc_insert_valid[i] = disp_valid_i;
                 break;
@@ -347,7 +347,7 @@ module register_opc_stage import bgpu_pkg::*; #(
     assign opc_ready_o = |opc_insert_ready;
 
     // Generate Operand Collectors
-    for(genvar i = 0; i < NumOperandCollectors; i++) begin : gen_operand_collectors
+    for (genvar i = 0; i < NumOperandCollectors; i++) begin : gen_operand_collectors
         operand_collector #(
             .NumTags          ( NumTags            ),
             .PcWidth          ( PcWidth            ),
@@ -435,7 +435,7 @@ module register_opc_stage import bgpu_pkg::*; #(
             $error("NumBanks is greater than the total number of registers.");
 
         // Read Response Interconnect always has to be ready
-        for(genvar i = 0; i < NumBanks; i++) begin : gen_read_response_interconnect_assertions
+        for (genvar i = 0; i < NumBanks; i++) begin : gen_read_response_interconnect_assertions
             assert property (@(posedge clk_i) disable iff (~rst_ni)
                 (banks_read_rsp_valid[i] |-> banks_read_rsp_ready[i])) else
                 $error("Read Response Interconnect is not ready for bank %0d", i);

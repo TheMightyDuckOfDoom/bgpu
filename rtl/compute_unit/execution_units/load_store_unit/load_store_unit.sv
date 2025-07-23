@@ -172,7 +172,7 @@ module load_store_unit import bgpu_pkg::*; #(
 
     // Operand 0 is the address for load/store operations
     // Truncate to address width
-    for(genvar i = 0; i < WarpWidth; i++) begin : gen_addr
+    for (genvar i = 0; i < WarpWidth; i++) begin : gen_addr
         assign opc_to_eu_addr[i] = opc_to_eu_operands_i[0][i*RegWidth +: AddressWidth];
     end : gen_addr
 
@@ -211,7 +211,7 @@ module load_store_unit import bgpu_pkg::*; #(
     // Find the first free buffer entry -> Also used as common request ID
     always_comb begin : find_free_buffer_entry
         insert_buff_id = '0; // Default to 0
-        for(int unsigned i = 0; i < OutstandingReqs; i++) begin : find_free
+        for (int unsigned i = 0; i < OutstandingReqs; i++) begin : find_free
             if (!buffer_valid_q[i]) begin
                 insert_buff_id = i[OutstandingReqIdxWidth-1:0];
                 break; // Found a free entry, stop searching
@@ -249,7 +249,7 @@ module load_store_unit import bgpu_pkg::*; #(
 
         // If we have a request splitted, update the thread data
         if (cs_to_wdata_valid_d && wdata_to_cs_ready_q) begin
-            for(int unsigned i = 0; i < WarpWidth; i++) begin : update_thread_data
+            for (int unsigned i = 0; i < WarpWidth; i++) begin : update_thread_data
                 if (cs_to_wdata_valid_mask_d[i]) begin
                     // Update the thread data for the corresponding thread
                     buffer_d[cs_to_wdata_d.com_id].thread_data   [i].sub_id = cs_to_wdata_d.sub_id;
@@ -265,7 +265,7 @@ module load_store_unit import bgpu_pkg::*; #(
         if (mem_rsp_valid_i) begin
             if (buffer_valid_q[mem_rsp_com_id]) begin
                 // If the buffer entry is valid, update the thread data
-                for(int unsigned i = 0; i < WarpWidth; i++) begin : update_thread_data_rsp
+                for (int unsigned i = 0; i < WarpWidth; i++) begin : update_thread_data_rsp
                     if (!buffer_q[mem_rsp_com_id].thread_ready[i]
                         && buffer_q[mem_rsp_com_id].thread_waiting[i]
                         && buffer_q[mem_rsp_com_id].thread_data[i].sub_id == mem_rsp_sub_id) begin
@@ -284,7 +284,7 @@ module load_store_unit import bgpu_pkg::*; #(
         end
 
         // A buffer entry is selected for the Result Collector
-        for(int unsigned i = 0; i < OutstandingReqs; i++) begin : free_buffer
+        for (int unsigned i = 0; i < OutstandingReqs; i++) begin : free_buffer
             if (buffer_select_for_rc[i])
                 buffer_valid_d[i] = 1'b0; // Free the buffer entry
         end : free_buffer
@@ -292,7 +292,7 @@ module load_store_unit import bgpu_pkg::*; #(
     end : request_buffer
 
     // Check if buffer entries are valid and ready to be sent to the Result Collector
-    for(genvar i = 0; i < OutstandingReqs; i++) begin : gen_buffer_ready_to_rc
+    for (genvar i = 0; i < OutstandingReqs; i++) begin : gen_buffer_ready_to_rc
         assign buffer_ready_for_rc[i] = buffer_valid_q[i] && (&buffer_q[i].thread_ready);
     end : gen_buffer_ready_to_rc
 
@@ -332,7 +332,7 @@ module load_store_unit import bgpu_pkg::*; #(
         eu_to_rc_data_o = '0;
 
         // Build the warp data for the Result Collector
-        for(int unsigned i = 0; i < WarpWidth; i++) begin : build_warp_data
+        for (int unsigned i = 0; i < WarpWidth; i++) begin : build_warp_data
             /* verilator lint_off WIDTHTRUNC  */
             /* verilator lint_off WIDTHEXPAND */
             if (selected_buffer_entry.load_width == 'd0) begin

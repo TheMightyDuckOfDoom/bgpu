@@ -94,20 +94,20 @@ module tb_coalesce_comparator #(
 
     initial begin
         int unsigned coalesced_match_count;
-        for(int i = 0; i < RequestsToCoalesce; i++) begin
+        for (int i = 0; i < RequestsToCoalesce; i++) begin
             // Randomize the request
             randomize_req();
 
             // Check the output
             $display("Request %0d", i);
-            for(int j = 0; j < NumRequests; j++) begin
+            for (int j = 0; j < NumRequests; j++) begin
                 $display("  Valid: %0d, Address: %0h", req.valid[j], req.addr[j]);
             end
 
             #1ns;
 
             $display("  Coalesced Address: %0h", coalesced_addr);
-            for(int j = 0; j < NumRequests; j++) begin
+            for (int j = 0; j < NumRequests; j++) begin
                 $display("  Member %0d: Valid: %0d, Offset: %0h", j, members[j],
                     member_block_offsets[j]);
             end
@@ -119,7 +119,7 @@ module tb_coalesce_comparator #(
                 else $error("Members should be zero for invalid requests");
 
             coalesced_match_count = 0;
-            for(int j = 0; j < NumRequests; j++) begin
+            for (int j = 0; j < NumRequests; j++) begin
                 // Check the block offsets
                 assert(member_block_offsets[j] == req.addr[j][BlockIdxbits-1:0])
                     else $error("Member block offset %0h does not match request address %0h",

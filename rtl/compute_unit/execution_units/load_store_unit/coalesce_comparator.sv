@@ -53,7 +53,7 @@ module coalesce_comparator #(
     end : check_members
 
     // Assign the block offsets for each request
-    for(genvar i = 0; i < NumRequests; i++) begin : gen_member_block_offsets
+    for (genvar i = 0; i < NumRequests; i++) begin : gen_member_block_offsets
         assign member_block_offsets_o[i] = req_addr_i[i][BlockIdxBits-1:0];
     end : gen_member_block_offsets
 

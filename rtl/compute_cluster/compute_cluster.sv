@@ -206,7 +206,7 @@ module compute_cluster #(
         .mst_resp_i( mem_rsp_i )
     );
 
-    for(genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_mem_to_axi
+    for (genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_mem_to_axi
         mem_to_axi #(
             .axi_req_t ( cu_mem_axi_req_t  ),
             .axi_rsp_t ( cu_mem_axi_resp_t ),
@@ -275,7 +275,7 @@ module compute_cluster #(
         .mst_resp_i( imem_rsp_i )
     );
 
-    for(genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_imem_to_axi
+    for (genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_imem_to_axi
         imem_to_axi #(
             .axi_req_t  ( cu_imem_axi_req_t  ),
             .axi_rsp_t  ( cu_imem_axi_resp_t ),
@@ -339,7 +339,7 @@ module compute_cluster #(
     // # Compute Units                                                                       #
     // #######################################################################################
 
-    for(genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_compute_units
+    for (genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_compute_units
         compute_unit #(
             .PcWidth               ( PcWidth                ),
             .NumWarps              ( NumWarps               ),

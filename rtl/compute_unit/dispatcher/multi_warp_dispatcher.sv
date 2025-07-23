@@ -146,7 +146,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     end
 
     // Dispatcher per Warp
-    for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
+    for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
         dispatcher #(
             .NumTags              ( NumTags               ),
             .PcWidth              ( PcWidth               ),

@@ -48,13 +48,13 @@ module wdata_assembler #(
     assign thread_we_mask_raw = ('d1 << ('d1 << write_width_i)) - 'd1;
 
     // Shift the data and write mask by the block offsets for each thread
-    for(genvar thread = 0; thread < WarpWidth; thread++) begin : gen_thread
+    for (genvar thread = 0; thread < WarpWidth; thread++) begin : gen_thread
 
         // Mask of upper unused bits of each thread's write data
         always_comb begin : mask_thread_wdata
             thread_wdata_raw[thread] = wdata_i[thread * RegWidth +: RegWidth];
 
-            for(int byte_idx = 0; byte_idx < RegWidthInBytes; byte_idx++) begin : byte_loop
+            for (int byte_idx = 0; byte_idx < RegWidthInBytes; byte_idx++) begin : byte_loop
                 // Mask the upper bits of the write data
                 if (byte_idx >= (1 << write_width_i)) begin
                     thread_wdata_raw[thread][byte_idx * 8 +: 8] = '0;
@@ -82,7 +82,7 @@ module wdata_assembler #(
         mem_we_mask_o = '0;
         mem_wdata_o   = '0;
 
-        for(int thread = 0; thread < WarpWidth; thread++) begin : thread_loop
+        for (int thread = 0; thread < WarpWidth; thread++) begin : thread_loop
             mem_we_mask_o = mem_we_mask_o | thread_we_mask[thread];
             mem_wdata_o   = mem_wdata_o   | thread_wdata  [thread];
         end : thread_loop

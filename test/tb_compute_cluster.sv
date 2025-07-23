@@ -242,7 +242,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
             warp_insert.tblock_idx = tblock_idx_t'(tblocks_launched);
             warp_insert.tblock_id  =  tblock_id_t'(tblocks_launched);
 
-            if(warp_free) begin
+            if (warp_free) begin
                 $display("Launching thread block %0d at address %0h.", tblocks_launched,
                     warp_insert.dp_addr);
                 tblocks_launched++;
@@ -265,7 +265,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         while(tblocks_done < TblocksToLaunch) begin
             @(posedge clk);
             #AcqDelay;
-            if(tblock_done) begin
+            if (tblock_done) begin
                 tblocks_done++;
                 $display("Thread block %d done. Completed %d blocks", tblock_done_id, tblocks_done);
                 tblock_done = 1'b0;
@@ -287,7 +287,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         $display("Initializing instruction memory with %0d instructions.", $size(test_program));
         for (int unsigned i = 0; i < $size(test_program); i++) begin
             inst = test_program[i];
-            for(int unsigned b = 0; b < $bits(enc_inst_t) / 8; b++) begin
+            for (int unsigned b = 0; b < $bits(enc_inst_t) / 8; b++) begin
                 i_imem.mem[imem_axi_addr_t'((i * $bits(enc_inst_t) / 8) + b)] = inst[b * 8 +: 8];
             end
         end
@@ -351,7 +351,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
 
     // Initialize data memory
     initial begin : init_mem
-        for(int unsigned i = 0; i < SimMemBlocks * BlockWidth; i++) begin
+        for (int unsigned i = 0; i < SimMemBlocks * BlockWidth; i++) begin
             i_mem.mem[addr_t'(i)] = i[7:0];
         end
     end : init_mem
@@ -455,8 +455,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         $display("Stopping simulation...");
         $dumpflush;
 
-        for(int block = 0; block < SimMemBlocks; block++) begin
-            for(int b = 0; b < BlockWidth; b++) begin
+        for (int block = 0; block < SimMemBlocks; block++) begin
+            for (int b = 0; b < BlockWidth; b++) begin
                 block_data[b * 8 +: 8] = i_mem.mem[addr_t'(block * BlockWidth + b)];
             end
             $display("Memory block[%0d]: %h", block, block_data);

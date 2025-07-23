@@ -82,7 +82,7 @@ module register_file_bank #(
     // #######################################################################################
 
     // Build byte enable from write mask
-    for(genvar warp = 0; warp < WarpWidth; warp++) begin : gen_write_mask_be
+    for (genvar warp = 0; warp < WarpWidth; warp++) begin : gen_write_mask_be
         always_comb begin : warp_write_mask_be
             write_mask_be[(warp * BytesPerRegister) +: BytesPerRegister] = '0;
 

@@ -180,7 +180,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 addr = i_mem_req_sub.gen_queue.queue.pop_front();
 
                 // Generate memory response based on the address
-                for(int j = 0; j < (1 << CachelineIdxBits); j++) begin
+                for (int j = 0; j < (1 << CachelineIdxBits); j++) begin
                     mem_rsp[j] = mem_data[addr * (1 << CachelineIdxBits) + j];
                 end
             end

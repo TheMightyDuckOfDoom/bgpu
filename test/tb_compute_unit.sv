@@ -274,7 +274,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             warp_insert.tblock_idx = tblock_idx_t'(tblocks_launched);
             warp_insert.tblock_id  =  tblock_id_t'(tblocks_launched);
 
-            if(warp_free) begin
+            if (warp_free) begin
                 tblocks_launched++;
             end
         end
@@ -295,7 +295,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         while(tblocks_done < TblocksToLaunch) begin
             @(posedge clk);
             #AcqDelay;
-            if(tblock_done) begin
+            if (tblock_done) begin
                 $display("Thread block %0d done.", tblock_done_id);
                 tblocks_done++;
                 tblock_done = 1'b0;
@@ -321,7 +321,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             #AcqDelay;
             if (imem_req_valid && imem_ready) begin
                 rsp = '0;
-                for(int i = 0; i < (1 << IClineIdxBits); i++) begin
+                for (int i = 0; i < (1 << IClineIdxBits); i++) begin
                     if (i + imem_req_addr * (1 << IClineIdxBits) < $size(test_program)) begin
                         // Fetch instruction from test program
                         rsp[i] = test_program[i + imem_req_addr * (1 << IClineIdxBits)];
@@ -360,8 +360,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
         int val;
 
         mem_ready = 1'b0;
-        for(int i = 0; i < SimMemBlocks; i++) begin
-            for(int j = 0; j < BlockWidth; j++) begin
+        for (int i = 0; i < SimMemBlocks; i++) begin
+            for (int j = 0; j < BlockWidth; j++) begin
                 val = i * BlockWidth + j;
                 memory[i][j] = val[7:0];
             end
@@ -374,16 +374,16 @@ module tb_compute_unit import bgpu_pkg::*; #(
             #AcqDelay;
             mem_rsp_valid_d = 1'b0;
 
-            if(mem_req_valid) begin
+            if (mem_req_valid) begin
                 assert(int'(mem_req.addr) < SimMemBlocks)
                 else $error("Memory write request out of bounds: Addr %0d", mem_req.addr);
 
-                if(mem_req.we_mask != '0) begin
+                if (mem_req.we_mask != '0) begin
                     // Write request
                     $display("Memory write request: ID %0d Addr %0d WeMask %b Data %h",
                         mem_req.id, mem_req.addr, mem_req.we_mask, mem_req.data);
-                    for(int i = 0; i < BlockWidth; i++) begin
-                        if(mem_req.we_mask[i]) begin
+                    for (int i = 0; i < BlockWidth; i++) begin
+                        if (mem_req.we_mask[i]) begin
                             memory[mem_req.addr][i] = mem_req.data[i];
                         end
                     end
@@ -423,11 +423,11 @@ module tb_compute_unit import bgpu_pkg::*; #(
             @(posedge clk);
             #AcqDelay;
             $display("Cycle %4d Time %8d", cycles, $time);
-            if(rst_n) begin
+            if (rst_n) begin
                 // Output from fetcher
                 `ifndef POST
                 $display("Fetcher output valid: %b", i_cu.fe_to_ic_valid_d);
-                if(i_cu.fe_to_ic_valid_d) begin
+                if (i_cu.fe_to_ic_valid_d) begin
                     $display("Instruction at PC %d", i_cu.fe_to_ic_data_d.pc);
                     $display("Act. mask:        %b", i_cu.fe_to_ic_data_d.act_mask);
                     $display("Warp ID:          %d", i_cu.fe_to_ic_data_d.warp_id);
@@ -438,7 +438,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
                 end
 
                 $display("Decoder output valid: %b", i_cu.dec_to_ib_valid_q);
-                if(i_cu.dec_to_ib_valid_q) begin
+                if (i_cu.dec_to_ib_valid_q) begin
                     $display("Instruction at PC %d", i_cu.dec_to_ib_data_q.pc);
                     $display("Act. mask:        %b", i_cu.dec_to_ib_data_q.act_mask);
                     $display("Warp ID:          %d", i_cu.dec_to_ib_data_q.warp_id);
@@ -456,7 +456,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         end
     end
     `ifndef POST
-    for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_display_dispatcher
+    for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_display_dispatcher
         initial begin
             while(1) begin
                 @(posedge clk);
@@ -464,7 +464,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
                 $display("Warp %2d", warp);
                 $display("Register Table");
                 $display("Entry   Vld Dst Prod");
-                for(int rtentry = 0; rtentry < InflightInstrPerWarp; rtentry++) begin : gen_disp_rt
+                for (int rtentry = 0; rtentry < InflightInstrPerWarp; rtentry++) begin : gen_disp_rt
                     $display("RT[%2d]: %1d  %2d  %2d",
                         rtentry,
                         i_cu.i_warp_dispatcher.gen_dispatcher[warp]
@@ -479,11 +479,11 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
                 $display("Wait buffer");
                 $write("Entry   Vld Rdy PC  Tag Dst");
-                for(int operand = 0; operand < OperandsPerInst; operand++) begin
+                for (int operand = 0; operand < OperandsPerInst; operand++) begin
                     $write("  Rdy Tag Op%1d", operand);
                 end
                 $display();
-                for(int wbentry = 0; wbentry < InflightInstrPerWarp; wbentry++) begin
+                for (int wbentry = 0; wbentry < InflightInstrPerWarp; wbentry++) begin
                     $write("WB[%2d]: %1d   %1d %4d  %2d %2d",
                         wbentry,
                         i_cu.i_warp_dispatcher.gen_dispatcher[warp]
@@ -497,7 +497,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
                         i_cu.i_warp_dispatcher.gen_dispatcher[warp]
                             .i_dispatcher.i_wait_buffer.wait_buffer_q[wbentry].dst_reg
                     );
-                    for(int operand = 0; operand < OperandsPerInst; operand++) begin
+                    for (int operand = 0; operand < OperandsPerInst; operand++) begin
                         $write("    %1d  %2d  %2d",
                             i_cu.i_warp_dispatcher.gen_dispatcher[warp]
                                 .i_dispatcher.i_wait_buffer.wait_buffer_q[wbentry]
@@ -546,7 +546,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             $fwrite(fd, "C\t1\n");
 
             // Fetcher
-            if(i_cu.fe_to_ic_valid_d && i_cu.ic_to_fe_ready_q) begin
+            if (i_cu.fe_to_ic_valid_d && i_cu.ic_to_fe_ready_q) begin
                 insn_id_in_sim[PcWidth-1:0] = i_cu.fe_to_ic_data_d.pc;
                 insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.fe_to_ic_data_d.act_mask;
                 insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
@@ -578,7 +578,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Instruction Cache
-            if(i_cu.fe_to_ic_valid_q && i_cu.ic_to_fe_ready_d) begin
+            if (i_cu.fe_to_ic_valid_q && i_cu.ic_to_fe_ready_d) begin
                 // Get the instruction ID from the hashmap
                 insn_id_in_sim[PcWidth-1:0] = i_cu.fe_to_ic_data_q.pc;
                 insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.fe_to_ic_data_q.act_mask;
@@ -592,7 +592,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Decoder
-            if(i_cu.ic_to_dec_valid && i_cu.dec_to_ic_ready) begin
+            if (i_cu.ic_to_dec_valid && i_cu.dec_to_ic_ready) begin
                 // Get the instruction ID from the hashmap
                 insn_id_in_sim[PcWidth-1:0] = i_cu.ic_to_dec_data.pc;
                 insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.ic_to_dec_data.act_mask;
@@ -605,7 +605,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
                     insn_id_in_file);
 
                 // Stop the warp -> retire this instruction
-                if(i_cu.dec_to_fetch_stop_warp) begin
+                if (i_cu.dec_to_fetch_stop_warp) begin
                     // Retire
                     $fwrite(fd, "R\t%0d\t%0d\t0\n",
                         insn_id_in_file, retire_id);
@@ -614,7 +614,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Start Dispatcher Stage
-            if(i_cu.dec_to_ib_valid_q && i_cu.ib_to_dec_ready_d) begin
+            if (i_cu.dec_to_ib_valid_q && i_cu.ib_to_dec_ready_d) begin
                 // Get the instruction ID from the hashmap
                 insn_id_in_sim[PcWidth-1:0] = i_cu.dec_to_ib_data_q.pc;
                 insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.dec_to_ib_data_q.act_mask;
@@ -628,7 +628,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Start OPC Stage
-            if(i_cu.disp_to_opc_valid && i_cu.opc_to_disp_ready) begin
+            if (i_cu.disp_to_opc_valid && i_cu.opc_to_disp_ready) begin
                 // Get the instruction ID from the hashmap
                 insn_id_in_sim[PcWidth-1:0] = i_cu.disp_to_opc_data.pc;
                 insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.disp_to_opc_data.act_mask;
@@ -655,7 +655,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Retire
-            if(i_cu.eu_to_opc_valid && i_cu.opc_to_eu_ready) begin
+            if (i_cu.eu_to_opc_valid && i_cu.opc_to_eu_ready) begin
                 insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data.tag];
 
                 // Retire
@@ -686,7 +686,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         $display("Stopping simulation...");
         $dumpflush;
 
-        for(int i = 0; i < SimMemBlocks; i++) begin
+        for (int i = 0; i < SimMemBlocks; i++) begin
             $display("Memory block[%0d]: %h", i, memory[i]);
         end
 

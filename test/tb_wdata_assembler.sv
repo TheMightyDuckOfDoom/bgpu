@@ -105,7 +105,7 @@ module tb_wdata_assembler #(
         logic [RegWidth-1:0] thread_truncated;
         block_mask_t thread_we_mask;
 
-        for(int i = 0; i < InputsToCheck; i++) begin
+        for (int i = 0; i < InputsToCheck; i++) begin
             // Randomize the request
             randomize_req();
 
@@ -115,7 +115,7 @@ module tb_wdata_assembler #(
             $display("Input:");
             $display("  we_mask: %b", req.we_mask);
             $display("  write_width: %d", 1 << req.write_width);
-            for(int thread = 0; thread < WarpWidth; thread++) begin
+            for (int thread = 0; thread < WarpWidth; thread++) begin
                 $display("  thread %0d:", thread);
                 $display("    wdata: %h", req.wdata[thread * RegWidth +: RegWidth]);
                 $display("    block_offset: %d", req.block_offsets[thread]);
@@ -127,8 +127,8 @@ module tb_wdata_assembler #(
 
             expected_we_mask = '0;
             expected_wdata   = '0;
-            for(int thread = 0; thread < WarpWidth; thread++) begin
-                if(!req.we_mask[thread])
+            for (int thread = 0; thread < WarpWidth; thread++) begin
+                if (!req.we_mask[thread])
                     continue;
 
                 // Truncate the write data to the correct width

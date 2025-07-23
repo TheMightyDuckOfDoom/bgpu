@@ -155,7 +155,7 @@ module wait_buffer import bgpu_pkg::*; #(
     logic [WaitBufferIndexWidth-1:0] insert_idx;
     always_comb begin
         insert_idx = '0;
-        for(int i = 0; i < WaitBufferSizePerWarp; i++) begin
+        for (int i = 0; i < WaitBufferSizePerWarp; i++) begin
             if (!wait_buffer_valid_q[i]) begin
                 insert_idx = i[WaitBufferIndexWidth-1:0];
                 break;
@@ -163,7 +163,7 @@ module wait_buffer import bgpu_pkg::*; #(
         end
     end
 
-    for(genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_insert_logic
+    for (genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_insert_logic
         always_comb begin
             // Default
             wait_buffer_d      [entry] = wait_buffer_q[entry];
@@ -176,7 +176,7 @@ module wait_buffer import bgpu_pkg::*; #(
             // From Execution Units
             if (eu_valid_i) begin : check_ready
                 if (wait_buffer_valid_q[entry]) begin
-                    for(int operand = 0; operand < OperandsPerInst; operand++) begin
+                    for (int operand = 0; operand < OperandsPerInst; operand++) begin
                         if (!wait_buffer_q[entry].operands_ready[operand]
                           && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i) begin
                             wait_buffer_d[entry].operands_ready[operand] = 1'b1;
@@ -205,7 +205,7 @@ module wait_buffer import bgpu_pkg::*; #(
     end : gen_insert_logic
 
     // Which instruction is ready to be dispatched?
-    for(genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_rr_inst_ready
+    for (genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_rr_inst_ready
         assign rr_inst_ready[entry]            = wait_buffer_valid_q[entry]
                                                     && &wait_buffer_q[entry].operands_ready;
         assign arb_in_data[entry].pc           = wait_buffer_q[entry].pc;
@@ -258,7 +258,7 @@ module wait_buffer import bgpu_pkg::*; #(
     // #######################################################################################
 
     `FF(wait_buffer_valid_q, wait_buffer_valid_d, '0, clk_i, rst_ni);
-    for(genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_buffer_ff
+    for (genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_buffer_ff
         `FF(wait_buffer_q[i], wait_buffer_d[i], '0, clk_i, rst_ni);
     end : gen_buffer_ff
 

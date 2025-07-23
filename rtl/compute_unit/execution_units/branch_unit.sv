@@ -135,7 +135,7 @@ module branch_unit import bgpu_pkg::*; #(
                 // New branch instruction
                 bru_branch_d = 1'b1;
 
-                for(int unsigned i = 0; i < WarpWidth; i++) begin
+                for (int unsigned i = 0; i < WarpWidth; i++) begin
                     // Set active mask for threads that are not zero
                     bru_branching_mask_d[i] = opc_to_eu_act_mask_i[i] && (operands[1][i] != '0);
                 end

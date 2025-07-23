@@ -210,7 +210,7 @@ module tb_coalesce_splitter #(
             @(posedge clk);
             #AcqDelay;
             if (rsp_ready && (|rsp_valid)) begin
-                for(int i = 0; i < NumRequests; i++) begin
+                for (int i = 0; i < NumRequests; i++) begin
                     if (rsp_valid[i]) begin
                         thread_rsp            = '0;
                         thread_rsp.thread_id  = i;
@@ -245,7 +245,7 @@ module tb_coalesce_splitter #(
             if (req_valid && req_ready) begin
                 valid      = req.req_valid;
                 sub_req_id = 0;
-                for(int i = 0; i < NumRequests; i++) begin
+                for (int i = 0; i < NumRequests; i++) begin
                     // Skip inactive threads
                     if (!valid[i]) begin
                         continue;

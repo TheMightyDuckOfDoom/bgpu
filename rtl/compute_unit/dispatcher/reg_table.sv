@@ -87,10 +87,10 @@ module reg_table #(
         // Insert logic
         if (insert_i && space_available_o) begin : insert_logic
             // First check operands
-            for(int op = 0; op < OperandsPerInst; op++) begin : check_operand
+            for (int op = 0; op < OperandsPerInst; op++) begin : check_operand
                 operands_ready_o[op] = 1'b1;
                 // Check all entries, if valid and the destination is the same as the operand |-> not ready
-                for(int entry = 0; entry < NumTags; entry++) begin : check_entry
+                for (int entry = 0; entry < NumTags; entry++) begin : check_entry
                     if (table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]) begin
                         operands_ready_o[op] = 1'b0;
                         operands_tag_o[op]   = table_q[entry].producer;
@@ -105,7 +105,7 @@ module reg_table #(
             end : check_operand
 
             // Insert destination, first check if dst is already in table
-            for(int entry = 0; entry < NumTags; entry++) begin : check_existing_entries
+            for (int entry = 0; entry < NumTags; entry++) begin : check_existing_entries
                 if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i) begin
                     table_valid_d[entry]    = 1'b1;
                     table_d[entry].producer = tag_i;
@@ -116,7 +116,7 @@ module reg_table #(
 
             // If not, find a free entry
             if (!use_existing_entry) begin : use_free_entry
-                for(int entry = 0; entry < NumTags; entry++) begin : find_free_entry
+                for (int entry = 0; entry < NumTags; entry++) begin : find_free_entry
                     if (!table_valid_q[entry]) begin
                         table_valid_d[entry]    = 1'b1;
                         table_d[entry].dst      = dst_reg_i;
@@ -130,7 +130,7 @@ module reg_table #(
         // Clear logic
         // |-> if the EU is valid, clear all entries with the same producer tag, as result is in register file
         if (eu_valid_i) begin : clear_entry
-            for(int entry = 0; entry < NumTags; entry++) begin
+            for (int entry = 0; entry < NumTags; entry++) begin
                 if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
                     table_valid_d[entry] = 1'b0;
                 end
@@ -142,7 +142,7 @@ module reg_table #(
     // # Sequential Logic                                                   #
     // ######################################################################
 
-    for(genvar i = 0; i < NumTags; i++) begin : gen_ffs
+    for (genvar i = 0; i < NumTags; i++) begin : gen_ffs
         `FF(table_valid_q[i], table_valid_d[i], '0, clk_i, rst_ni);
         `FF(table_q[i], table_d[i], '0, clk_i, rst_ni);
     end
@@ -157,8 +157,8 @@ module reg_table #(
         else $error("No space available in register table when inserting");
 
         // Check that there a no entries with matching destination register or tag
-        for(genvar i = 0; i < NumTags; i++) begin : gen_check_entries
-            for(genvar j = 0; j < NumTags; j++) begin : gen_check_entries_inner
+        for (genvar i = 0; i < NumTags; i++) begin : gen_check_entries
+            for (genvar j = 0; j < NumTags; j++) begin : gen_check_entries_inner
                 // Check destination register
                 assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i]
                     && table_valid_q[j] |-> i == j || table_q[i].dst != table_q[j].dst)

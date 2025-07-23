@@ -118,7 +118,7 @@ module fetcher #(
     // #######################################################################################
 
     // Arbiter data input
-    for(genvar i = 0; i < NumWarps; i++) begin : gen_arb_data
+    for (genvar i = 0; i < NumWarps; i++) begin : gen_arb_data
         assign arb_in_data[i].pc         = its_warp_pc        [i];
         assign arb_in_data[i].act_mask   = its_warp_act_mask  [i];
         assign arb_in_data[i].subwarp_id = its_warp_subwarp_id[i];

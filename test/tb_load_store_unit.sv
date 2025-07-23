@@ -236,9 +236,9 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                 rsp.id = mem_req.id;
 
                 rsp.data = '0;
-                if(mem_req.we_mask == '0) begin
+                if (mem_req.we_mask == '0) begin
                     $display("Memory Read Request: ID=%0h, Addr=%0h", mem_req.id, mem_req.addr);
-                    for(int j = 0; j < BlockWidth; j++) begin
+                    for (int j = 0; j < BlockWidth; j++) begin
                         // Read data from the memory block
                         rsp.data[j] = mem_data[j + int'(mem_req.addr) * BlockWidth];
                         $display("Read data[%0d] = %h from address %h",
@@ -248,7 +248,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                     // Write to memory
                     $display("Memory Write Request: ID=%0h, Addr=%0h, WE=%b, WData=%h",
                              mem_req.id, mem_req.addr, mem_req.we_mask, mem_req.wdata);
-                    for(int j = 0; j < BlockWidth; j++) begin
+                    for (int j = 0; j < BlockWidth; j++) begin
                         if (mem_req.we_mask[j]) begin
                             // Write byte to memory
                             mem_data[j + int'(mem_req.addr) * BlockWidth] = mem_req.wdata[j];
@@ -360,8 +360,8 @@ module tb_load_store_unit import bgpu_pkg::*; #(
         int unsigned wbyte, size, block_addr, block_offset;
 
         // Initialize golden memory with some data
-        for(int i = 0; i < (1 << BlockAddrWidth); i++) begin
-            for(int j = 0; j < BlockWidth; j++) begin
+        for (int i = 0; i < (1 << BlockAddrWidth); i++) begin
+            for (int j = 0; j < BlockWidth; j++) begin
                 wbyte = i * BlockWidth + j;
                 golden_mem[i][j] = wbyte[7:0];
             end
@@ -388,7 +388,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
             assert(non_zero_mask != '0) else $error("Golden Model: Active mask is zero!");
 
             // Overlapping store data get OR-ed together -> store 0 first
-            for(int thread = 0; thread < WarpWidth; thread++) begin
+            for (int thread = 0; thread < WarpWidth; thread++) begin
                 if (!non_zero_mask[thread]) begin
                     continue; // Skip inactive threads
                 end
@@ -406,9 +406,9 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                         / BlockWidth;
                     block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
                         % BlockWidth;
-                    for(int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
+                    for (int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
                         // Check that we're not storing outside of a block
-                        if(block_offset == BlockWidth) begin
+                        if (block_offset == BlockWidth) begin
                             break;
                         end
                         // Write zero to golden memory
@@ -419,7 +419,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                 end
             end
 
-            for(int thread = 0; thread < WarpWidth; thread++) begin
+            for (int thread = 0; thread < WarpWidth; thread++) begin
                 if (!non_zero_mask[thread]) begin
                     continue; // Skip inactive threads
                 end
@@ -439,9 +439,9 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                         / BlockWidth;
                     block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
                         % BlockWidth;
-                    for(int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
+                    for (int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
                         // Check that we're not reading outside of a block
-                        if(block_offset >= BlockWidth) begin
+                        if (block_offset >= BlockWidth) begin
                             break;
                         end
                         // Read byte from golden memory
@@ -470,9 +470,9 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                         / BlockWidth;
                     block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
                         % BlockWidth;
-                    for(int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
+                    for (int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
                         // Check that we're not storing outside of a block
-                        if(block_offset == BlockWidth) begin
+                        if (block_offset == BlockWidth) begin
                             break;
                         end
                         // Write byte to golden memory -> OR data together
@@ -602,8 +602,8 @@ module tb_load_store_unit import bgpu_pkg::*; #(
             #1ns;
 
             // Count how many bits in i_load_store_unit.buffer_valid_q are set
-            for(int i = 0; i < OutstandingReqs; i++) begin
-                if(i_load_store_unit.buffer_valid_q[i]) begin
+            for (int i = 0; i < OutstandingReqs; i++) begin
+                if (i_load_store_unit.buffer_valid_q[i]) begin
                     occupancy++;
                 end
             end

@@ -142,7 +142,7 @@ module operand_collector import bgpu_pkg::*; #(
                 else begin : operands_not_required
                     // Store register index of operands in the data
                     operand_d[i].data = '0;
-                    for(int thread = 0; thread < WarpWidth; thread++) begin
+                    for (int thread = 0; thread < WarpWidth; thread++) begin
                         // Load {operand1, operand2} register index into data
                         operand_d[i].data[thread * RegWidth + i * RegIdxWidth +: RegIdxWidth]
                             = disp_src_i[i];
