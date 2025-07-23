@@ -89,13 +89,15 @@ module reg_table #(
             // First check operands
             for (int op = 0; op < OperandsPerInst; op++) begin : check_operand
                 operands_ready_o[op] = 1'b1;
-                // Check all entries, if valid and the destination is the same as the operand |-> not ready
+                // Check all entries, if valid and the destination is the same as the operand
+                // and part of the same subwarp |-> not ready
                 for (int entry = 0; entry < NumTags; entry++) begin : check_entry
-                    if (table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]) begin
+                    if (table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]
+                        && table_q[entry].subwarp_id == subwarp_id_i) begin : entry_found
                         operands_ready_o[op] = 1'b0;
-                        operands_tag_o[op]   = table_q[entry].producer;
+                        operands_tag_o  [op] = table_q[entry].producer;
                         break;
-                    end
+                    end : entry_found
                 end : check_entry
 
                 // Check if operand is produced by the EUs in the same cycle |-> then it is ready
@@ -106,23 +108,28 @@ module reg_table #(
 
             // Insert destination, first check if dst is already in table
             for (int entry = 0; entry < NumTags; entry++) begin : check_existing_entries
-                if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i) begin
+                if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i
+                    && table_q[entry].subwarp_id == subwarp_id_i) begin : modify_existing
                     table_valid_d[entry]    = 1'b1;
                     table_d[entry].producer = tag_i;
                     use_existing_entry      = 1'b1;
                     break;
-                end
+                end : modify_existing
             end : check_existing_entries
 
             // If not, find a free entry
             if (!use_existing_entry) begin : use_free_entry
                 for (int entry = 0; entry < NumTags; entry++) begin : find_free_entry
-                    if (!table_valid_q[entry]) begin
-                        table_valid_d[entry]    = 1'b1;
-                        table_d[entry].dst      = dst_reg_i;
-                        table_d[entry].producer = tag_i;
+                    if (!table_valid_q[entry]) begin : free_entry_found
+                        // Mark as valid
+                        table_valid_d[entry] = 1'b1;
+
+                        // Set the entry
+                        table_d[entry].dst        = dst_reg_i;
+                        table_d[entry].producer   = tag_i;
+                        table_d[entry].subwarp_id = subwarp_id_i;
                         break;
-                    end
+                    end : free_entry_found
                 end : find_free_entry
             end : use_free_entry
         end : insert_logic
@@ -144,7 +151,7 @@ module reg_table #(
 
     for (genvar i = 0; i < NumTags; i++) begin : gen_ffs
         `FF(table_valid_q[i], table_valid_d[i], '0, clk_i, rst_ni);
-        `FF(table_q[i], table_d[i], '0, clk_i, rst_ni);
+        `FF(table_q      [i], table_d      [i], '0, clk_i, rst_ni);
     end
 
     // ######################################################################
