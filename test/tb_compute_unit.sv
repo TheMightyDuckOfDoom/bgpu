@@ -7,7 +7,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
-    parameter int unsigned NumWarps = 1,
+    parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// Number of inflight instructions per warp
@@ -39,7 +39,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
     parameter int unsigned SimMemBlocks = 65,
 
-    parameter int unsigned TblocksToLaunch = 1,
+    parameter int unsigned TblocksToLaunch = 33,
 
     parameter time         ClkPeriod    = 10ns,
     parameter time         AcqDelay     = 9ns,
@@ -594,8 +594,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
                 $fwrite(fd, "S\t%0d\t0\tD\n",
                     insn_id_in_file);
 
-                // Stop the warp -> retire this instruction
-                if (i_cu.dec_to_fetch_stop_warp) begin
+                // Control Instruction -> Retire this instruction
+                if (i_cu.dec_to_fetch_control) begin
                     // Retire
                     $fwrite(fd, "R\t%0d\t%0d\t0\n",
                         insn_id_in_file, retire_id);

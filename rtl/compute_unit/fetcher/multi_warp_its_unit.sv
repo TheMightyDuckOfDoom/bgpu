@@ -83,7 +83,6 @@ module multi_warp_its_unit #(
     // Data per warp
     typedef struct packed {
         logic        occupied;
-        logic        finished;
         addr_t       dp_addr;    // Data / Parameter address
         tblock_idx_t tblock_idx; // Block index -> used to calculate the thread id
         tblock_id_t  tblock_id;  // Unique identifier for the block
@@ -95,6 +94,8 @@ module multi_warp_its_unit #(
 
     // General stack data
     warp_data_t [NumWarps-1:0] warp_data_q, warp_data_d;
+
+    logic [NumWarps-1:0] warp_finished;
 
     logic [NumWarps-1:0] allocate_warp;
     logic [NumWarps-1:0] warp_ready;
@@ -123,7 +124,6 @@ module multi_warp_its_unit #(
 
                     // Set the initial values
                     warp_data_d[i].occupied   = 1'b1;
-                    warp_data_d[i].finished   = 1'b0;
                     warp_data_d[i].tblock_idx = allocate_tblock_idx_i;
                     warp_data_d[i].tblock_id  = allocate_tblock_id_i;
                     warp_data_d[i].dp_addr    = allocate_dp_addr_i;
@@ -132,18 +132,9 @@ module multi_warp_its_unit #(
             end : find_free_warp
         end : allocate_new_warp
 
-        // Did we get an update from decode?
-        if (instruction_decoded_i) begin : decode_update
-            // If the warp is finished |-> mark it as finished,
-            // wait until all instructions are finished
-            if (decode_stop_warp_i) begin
-                warp_data_d[decode_wid_i].finished = 1'b1;
-            end
-        end : decode_update
-
         for (int i = 0; i < NumWarps; i++) begin : update
             // If the warp is finished and all instructions are finished |-> deallocate the warp and notify
-            if (warp_data_q[i].occupied && warp_data_q[i].finished
+            if (warp_data_q[i].occupied && warp_finished[i]
                 && ib_all_instr_finished_i[i] && (!tblock_done_o)) begin
 
                 tblock_done_o    = 1'b1;
@@ -152,7 +143,6 @@ module multi_warp_its_unit #(
                 // Deallocate the warp upon handshake
                 if (tblock_done_ready_i) begin
                     warp_data_d[i].occupied = 1'b0;
-                    warp_data_d[i].finished = 1'b0;
                 end
             end
         end : update
@@ -191,9 +181,12 @@ module multi_warp_its_unit #(
 
             // From decode stage
             .instruction_decoded_i( instruction_decoded_i && (decode_wid_i == warp) ),
+            .stop_warp_i          ( decode_stop_warp_i                              ),
             .decoded_subwarp_id_i ( decode_subwarp_id_i                             ),
             .is_branch_i          ( decode_branch_i                                 ),
             .next_pc_i            ( decode_next_pc_i                                ),
+
+            .all_threads_finished_o( warp_finished[warp] ),
 
             // From fetcher
             .selected_for_fetch_i( warp_selected_i[warp] ),
@@ -217,7 +210,7 @@ module multi_warp_its_unit #(
 
     for (genvar i = 0; i < NumWarps; i++) begin : gen_assign_outputs
         assign warp_ready_o     [i] = warp_ready[i] && warp_data_q[i].occupied
-            && (|warp_act_mask_o[i]) && !warp_data_q[i].finished;
+            && (|warp_act_mask_o[i]) && (!warp_finished[i]);
         assign warp_dp_addr_o   [i] = warp_data_q[i].dp_addr;
         assign warp_tblock_idx_o[i] = warp_data_q[i].tblock_idx;
     end : gen_assign_outputs

@@ -168,13 +168,15 @@ module reg_table #(
             for (genvar j = 0; j < NumTags; j++) begin : gen_check_entries_inner
                 // Check destination register
                 assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i]
-                    && table_valid_q[j] |-> i == j || table_q[i].dst != table_q[j].dst)
+                    && table_valid_q[j] |-> i == j || (table_q[i].dst != table_q[j].dst
+                    || table_q[i].subwarp_id != table_q[j].subwarp_id))
                 else $error("Destination register %d is in multiple entries: %d and %d",
                     table_q[i].dst, i, j);
 
                 // Check producer tag
                 assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i]
-                    && table_valid_q[j] |-> i == j || table_q[i].producer != table_q[j].producer)
+                    && table_valid_q[j] |-> i == j || (table_q[i].producer != table_q[j].producer
+                    || table_q[i].subwarp_id != table_q[j].subwarp_id))
                 else $error("Producer tag %d is in multiple entries: %d and %d",
                     table_q[i].producer, i, j);
             end : gen_check_entries_inner

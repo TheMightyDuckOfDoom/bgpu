@@ -35,8 +35,11 @@ module warp_its_unit #(
     output act_mask_t   fetch_act_mask_o,
     output subwarp_id_t fetch_subwarp_id_o,
 
+    output logic        all_threads_finished_o, // All threads have reached a stop instruction
+
     // From Decoder
     input logic        instruction_decoded_i,
+    input logic        stop_warp_i,
     input logic        is_branch_i,
     input subwarp_id_t decoded_subwarp_id_i,
     input pc_t         next_pc_i,
@@ -129,7 +132,13 @@ module warp_its_unit #(
                         // Update PC to next instruction
                         pc_act_mask_d[i].pc = next_pc_i;
                         // We are ready again for fetching if it was not a branch instruction
-                        pc_ready_d[i] = !is_branch_i;
+                        pc_ready_d[i] = (!is_branch_i);
+
+                        // If it is a stop instruction, then we can deallocate the PC
+                        if (stop_warp_i) begin : stop_subwarp
+                            pc_ready_d[i] = 1'b0;
+                            valid_pc_d[i] = 1'b0;
+                        end : stop_subwarp
                     end : decoded_normal_instruction
 
                     // Branch from Branch Unit
@@ -165,7 +174,7 @@ module warp_its_unit #(
                         valid_pc_d[i]                = 1'b1;
                         pc_act_mask_d[i].pc          = bru_branch_pc_i;
                         pc_act_mask_d[i].active_mask = bru_branching_mask_i;
-                        
+
                         // Is ready for fetching
                         pc_ready_d[i]                = 1'b1;
 
@@ -208,6 +217,9 @@ module warp_its_unit #(
     assign fetch_pc_o       = selected_pc_act_mask.pc;
     assign fetch_act_mask_o = selected_pc_act_mask.active_mask;
 
+    // All threads have reached a stop if no PC is valid anymore
+    assign all_threads_finished_o = valid_pc_q == '0;
+
     // #######################################################################################
     // # Sequential Logic                                                                    #
     // #######################################################################################
@@ -243,8 +255,5 @@ module warp_its_unit #(
                 |-> pc_act_mask_q[i].active_mask != '0)
                 else $error("ITS: Valid PC but no active threads in active mask!");
         end : gen_assertions
-
-        // A branch mask can only partially match with a single valid PC
-
     `endif
 endmodule : warp_its_unit
