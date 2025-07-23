@@ -79,10 +79,10 @@ module fetcher #(
     output tblock_idx_t [NumWarps-1:0] warp_tblock_idx_o, // Block index
 
     // From Branch Unit
-    input logic      bru_branch_i,      // New branch instruction
-    input wid_t      bru_branch_wid_i,  // Which warp is the branch for?
+    input logic      bru_branch_i,         // New branch instruction
+    input wid_t      bru_branch_wid_i,     // Which warp is the branch for?
     input act_mask_t bru_branching_mask_i, // Active threads for the branch
-    input pc_t       bru_inactive_pc_i  // PC to execute for inactive threads
+    input pc_t       bru_branch_pc_i       // PC to branch to for the threads in the mask
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -201,7 +201,7 @@ module fetcher #(
         .bru_branch_i        ( bru_branch_i         ),
         .bru_branch_wid_i    ( bru_branch_wid_i     ),
         .bru_branching_mask_i( bru_branching_mask_i ),
-        .bru_inactive_pc_i   ( bru_inactive_pc_i    )
+        .bru_branch_pc_i     ( bru_branch_pc_i      )
     );
 
     // #######################################################################################

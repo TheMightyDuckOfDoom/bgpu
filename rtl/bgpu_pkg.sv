@@ -87,8 +87,8 @@ typedef struct packed {
         IU_SLLI\
     }
 
+    // Jump never reaches the BRU, as it is handled by the decoder
     `define BRU_VALID_SUBTYPES {\
-        BRU_JMP,\
         BRU_BNZ\
     }
 `endif

@@ -39,7 +39,12 @@ module warp_its_unit #(
     input logic        instruction_decoded_i,
     input logic        is_branch_i,
     input subwarp_id_t decoded_subwarp_id_i,
-    input pc_t         next_pc_i
+    input pc_t         next_pc_i,
+
+    // From Branch Unit
+    input logic      bru_branch_i,         // New branch instruction
+    input act_mask_t bru_branching_mask_i, // Active threads for the branch
+    input pc_t       bru_branch_pc_i       // PC to branch to for the threads in the mask
 );
     // #######################################################################################
     // # Local Parameters                                                                    #

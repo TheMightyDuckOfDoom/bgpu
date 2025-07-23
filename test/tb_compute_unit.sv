@@ -138,7 +138,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         // Subtract address from data
         '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 1, op2: 0}, // reg2 = reg1 - reg0
 
-        '{eu: EU_BRU, subtype: BRU_JMP,        dst: 6, op1: 0, op2: 2}, // Jump over next inst
+        '{eu: EU_BRU, subtype: BRU_JMP,        dst: 6, op1: 0, op2: 1}, // Jump over next inst
         '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 2, op2: 0}, // reg2 = reg2 - reg0
 
         '{eu: EU_IU,  subtype: IU_BID,         dst: 3, op1: 0, op2: 0}, // reg3 = block ID

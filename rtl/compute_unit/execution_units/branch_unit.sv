@@ -60,7 +60,7 @@ module branch_unit import bgpu_pkg::*; #(
     output logic      bru_branch_o,      // New branch instruction
     output wid_t      bru_branch_wid_o,  // Branching warp ID
     output act_mask_t bru_branching_mask_o, // Active threads for the branch
-    output pc_t       bru_inactive_pc_o  // PC to execute for inactive threads
+    output pc_t       bru_branch_pc_o  // PC to branch to for the threads in the mask
 );
     // #######################################################################################
     // # Type Definitions                                                                    #
@@ -85,10 +85,10 @@ module branch_unit import bgpu_pkg::*; #(
 
     eu_to_opc_t eu_to_opc_d, eu_to_opc_q;
 
-    logic      bru_branch_d, bru_branch_q;
-    wid_t      bru_branch_wid_d, bru_branch_wid_q;
+    logic      bru_branch_d,         bru_branch_q;
     act_mask_t bru_branching_mask_d, bru_branching_mask_q;
-    pc_t       bru_inactive_pc_d, bru_inactive_pc_q;
+    pc_t       bru_branch_pc_d,      bru_branch_pc_q;
+    wid_t      bru_branch_wid_q;
 
     // #######################################################################################
     // # Combinational Logic                                                                 #
@@ -106,12 +106,9 @@ module branch_unit import bgpu_pkg::*; #(
 
             // Check instruction subtype and perform operation
             case (opc_to_eu_inst_sub_i)
-                BRU_JMP: begin // Jump to address
-                    result[i][PcWidth-1:0] = opc_to_eu_pc_i;
-                end
-
                 BRU_BNZ: begin // Branch if not zero
-                    result[i] = operands[1][i] != '0 ? 'd1 : '0;
+                    // Result contains the condition
+                    result[i] = (operands[1][i] != '0) ? 'd1 : '0;
                 end
 
                 default: begin
@@ -126,8 +123,6 @@ module branch_unit import bgpu_pkg::*; #(
         // Default
         bru_branch_d         = 1'b0;
         bru_branching_mask_d = '0;
-        bru_inactive_pc_d    = opc_to_eu_pc_i + 'd1;
-        bru_branch_wid_d     = opc_to_eu_tag_i[WidWidth-1:0]; // Warp ID
 
         // Handshake
         if (eu_to_opc_ready_o && opc_to_eu_valid_i) begin
@@ -143,19 +138,24 @@ module branch_unit import bgpu_pkg::*; #(
         end
     end : handle_branch
 
+    // Calculate the PC to branch to
+    assign bru_branch_pc_d = opc_to_eu_pc_i
+        + {{(PcWidth-RegIdxWidth){operands[0][0][RegIdxWidth-1]}}, operands[0][0][RegIdxWidth-1:0]}
+        + 'd1;
+
     // #######################################################################################
     // # Register Signals to Fetcher                                                         #
     // #######################################################################################
 
-    `FF(bru_branch_q,         bru_branch_d,         '0, clk_i, rst_ni)
-    `FF(bru_branch_wid_q,     bru_branch_wid_d,     '0, clk_i, rst_ni)
-    `FF(bru_branching_mask_q, bru_branching_mask_d, '0, clk_i, rst_ni)
-    `FF(bru_inactive_pc_q,    bru_inactive_pc_d,    '0, clk_i, rst_ni)
+    `FF(bru_branch_q,         bru_branch_d,                  '0, clk_i, rst_ni)
+    `FF(bru_branch_wid_q,     opc_to_eu_tag_i[WidWidth-1:0], '0, clk_i, rst_ni)
+    `FF(bru_branching_mask_q, bru_branching_mask_d,          '0, clk_i, rst_ni)
+    `FF(bru_branch_pc_q,      bru_branch_pc_d,               '0, clk_i, rst_ni)
 
     assign bru_branch_o         = bru_branch_q;
     assign bru_branch_wid_o     = bru_branch_wid_q;
     assign bru_branching_mask_o = bru_branching_mask_q;
-    assign bru_inactive_pc_o    = bru_inactive_pc_q;
+    assign bru_branch_pc_o      = bru_branch_pc_q;
 
     // #######################################################################################
     // # Output Register                                                                     #

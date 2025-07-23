@@ -71,10 +71,10 @@ module multi_warp_its_unit #(
     output tblock_idx_t [NumWarps-1:0] warp_tblock_idx_o, // Block index,
 
     // From Branch Unit
-    input logic      bru_branch_i,      // New branch instruction
-    input wid_t      bru_branch_wid_i,  // Which warp is the branch for?
+    input logic      bru_branch_i,         // New branch instruction
+    input wid_t      bru_branch_wid_i,     // Which warp is the branch for?
     input act_mask_t bru_branching_mask_i, // Active threads for the branch
-    input pc_t       bru_inactive_pc_i  // PC to execute for inactive threads
+    input pc_t       bru_branch_pc_i       // PC to branch to for the threads in the mask
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -202,12 +202,12 @@ module multi_warp_its_unit #(
             .ready_for_fetch_o ( warp_ready       [warp] ),
             .fetch_pc_o        ( warp_pc_o        [warp] ),
             .fetch_act_mask_o  ( warp_act_mask_o  [warp] ),
-            .fetch_subwarp_id_o( warp_subwarp_id_o[warp] )
+            .fetch_subwarp_id_o( warp_subwarp_id_o[warp] ),
 
             // From branch unit
-            // .bru_branch_i        ( bru_branch_i && (bru_branch_wid_i == warp) ),
-            // .bru_branching_mask_i( bru_branching_mask_i                       ),
-            // .bru_inactive_pc_i   ( bru_inactive_pc_i                          )
+            .bru_branch_i        ( bru_branch_i && (bru_branch_wid_i == warp) ),
+            .bru_branching_mask_i( bru_branching_mask_i                       ),
+            .bru_branch_pc_i     ( bru_branch_pc_i                            )
         );
     end : gen_its_unit
 

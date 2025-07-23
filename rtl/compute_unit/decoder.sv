@@ -126,9 +126,9 @@ module decoder import bgpu_pkg::*; #(
                 // Sign extend the offset and add it to the PC
                 if (PcWidth > 16)
                     dec_decoded_next_pc_o = dec_pc_o
-                        + {{(PcWidth-16){ic_inst_i[15]}}, ic_inst_i[15:0]};
+                        + {{(PcWidth-16){ic_inst_i[15]}}, ic_inst_i[15:0]} + 'd1;
                 else
-                    dec_decoded_next_pc_o = dec_pc_o + ic_inst_i[15:0];
+                    dec_decoded_next_pc_o = dec_pc_o + ic_inst_i[15:0] + 'd1;
 
                 // Is a control instruction
                 dec_decoded_control_o = 1'b1;

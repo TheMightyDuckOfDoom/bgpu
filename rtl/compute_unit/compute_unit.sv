@@ -238,7 +238,7 @@ module compute_unit import bgpu_pkg::*; #(
     logic      bru_branch;
     wid_t      bru_branch_wid;
     act_mask_t bru_branching_mask;
-    pc_t       bru_inactive_pc;
+    pc_t       bru_branch_pc;
 
     // #######################################################################################
     // # Fetcher                                                                             #
@@ -289,7 +289,7 @@ module compute_unit import bgpu_pkg::*; #(
         .bru_branch_i        ( bru_branch         ),
         .bru_branch_wid_i    ( bru_branch_wid     ),
         .bru_branching_mask_i( bru_branching_mask ),
-        .bru_inactive_pc_i   ( bru_inactive_pc    )
+        .bru_branch_pc_i     ( bru_branch_pc      )
     );
 
     `FF(dec_to_fetch_decoded_q,            dec_to_fetch_decoded,            '0, clk_i, rst_ni)
@@ -648,7 +648,7 @@ module compute_unit import bgpu_pkg::*; #(
         .bru_branch_o        ( bru_branch         ),
         .bru_branch_wid_o    ( bru_branch_wid     ),
         .bru_branching_mask_o( bru_branching_mask ),
-        .bru_inactive_pc_o   ( bru_inactive_pc    )
+        .bru_branch_pc_o     ( bru_branch_pc      )
     );
 
     // #######################################################################################
