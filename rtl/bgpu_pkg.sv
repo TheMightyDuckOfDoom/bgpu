@@ -41,9 +41,10 @@ typedef enum logic [5:0] {
 } lsu_subtype_e;
 
 typedef enum logic [5:0] {
-    BRU_JMP = 'h00, // Jump to address
-    BRU_BNZ = 'h01, // Branch if not zero
-    BRU_BEZ = 'h02  // Branch if zero
+    BRU_JMP  = 'h00, // Jump to address
+    BRU_SYNC = 'h01, // Blocks until all threads have reached this instruction
+    BRU_BNZ  = 'h02, // Branch if not zero
+    BRU_BEZ  = 'h03  // Branch if zero
 } bru_subtype_e;
 
 typedef union packed {
@@ -88,7 +89,7 @@ typedef struct packed {
         IU_SLLI\
     }
 
-    // Jump never reaches the BRU, as it is handled by the decoder
+    // JMP and SYNC never reach the BRU, as they are handled by the decoder
     `define BRU_VALID_SUBTYPES {\
         BRU_BEZ,\
         BRU_BNZ\

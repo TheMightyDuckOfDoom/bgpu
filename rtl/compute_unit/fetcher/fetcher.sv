@@ -70,6 +70,7 @@ module fetcher #(
     input logic        dec_decoded_i,
     input logic        dec_stop_warp_i,
     input logic        dec_decoded_branch_i,
+    input logic        dec_decoded_sync_i,
     input wid_t        dec_decoded_warp_id_i,
     input subwarp_id_t dec_decoded_subwarp_id_i,
     input pc_t         dec_decoded_next_pc_i,
@@ -187,6 +188,7 @@ module fetcher #(
         .decode_wid_i         ( dec_decoded_warp_id_i    ),
         .decode_subwarp_id_i  ( dec_decoded_subwarp_id_i ),
         .decode_branch_i      ( dec_decoded_branch_i     ),
+        .decode_sync_i        ( dec_decoded_sync_i       ),
         .decode_next_pc_i     ( dec_decoded_next_pc_i    ),
 
         .warp_selected_i  ( arb_gnt & rr_warp_ready ),

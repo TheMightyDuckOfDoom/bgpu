@@ -53,6 +53,7 @@ module decoder import bgpu_pkg::*; #(
     output logic        dec_decoded_control_o,
     output logic        dec_stop_warp_o,
     output logic        dec_decoded_branch_o,
+    output logic        dec_decoded_sync_o,
     output wid_t        dec_decoded_warp_id_o,
     output subwarp_id_t dec_decoded_subwarp_id_o,
     output pc_t         dec_decoded_next_pc_o
@@ -85,6 +86,7 @@ module decoder import bgpu_pkg::*; #(
         // By default, increment the PC by one
         dec_decoded_next_pc_o = dec_pc_o + 'd1;
         dec_decoded_branch_o  = 1'b0;
+        dec_decoded_sync_o    = 1'b0;
 
         // By default, all operands are immediate values
         dec_operands_required_o = '0;
@@ -133,6 +135,10 @@ module decoder import bgpu_pkg::*; #(
                 // Is a control instruction
                 dec_decoded_control_o = 1'b1;
             end : jump_instruction
+            else if (dec_inst_o.subtype == BRU_SYNC) begin : sync_instruction
+                dec_decoded_control_o = 1'b1;
+                dec_decoded_sync_o    = 1'b1;
+            end : sync_instruction
             else begin : branch_instruction
                 // Op1 is an immediate value holding the offset
                 // Op2 is a register holding the condition

@@ -53,6 +53,7 @@ module multi_warp_its_unit #(
     input wid_t        decode_wid_i,
     input subwarp_id_t decode_subwarp_id_i,
     input logic        decode_branch_i,
+    input logic        decode_sync_i,
     input pc_t         decode_next_pc_i,
 
     /// From instruction buffer
@@ -184,6 +185,7 @@ module multi_warp_its_unit #(
             .stop_warp_i          ( decode_stop_warp_i                              ),
             .decoded_subwarp_id_i ( decode_subwarp_id_i                             ),
             .is_branch_i          ( decode_branch_i                                 ),
+            .is_sync_i            ( decode_sync_i                                   ),
             .next_pc_i            ( decode_next_pc_i                                ),
 
             .all_threads_finished_o( warp_finished[warp] ),

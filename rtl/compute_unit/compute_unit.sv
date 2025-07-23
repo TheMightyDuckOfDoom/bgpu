@@ -202,6 +202,7 @@ module compute_unit import bgpu_pkg::*; #(
     logic        dec_to_fetch_control;
     logic        dec_to_fetch_stop_warp,          dec_to_fetch_stop_warp_q;
     logic        dec_to_fetch_decoded_branch,     dec_to_fetch_decoded_branch_q;
+    logic        dec_to_fetch_decoded_sync,       dec_to_fetch_decoded_sync_q;
     wid_t        dec_to_fetch_decoded_warp_id,    dec_to_fetch_decoded_warp_id_q;
     subwarp_id_t dec_to_fetch_decoded_subwarp_id, dec_to_fetch_decoded_subwarp_id_q;
     pc_t         dec_to_fetch_decoded_next_pc,    dec_to_fetch_decoded_next_pc_q;
@@ -279,6 +280,7 @@ module compute_unit import bgpu_pkg::*; #(
         .dec_decoded_i           ( dec_to_fetch_decoded_q            ),
         .dec_stop_warp_i         ( dec_to_fetch_stop_warp_q          ),
         .dec_decoded_branch_i    ( dec_to_fetch_decoded_branch_q     ),
+        .dec_decoded_sync_i      ( dec_to_fetch_decoded_sync_q       ),
         .dec_decoded_warp_id_i   ( dec_to_fetch_decoded_warp_id_q    ),
         .dec_decoded_subwarp_id_i( dec_to_fetch_decoded_subwarp_id_q ),
         .dec_decoded_next_pc_i   ( dec_to_fetch_decoded_next_pc_q    ),
@@ -295,6 +297,7 @@ module compute_unit import bgpu_pkg::*; #(
     `FF(dec_to_fetch_decoded_q,            dec_to_fetch_decoded,            '0, clk_i, rst_ni)
     `FF(dec_to_fetch_stop_warp_q,          dec_to_fetch_stop_warp,          '0, clk_i, rst_ni)
     `FF(dec_to_fetch_decoded_branch_q,     dec_to_fetch_decoded_branch,     '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_sync_q,       dec_to_fetch_decoded_sync,       '0, clk_i, rst_ni)
     `FF(dec_to_fetch_decoded_warp_id_q,    dec_to_fetch_decoded_warp_id,    '0, clk_i, rst_ni)
     `FF(dec_to_fetch_decoded_next_pc_q,    dec_to_fetch_decoded_next_pc,    '0, clk_i, rst_ni)
     `FF(dec_to_fetch_decoded_subwarp_id_q, dec_to_fetch_decoded_subwarp_id, '0, clk_i, rst_ni)
@@ -393,6 +396,7 @@ module compute_unit import bgpu_pkg::*; #(
         .dec_decoded_control_o   ( dec_to_fetch_control            ),
         .dec_stop_warp_o         ( dec_to_fetch_stop_warp          ),
         .dec_decoded_branch_o    ( dec_to_fetch_decoded_branch     ),
+        .dec_decoded_sync_o      ( dec_to_fetch_decoded_sync       ),
         .dec_decoded_warp_id_o   ( dec_to_fetch_decoded_warp_id    ),
         .dec_decoded_subwarp_id_o( dec_to_fetch_decoded_subwarp_id ),
         .dec_decoded_next_pc_o   ( dec_to_fetch_decoded_next_pc    )

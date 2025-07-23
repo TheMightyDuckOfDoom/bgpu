@@ -41,6 +41,7 @@ module warp_its_unit #(
     input logic        instruction_decoded_i,
     input logic        stop_warp_i,
     input logic        is_branch_i,
+    input logic        is_sync_i,
     input subwarp_id_t decoded_subwarp_id_i,
     input pc_t         next_pc_i,
 
@@ -131,14 +132,53 @@ module warp_its_unit #(
                     begin : decoded_normal_instruction
                         // Update PC to next instruction
                         pc_act_mask_d[i].pc = next_pc_i;
-                        // We are ready again for fetching if it was not a branch instruction
-                        pc_ready_d[i] = (!is_branch_i);
+                        // We are ready again for fetching if it was not a branch or sync
+                        pc_ready_d[i] = (!is_branch_i) && (!is_sync_i);
 
                         // If it is a stop instruction, then we can deallocate the PC
                         if (stop_warp_i) begin : stop_subwarp
                             pc_ready_d[i] = 1'b0;
                             valid_pc_d[i] = 1'b0;
                         end : stop_subwarp
+
+                        // Sync instruction
+                        if (is_sync_i) begin : sync_instruction
+                            // Check if there are any other threads trying to sync
+                            if ((valid_pc_q & sync_waiting_q) != '0) begin : others_waiting_for_sync
+                                // Check other subwarps, if they are waiting for a sync and have the same PC
+                                // Merge this PC with the other
+                                for (int unsigned j = 0; j < WarpWidth; j++) begin : loop_sync_pcs
+                                    if (valid_pc_q[j] && sync_waiting_q[j]
+                                        && (pc_act_mask_q[j].pc == next_pc_i))
+                                    begin : found_sync_pc
+                                        // Combine into other PC -> deallocate this PC
+                                        // Merge active masks
+                                        pc_act_mask_d[j].active_mask = pc_act_mask_q[j].active_mask
+                                                                    | pc_act_mask_q[i].active_mask;
+                                        // Deallocate this PC
+                                        valid_pc_d    [i] = 1'b0;
+                                        pc_ready_d    [i] = 1'b0;
+                                        sync_waiting_d[i] = 1'b0;
+
+                                        // Mark other as ready for fetching and not waiting for sync
+                                        sync_waiting_d[j] = 1'b0;
+                                        pc_ready_d[j]     = 1'b1;
+
+                                        break;
+                                    end : found_sync_pc
+                                end : loop_sync_pcs
+                            end : others_waiting_for_sync
+                            // If not, we're the first to sync -> set sync waiting flag
+                            else begin : new_sync
+                                if (pc_act_mask_q[i].active_mask == '1) begin : single_subwarp_sync
+                                    // All threads are in this subwarp, so we are already sync'd
+                                    pc_ready_d[i] = 1'b1;
+                                end : single_subwarp_sync
+                                else begin : wait_for_other_subwarps
+                                    sync_waiting_d[i] = 1'b1;
+                                end : wait_for_other_subwarps
+                            end : new_sync
+                        end : sync_instruction
                     end : decoded_normal_instruction
 
                     // Branch from Branch Unit
@@ -171,9 +211,10 @@ module warp_its_unit #(
                 for (int unsigned i = 0; i < WarpWidth; i++) begin : loop_over_free_pcs
                     if (!valid_pc_q[i]) begin : found_free_pc
                         // Allocate new PC
-                        valid_pc_d[i]                = 1'b1;
-                        pc_act_mask_d[i].pc          = bru_branch_pc_i;
-                        pc_act_mask_d[i].active_mask = bru_branching_mask_i;
+                        valid_pc_d    [i]             = 1'b1;
+                        pc_act_mask_d [i].pc          = bru_branch_pc_i;
+                        pc_act_mask_d [i].active_mask = bru_branching_mask_i;
+                        sync_waiting_d[i]             = 1'b0; // Not waiting for sync
 
                         // Is ready for fetching
                         pc_ready_d[i]                = 1'b1;
