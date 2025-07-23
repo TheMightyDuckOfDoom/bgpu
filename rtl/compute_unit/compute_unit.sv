@@ -449,6 +449,7 @@ module compute_unit import bgpu_pkg::*; #(
         .dec_pc_i               ( dec_to_ib_data_q.pc                ),
         .dec_act_mask_i         ( dec_to_ib_data_q.act_mask          ),
         .dec_warp_id_i          ( dec_to_ib_data_q.warp_id           ),
+        .dec_subwarp_id_i       ( dec_to_ib_data_q.subwarp_id        ),
         .dec_inst_i             ( dec_to_ib_data_q.inst              ),
         .dec_dst_i              ( dec_to_ib_data_q.dst               ),
         .dec_operands_required_i( dec_to_ib_data_q.operands_required ),

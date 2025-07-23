@@ -7,13 +7,16 @@
 /// Register Table
 // Maps a register to a tag that produces the most recent value
 module reg_table #(
+    parameter int unsigned WarpWidth       = 32,
     parameter int unsigned NumTags         = 8,
     parameter int unsigned RegIdxWidth     = 6,
     parameter int unsigned OperandsPerInst = 2,
 
-    parameter int unsigned TagWidth  = $clog2(NumTags),
-    parameter type         tag_t     = logic [   TagWidth-1:0],
-    parameter type         reg_idx_t = logic [RegIdxWidth-1:0]
+    parameter int unsigned TagWidth       = $clog2(NumTags),
+    parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter type         tag_t          = logic [      TagWidth-1:0],
+    parameter type         reg_idx_t      = logic [   RegIdxWidth-1:0],
+    parameter type         subwarp_id_t   = logic [SubwarpIdWidth-1:0]
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -23,11 +26,12 @@ module reg_table #(
     output logic all_dst_written_o,
 
     // From Decoder
-    output logic space_available_o,
-    input logic insert_i,
-    input tag_t tag_i,
-    input reg_idx_t dst_reg_i,
-    input reg_idx_t [OperandsPerInst-1:0] operands_reg_i,
+    output logic        space_available_o,
+    input  logic        insert_i,
+    input  tag_t        tag_i,
+    input  subwarp_id_t subwarp_id_i,
+    input  reg_idx_t    dst_reg_i,
+    input  reg_idx_t [OperandsPerInst-1:0] operands_reg_i,
 
     // To Wait Buffer
     output logic [OperandsPerInst-1:0] operands_ready_o,
@@ -44,8 +48,9 @@ module reg_table #(
 
     // Regsiter Table Entry
     typedef struct packed {
-        reg_idx_t dst;
-        tag_t     producer;
+        subwarp_id_t subwarp_id; // TODO: Handle this properly
+        reg_idx_t    dst;
+        tag_t        producer;
     } reg_table_entry_t;
 
     // ######################################################################

@@ -21,14 +21,16 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     parameter int unsigned OperandsPerInst = 2,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type         wid_t      = logic [   WidWidth-1:0],
-    parameter type         reg_idx_t  = logic [RegIdxWidth-1:0],
-    parameter type         pc_t       = logic [    PcWidth-1:0],
-    parameter type         act_mask_t = logic [  WarpWidth-1:0],
-    parameter type         tag_t      = logic [   TagWidth-1:0],
-    parameter type         iid_t      = logic [TagWidth+WidWidth-1:0]
+    parameter int unsigned TagWidth       = $clog2(NumTags),
+    parameter int unsigned WidWidth       =  NumWarps > 1 ? $clog2(NumWarps)  : 1,
+    parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter type         wid_t          = logic [         WidWidth-1:0],
+    parameter type         reg_idx_t      = logic [      RegIdxWidth-1:0],
+    parameter type         pc_t           = logic [          PcWidth-1:0],
+    parameter type         act_mask_t     = logic [        WarpWidth-1:0],
+    parameter type         tag_t          = logic [         TagWidth-1:0],
+    parameter type         iid_t          = logic [TagWidth+WidWidth-1:0],
+    parameter type         subwarp_id_t   = logic [   SubwarpIdWidth-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,
@@ -49,15 +51,16 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     input  wid_t dec_control_decoded_warp_id_i,
 
     /// From decoder -> new instruction
-    output logic      ib_ready_o,
-    input  logic      dec_valid_i,
-    input  pc_t       dec_pc_i,
-    input  act_mask_t dec_act_mask_i,
-    input  wid_t      dec_warp_id_i,
-    input  inst_t     dec_inst_i,
-    input  reg_idx_t  dec_dst_i,
-    input  logic      [OperandsPerInst-1:0] dec_operands_required_i,
-    input  reg_idx_t  [OperandsPerInst-1:0] dec_operands_i,
+    output logic        ib_ready_o,
+    input  logic        dec_valid_i,
+    input  pc_t         dec_pc_i,
+    input  act_mask_t   dec_act_mask_i,
+    input  wid_t        dec_warp_id_i,
+    input  subwarp_id_t dec_subwarp_id_i,
+    input  inst_t       dec_inst_i,
+    input  reg_idx_t    dec_dst_i,
+    input  logic        [OperandsPerInst-1:0] dec_operands_required_i,
+    input  reg_idx_t    [OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collector
     input  logic      opc_ready_i,
@@ -163,6 +166,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
 
             .disp_ready_o           ( ib_ready_warp [warp]    ),
             .dec_valid_i            ( dec_valid_warp[warp]    ),
+            .dec_subwarp_id_i       ( dec_subwarp_id_i        ),
             .dec_pc_i               ( dec_pc_i                ),
             .dec_act_mask_i         ( dec_act_mask_i          ),
             .dec_inst_i             ( dec_inst_i              ),

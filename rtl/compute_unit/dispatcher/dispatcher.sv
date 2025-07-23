@@ -30,11 +30,13 @@ module dispatcher import bgpu_pkg::*; #(
     parameter int unsigned OperandsPerInst = 2,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter type         tag_t      = logic [   TagWidth-1:0],
-    parameter type         reg_idx_t  = logic [RegIdxWidth-1:0],
-    parameter type         pc_t       = logic [    PcWidth-1:0],
-    parameter type         act_mask_t = logic [  WarpWidth-1:0]
+    parameter int unsigned TagWidth       = $clog2(NumTags),
+    parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter type         tag_t          = logic [      TagWidth-1:0],
+    parameter type         reg_idx_t      = logic [   RegIdxWidth-1:0],
+    parameter type         pc_t           = logic [       PcWidth-1:0],
+    parameter type         act_mask_t     = logic [     WarpWidth-1:0],
+    parameter type         subwarp_id_t   = logic [SubwarpIdWidth-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,
@@ -54,14 +56,15 @@ module dispatcher import bgpu_pkg::*; #(
     input  logic      dec_control_decoded_i,
 
     /// From decoder -> new instruction
-    output logic      disp_ready_o,
-    input  logic      dec_valid_i,
-    input  pc_t       dec_pc_i,
-    input  act_mask_t dec_act_mask_i,
-    input  inst_t     dec_inst_i,
-    input  reg_idx_t  dec_dst_i,
-    input  logic      [OperandsPerInst-1:0] dec_operands_required_i,
-    input  reg_idx_t  [OperandsPerInst-1:0] dec_operands_i,
+    output logic        disp_ready_o,
+    input  logic        dec_valid_i,
+    input  subwarp_id_t dec_subwarp_id_i,
+    input  pc_t         dec_pc_i,
+    input  act_mask_t   dec_act_mask_i,
+    input  inst_t       dec_inst_i,
+    input  reg_idx_t    dec_dst_i,
+    input  logic        [OperandsPerInst-1:0] dec_operands_required_i,
+    input  reg_idx_t    [OperandsPerInst-1:0] dec_operands_i,
 
     /// To Operand Collector
     input  logic      opc_ready_i,
@@ -119,7 +122,7 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     tag_queue #(
-        .NumTags(NumTags)
+        .NumTags( NumTags )
     ) i_tag_queue (
         .clk_i  ( clk_i  ),
         .rst_ni ( rst_ni ),
@@ -137,9 +140,10 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     reg_table #(
-        .NumTags(NumTags),
-        .RegIdxWidth(RegIdxWidth),
-        .OperandsPerInst(OperandsPerInst)
+        .WarpWidth      ( WarpWidth       ),
+        .NumTags        ( NumTags         ),
+        .RegIdxWidth    ( RegIdxWidth     ),
+        .OperandsPerInst( OperandsPerInst )
     ) i_reg_table (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
@@ -148,6 +152,7 @@ module dispatcher import bgpu_pkg::*; #(
 
         .space_available_o( reg_table_space_available ),
         .insert_i         ( insert                    ),
+        .subwarp_id_i     ( dec_subwarp_id_i          ),
         .tag_i            ( dst_tag                   ),
         .dst_reg_i        ( dec_dst_i                 ),
         .operands_reg_i   ( dec_operands_i            ),
@@ -164,12 +169,12 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     wait_buffer #(
-        .NumTags(NumTags),
-        .PcWidth(PcWidth),
-        .WarpWidth(WarpWidth),
-        .WaitBufferSizePerWarp(WaitBufferSizePerWarp),
-        .RegIdxWidth(RegIdxWidth),
-        .OperandsPerInst(OperandsPerInst)
+        .NumTags              ( NumTags               ),
+        .PcWidth              ( PcWidth               ),
+        .WarpWidth            ( WarpWidth             ),
+        .WaitBufferSizePerWarp( WaitBufferSizePerWarp ),
+        .RegIdxWidth          ( RegIdxWidth           ),
+        .OperandsPerInst      ( OperandsPerInst       )
     ) i_wait_buffer (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
