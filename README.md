@@ -20,7 +20,7 @@
 
 ## Architecture
 
-The Architecture of BGPU has similarities with NVIDIA GPUs starting from the Fermi-Microarchitecture.
+The Architecture of BGPU is most similar to NVIDIA GPUs starting from the Fermi-Microarchitecture.
 
 TODO: As with all projects, documentation is still a work-in-progress...
 

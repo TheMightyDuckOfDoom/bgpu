@@ -175,33 +175,35 @@ module multi_warp_reconvergence_stack #(
     // #######################################################################################
 
     for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_reconvergence_stack
-        reconvergence_stack #(
+        warp_its_unit #(
             .PcWidth  ( PcWidth   ),
             .WarpWidth( WarpWidth )
-        ) i_reconvergence_stack (
+        ) i_warp_its (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
 
             .init_i   ( allocate_warp[warp] ),
-            .init_pc_i( allocate_pc_i ),
+            .init_pc_i( allocate_pc_i       ),
 
             // From decode stage
-            .instruction_decoded_i        ( instruction_decoded_i && (decode_wid_i == warp) ),
-            .is_branch_i                  ( decode_branch_i                                 ),
-            .next_pc_or_reconvergence_pc_i( decode_next_pc_i                                ),
+            .instruction_decoded_i( instruction_decoded_i && (decode_wid_i == warp) ),
+            .decoded_subwarp_id_i ( '0                                              ), // TODO
+            .is_branch_i          ( decode_branch_i                                 ),
+            .next_pc_i            ( decode_next_pc_i                                ),
 
             // From fetcher
             .selected_for_fetch_i( warp_selected_i[warp] ),
 
             // Stack outputs
-            .ready_for_fetch_o( warp_ready     [warp] ),
-            .fetch_pc_o       ( warp_pc_o      [warp] ),
-            .fetch_act_mask_o ( warp_act_mask_o[warp] ),
+            .ready_for_fetch_o ( warp_ready     [warp] ),
+            .fetch_pc_o        ( warp_pc_o      [warp] ),
+            .fetch_act_mask_o  ( warp_act_mask_o[warp] ),
+            .fetch_subwarp_id_o( /* TODO */            )
 
             // From branch unit
-            .bru_branch_i        ( bru_branch_i && (bru_branch_wid_i == warp) ),
-            .bru_branching_mask_i( bru_branching_mask_i                       ),
-            .bru_inactive_pc_i   ( bru_inactive_pc_i                          )
+            // .bru_branch_i        ( bru_branch_i && (bru_branch_wid_i == warp) ),
+            // .bru_branching_mask_i( bru_branching_mask_i                       ),
+            // .bru_inactive_pc_i   ( bru_inactive_pc_i                          )
         );
     end : gen_reconvergence_stack
 

@@ -143,42 +143,42 @@ module reconvergence_stack #(
                     ready_for_fetch_d = 1'b1;
                 end : normal_instruction
 
-                // Branch instruction
-                else begin : branch_instruction
-                    // Update the current stack entry's PC with the reconvergence PC
-                    stack_d[stack_ptr_q].pc = next_pc_or_reconvergence_pc_i;
-                    reconvergence_pc_d      = next_pc_or_reconvergence_pc_i;
+                // Branch instruction -> wait until it was executed by the branch unit
+                // else begin : branch_instruction
+                //     // Update the current stack entry's PC with the reconvergence PC
+                //     stack_d[stack_ptr_q].pc = next_pc_or_reconvergence_pc_i;
+                //     reconvergence_pc_d      = next_pc_or_reconvergence_pc_i;
 
-                    // Increment the stack pointer
-                    `ifndef SYNTHESIS
-                        assert (stack_ptr_q == '1) begin
-                            $error("Stack overflow! Stack pointer: %0d, Stack entries: %0d",
-                                   stack_ptr_q, StackEntries);
-                        end
-                    `endif
-                    stack_ptr_d = stack_ptr_q + 'd1;
+                //     // Increment the stack pointer
+                //     `ifndef SYNTHESIS
+                //         assert (stack_ptr_q == '1) begin
+                //             $error("Stack overflow! Stack pointer: %0d, Stack entries: %0d",
+                //                    stack_ptr_q, StackEntries);
+                //         end
+                //     `endif
+                //     stack_ptr_d = stack_ptr_q + 'd1;
 
-                    // We now wait until we receive the branch instruction from the branch unit
-                end : branch_instruction
+                //     // We now wait until we receive the branch instruction from the branch unit
+                // end : branch_instruction
             end : instruction_decoded
 
             // We received a new branch instruction from the branch unit
             if (bru_branch_i) begin : new_bru_branch
-                if (bru_branching_mask_i != '1) begin : some_nonbranching_threads
-                    // Add a new stack entry for the threads that are not branching
-                    // They just continue execution linearly
-                    stack_d[stack_ptr_q].pc               = bru_inactive_pc_i;
-                    stack_d[stack_ptr_q].act_mask         = ~bru_branching_mask_i;
-                    stack_d[stack_ptr_q].reconvergence_pc = reconvergence_pc_q;
-                end : some_nonbranching_threads
-                else begin : uniform_branch
-                    // If the active mask is zero, we do not need to add a new stack entry
-                    // We just pop back to the reconvergence point(set earlier)
-                    stack_ptr_d = stack_ptr_q - 'd1;
-                end : uniform_branch
+                // if (bru_branching_mask_i != '1) begin : some_nonbranching_threads
+                //     // Add a new stack entry for the threads that are not branching
+                //     // They just continue execution linearly
+                //     stack_d[stack_ptr_q].pc               = bru_inactive_pc_i;
+                //     stack_d[stack_ptr_q].act_mask         = ~bru_branching_mask_i;
+                //     stack_d[stack_ptr_q].reconvergence_pc = reconvergence_pc_q;
+                // end : some_nonbranching_threads
+                // else begin : uniform_branch
+                //     // If the active mask is zero, we do not need to add a new stack entry
+                //     // We just pop back to the reconvergence point(set earlier)
+                //     stack_ptr_d = stack_ptr_q - 'd1;
+                // end : uniform_branch
 
-                // We are ready for fetching again
-                ready_for_fetch_d = 1'b1;
+                // // We are ready for fetching again
+                // ready_for_fetch_d = 1'b1;
             end : new_bru_branch
         end : normal_stack
     end : stack_logic
