@@ -15,16 +15,29 @@ do
             TblocksToLaunch=256
         fi
         echo "Running simulation for NumWarp: $NumWarp, InflightInstructionsPerWarp: $InflightInstructionsPerWarp, TblocksToLaunch: $TblocksToLaunch"
-        result=$(make tb_compute_unit VERILATOR_ARGS="-GNumWarps=$NumWarp -GInflightInstrPerWarp=$InflightInstructionsPerWarp -GTblocksToLaunch=$TblocksToLaunch -GMaxSimCycles=4000")
-        if [ $? -eq 0 ]; then
-            echo "$result" | grep -A1 "All thread blocks done."
-            echo "Passed!"
-        else
-            echo "$result" > failure.log
-            cat failure.log
-            echo "Failed!"
-            exit 1
-        fi
+        for try in {1..5}
+        do
+            result=$(make tb_compute_unit VERILATOR_ARGS="-GNumWarps=$NumWarp -GInflightInstrPerWarp=$InflightInstructionsPerWarp -GTblocksToLaunch=$TblocksToLaunch -GMaxSimCycles=4000")
+            if [ $? -eq 0 ]; then
+                echo "$result" | grep -A1 "All thread blocks done."
+                echo "Passed!"
+                break
+            else
+                # Retry if the simulation fails with "verilator internal fault"
+                if [ "$(echo "$result" | grep -c "verilator internal fault")" -gt 0 ]; then
+                    echo "Verilator internal fault detected, retrying..."
+                    if [ $try -eq 5 ]; then
+                        echo "Failed after 5 retries due to Verilator internal fault."
+                        exit 1
+                    fi
+                fi
+
+                echo "$result" > failure.log
+                cat failure.log
+                echo "Failed!"
+                exit 1
+            fi
+        done
     done
     echo ""
 done
