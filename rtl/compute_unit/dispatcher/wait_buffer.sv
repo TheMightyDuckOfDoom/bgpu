@@ -44,8 +44,8 @@ module wait_buffer import bgpu_pkg::*; #(
     /// To fetcher |-> space for a new instruction?
     output logic ib_space_available_o,
 
-    /// From decoder -> stop warp decoded
-    input  logic      dec_stop_decoded_i,
+    /// From decoder -> control decoded, no buffer space need -> free up the credit
+    input  logic      dec_control_decoded_i,
 
     /// From decoder -> new instruction
     output logic      wb_ready_o,
@@ -129,7 +129,7 @@ module wait_buffer import bgpu_pkg::*; #(
     // Decremented when an instruction is fetched for the warp
     // Incremented when the instruction get dispatched to the operand collector or a stop is decoded
     assign inst_dispatched = (|arb_gnt) && disp_valid_o && opc_ready_i;
-    assign give_credit = inst_dispatched || dec_stop_decoded_i;
+    assign give_credit = inst_dispatched || dec_control_decoded_i;
 
     credit_counter #(
         .NumCredits     ( WaitBufferSizePerWarp ),

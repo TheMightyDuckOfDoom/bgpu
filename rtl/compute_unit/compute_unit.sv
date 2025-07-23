@@ -194,6 +194,7 @@ module compute_unit import bgpu_pkg::*; #(
 
     // Decoder to Fetcher
     logic dec_to_fetch_decoded,         dec_to_fetch_decoded_q;
+    logic dec_to_fetch_control;
     logic dec_to_fetch_stop_warp,       dec_to_fetch_stop_warp_q;
     logic dec_to_fetch_decoded_branch,  dec_to_fetch_decoded_branch_q;
     wid_t dec_to_fetch_decoded_warp_id, dec_to_fetch_decoded_warp_id_q;
@@ -376,6 +377,7 @@ module compute_unit import bgpu_pkg::*; #(
         .dec_operands_o         ( dec_to_ib_data_d.operands          ),
 
         .dec_decoded_o         ( dec_to_fetch_decoded         ),
+        .dec_decoded_control_o ( dec_to_fetch_control         ),
         .dec_stop_warp_o       ( dec_to_fetch_stop_warp       ),
         .dec_decoded_branch_o  ( dec_to_fetch_decoded_branch  ),
         .dec_decoded_warp_id_o ( dec_to_fetch_decoded_warp_id ),
@@ -425,8 +427,8 @@ module compute_unit import bgpu_pkg::*; #(
         .ib_space_available_o   ( ib_space_available    ),
         .ib_all_instr_finished_o( ib_all_instr_finished ),
 
-        .dec_stop_decoded_i        ( dec_to_fetch_decoded && dec_to_fetch_stop_warp ),
-        .dec_stop_decoded_warp_id_i( dec_to_fetch_decoded_warp_id                   ),
+        .dec_control_decoded_i        ( dec_to_fetch_decoded && dec_to_fetch_control ),
+        .dec_control_decoded_warp_id_i( dec_to_fetch_decoded_warp_id                 ),
 
         .ib_ready_o             ( ib_to_dec_ready_d                  ),
         .dec_valid_i            ( dec_to_ib_valid_q                  ),

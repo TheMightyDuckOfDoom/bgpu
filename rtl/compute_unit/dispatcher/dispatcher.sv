@@ -50,8 +50,8 @@ module dispatcher import bgpu_pkg::*; #(
     // -> All instructions finished
     output logic ib_all_instr_finished_o,
 
-    /// From decoder -> stop warp decoded
-    input  logic      dec_stop_decoded_i,
+    /// From decoder -> control decoded
+    input  logic      dec_control_decoded_i,
 
     /// From decoder -> new instruction
     output logic      disp_ready_o,
@@ -177,7 +177,7 @@ module dispatcher import bgpu_pkg::*; #(
         .fe_handshake_i      ( fe_handshake_i       ),
         .ib_space_available_o( ib_space_available_o ),
 
-        .dec_stop_decoded_i( dec_stop_decoded_i ),
+        .dec_control_decoded_i( dec_control_decoded_i ),
 
         .wb_ready_o             ( wb_ready                ),
         .dec_valid_i            ( insert                  ),

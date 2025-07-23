@@ -44,9 +44,9 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // Are there any instructions in flight?
     output logic [NumWarps-1:0] ib_all_instr_finished_o,
 
-    /// From decoder -> stop warp decoded
-    input  logic dec_stop_decoded_i,
-    input  wid_t dec_stop_decoded_warp_id_i,
+    /// From decoder -> control decoded
+    input  logic dec_control_decoded_i,
+    input  wid_t dec_control_decoded_warp_id_i,
 
     /// From decoder -> new instruction
     output logic      ib_ready_o,
@@ -105,8 +105,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     disp_data_t [NumWarps-1:0] arb_in_data;
     disp_data_t arb_sel_data;
 
-    // Stop decoded Demultiplexer
-    logic [NumWarps-1:0] dec_stop_decoded_warp;
+    // Control decoded Demultiplexer
+    logic [NumWarps-1:0] dec_control_decoded_warp;
 
     // #######################################################################################
     // # Dispatcher per warp                                                                 #
@@ -136,10 +136,10 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         eu_valid[eu_tag_i[WidWidth-1:0]] = eu_valid_i;
     end
 
-    // Stop Decoded Demultiplexer
+    // Control Decoded Demultiplexer
     always_comb begin
-        dec_stop_decoded_warp = '0;
-        dec_stop_decoded_warp[dec_stop_decoded_warp_id_i] = dec_stop_decoded_i;
+        dec_control_decoded_warp = '0;
+        dec_control_decoded_warp[dec_control_decoded_warp_id_i] = dec_control_decoded_i;
     end
 
     // Dispatcher per Warp
@@ -159,7 +159,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .ib_space_available_o   ( ib_space_available_o   [warp] ),
             .ib_all_instr_finished_o( ib_all_instr_finished_o[warp] ),
 
-            .dec_stop_decoded_i( dec_stop_decoded_warp[warp] ),
+            .dec_control_decoded_i( dec_control_decoded_warp[warp] ),
 
             .disp_ready_o           ( ib_ready_warp [warp]    ),
             .dec_valid_i            ( dec_valid_warp[warp]    ),

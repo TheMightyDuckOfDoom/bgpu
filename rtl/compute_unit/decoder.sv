@@ -46,36 +46,43 @@ module decoder import bgpu_pkg::*; #(
 
     // To Fetcher |-> tells it what the next PC is
     output logic dec_decoded_o,
+    output logic dec_decoded_control_o,
     output logic dec_stop_warp_o,
     output logic dec_decoded_branch_o,
     output wid_t dec_decoded_warp_id_o,
     output pc_t  dec_decoded_next_pc_o
 );
     // Pass through signals
-    assign dec_ready_o    = disp_ready_i;
-    assign dec_pc_o       = ic_pc_i;
-    assign dec_act_mask_o = ic_act_mask_i;
-    assign dec_warp_id_o  = ic_warp_id_i;
+    assign dec_ready_o       = disp_ready_i;
+    assign dec_pc_o          = ic_pc_i;
+    assign dec_act_mask_o    = ic_act_mask_i;
+    assign dec_warp_id_o     = ic_warp_id_i;
+    assign dec_inst_o        = inst_t'(ic_inst_i[31:24]);
+    assign dec_dst_o         = ic_inst_i[23:16];
+    assign dec_operands_o[0] = ic_inst_i[15:8];
+    assign dec_operands_o[1] = ic_inst_i[7:0];
 
     // Instruction was decoded if a handshake between Decoder and Dispatcher happend
-    assign dec_decoded_o         = ((ic_valid_i && dec_stop_warp_o) || dec_valid_o) && disp_ready_i;
+    assign dec_decoded_o         = ((ic_valid_i && dec_decoded_control_o) || dec_valid_o) && disp_ready_i;
     assign dec_decoded_warp_id_o = dec_warp_id_o;
 
+    // Stop the warp if the instruction is a stop instruction
     assign dec_stop_warp_o = ic_inst_i[31:24] == '1;
+
+    // Control instructions are not sent to the Dispatcher
+    assign dec_valid_o       = ic_valid_i && (!dec_decoded_control_o);
 
     // Decode instruction
     always_comb begin : decode
-        // Default
-        dec_valid_o       = ic_valid_i && (!dec_stop_warp_o);
-        dec_inst_o        = inst_t'(ic_inst_i[31:24]);
-        dec_dst_o         = ic_inst_i[23:16];
-
         // By default, increment the PC by one
         dec_decoded_next_pc_o = dec_pc_o + 'd1;
         dec_decoded_branch_o  = 1'b0;
 
         // By default, all operands are immediate values
         dec_operands_required_o = '0;
+
+        // Stop is a control instruction
+        dec_decoded_control_o = dec_stop_warp_o;
 
         // Integer Unit
         if (dec_inst_o.eu == EU_IU) begin : decode_iu
@@ -114,27 +121,14 @@ module decoder import bgpu_pkg::*; #(
                         + {{(PcWidth-16){ic_inst_i[15]}}, ic_inst_i[15:0]};
                 else
                     dec_decoded_next_pc_o = dec_pc_o + ic_inst_i[15:0];
+
+                // Is a control instruction
+                dec_decoded_control_o = 1'b1;
             end : jump_instruction
             else begin : branch_instruction
-                dec_operands_required_o[0] = 1'b0; // Operand 1 is the offset
-                dec_operands_required_o[1] = 1'b1; // Operand 2 is the condition
 
-                // Sign extend the offset and add it to the PC
-                dec_decoded_next_pc_o = dec_pc_o + {{(PcWidth-8){ic_inst_i[15]}}, ic_inst_i[15:8]};
-
-                `ifndef SYNTHESIS
-                    if(ic_inst_i[15]) begin
-                        $display("Branch offset is negative!");
-                        $error("Not yet implemented! Reconvergenece PC will be set wrong!");
-                    end
-                `endif
-
-                dec_decoded_branch_o = 1'b1; // Is a branch instruction
             end : branch_instruction
         end : decode_bru
-
-        dec_operands_o[0] = ic_inst_i[15:8];
-        dec_operands_o[1] = ic_inst_i[7:0];
     end
 
     `ifndef SYNTHESIS
