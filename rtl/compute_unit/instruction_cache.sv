@@ -334,10 +334,9 @@ module instruction_cache #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .req_i  ( cache_req             ),
-        .we_i   ( cache_we              ),
-        .addr_i ( cache_select          ),
-        // .wdata_i (),
+        .req_i  ( cache_req    ),
+        .we_i   ( cache_we     ),
+        .addr_i ( cache_select ),
         .wdata_i( write_cache_tag ),
 
         .rdata_o( cache_tag_q ),
