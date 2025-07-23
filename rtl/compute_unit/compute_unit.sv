@@ -105,9 +105,10 @@ module compute_unit import bgpu_pkg::*; #(
     // # Local Parameters                                                                    #
     // #######################################################################################
 
-    localparam int unsigned NumTags  = InflightInstrPerWarp;
-    localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
-    localparam int unsigned TagWidth = NumTags > 1  ? $clog2(NumTags)  : 1;
+    localparam int unsigned NumTags        = InflightInstrPerWarp;
+    localparam int unsigned WidWidth       =  NumWarps > 1 ? $clog2(NumWarps)  : 1;
+    localparam int unsigned TagWidth       =   NumTags > 1 ? $clog2(NumTags)   : 1;
+    localparam int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
 
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -118,32 +119,36 @@ module compute_unit import bgpu_pkg::*; #(
     typedef logic [ WidWidth + TagWidth-1:0] iid_t;
     typedef logic [           WarpWidth-1:0] act_mask_t;
     typedef logic [RegWidth * WarpWidth-1:0] warp_data_t;
-    typedef logic [    WidWidth-1:0] wid_t;
+    typedef logic [            WidWidth-1:0] wid_t;
+    typedef logic [      SubwarpIdWidth-1:0] subwarp_id_t;
 
     // Fetcher to Instruction Cache type
     typedef struct packed {
-        pc_t       pc;
-        act_mask_t act_mask;
-        wid_t      warp_id;
+        pc_t         pc;
+        act_mask_t   act_mask;
+        wid_t        warp_id;
+        subwarp_id_t subwarp_id;
     } fe_to_ic_data_t;
 
     // Instruction Cache to Decoder type
     typedef struct packed {
-        pc_t       pc;
-        act_mask_t act_mask;
-        wid_t      warp_id;
-        enc_inst_t inst;
+        pc_t         pc;
+        act_mask_t   act_mask;
+        wid_t        warp_id;
+        subwarp_id_t subwarp_id;
+        enc_inst_t   inst;
     } ic_to_dec_data_t;
 
     // Decoder to Instruction Buffer type
     typedef struct packed {
-        pc_t       pc;
-        act_mask_t act_mask;
-        wid_t      warp_id;
-        inst_t     inst;
-        reg_idx_t  dst;
-        logic      [OperandsPerInst-1:0] operands_required;
-        reg_idx_t  [OperandsPerInst-1:0] operands;
+        pc_t         pc;
+        act_mask_t   act_mask;
+        wid_t        warp_id;
+        subwarp_id_t subwarp_id;
+        inst_t       inst;
+        reg_idx_t    dst;
+        logic        [OperandsPerInst-1:0] operands_required;
+        reg_idx_t    [OperandsPerInst-1:0] operands;
     } dec_to_ib_data_t;
 
     // Multi Warp Dispatcher to Register Operand Collector Stage type
@@ -193,12 +198,13 @@ module compute_unit import bgpu_pkg::*; #(
     ic_to_dec_data_t ic_to_dec_data;
 
     // Decoder to Fetcher
-    logic dec_to_fetch_decoded,         dec_to_fetch_decoded_q;
-    logic dec_to_fetch_control;
-    logic dec_to_fetch_stop_warp,       dec_to_fetch_stop_warp_q;
-    logic dec_to_fetch_decoded_branch,  dec_to_fetch_decoded_branch_q;
-    wid_t dec_to_fetch_decoded_warp_id, dec_to_fetch_decoded_warp_id_q;
-    pc_t  dec_to_fetch_decoded_next_pc, dec_to_fetch_decoded_next_pc_q;
+    logic        dec_to_fetch_decoded,            dec_to_fetch_decoded_q;
+    logic        dec_to_fetch_control;
+    logic        dec_to_fetch_stop_warp,          dec_to_fetch_stop_warp_q;
+    logic        dec_to_fetch_decoded_branch,     dec_to_fetch_decoded_branch_q;
+    wid_t        dec_to_fetch_decoded_warp_id,    dec_to_fetch_decoded_warp_id_q;
+    subwarp_id_t dec_to_fetch_decoded_subwarp_id, dec_to_fetch_decoded_subwarp_id_q;
+    pc_t         dec_to_fetch_decoded_next_pc,    dec_to_fetch_decoded_next_pc_q;
 
     // Decoder to Instruction Buffer
     logic dec_to_ib_valid_d, dec_to_ib_valid_q;
@@ -263,17 +269,19 @@ module compute_unit import bgpu_pkg::*; #(
         .ib_space_available_i   ( ib_space_available    ),
         .ib_all_instr_finished_i( ib_all_instr_finished ),
 
-        .ic_ready_i   ( ic_to_fe_ready_q         ),
-        .fe_valid_o   ( fe_to_ic_valid_d         ),
-        .fe_pc_o      ( fe_to_ic_data_d.pc       ),
-        .fe_act_mask_o( fe_to_ic_data_d.act_mask ),
-        .fe_warp_id_o ( fe_to_ic_data_d.warp_id  ),
+        .ic_ready_i     ( ic_to_fe_ready_q           ),
+        .fe_valid_o     ( fe_to_ic_valid_d           ),
+        .fe_pc_o        ( fe_to_ic_data_d.pc         ),
+        .fe_act_mask_o  ( fe_to_ic_data_d.act_mask   ),
+        .fe_warp_id_o   ( fe_to_ic_data_d.warp_id    ),
+        .fe_subwarp_id_o( fe_to_ic_data_d.subwarp_id ),
 
-        .dec_decoded_i        ( dec_to_fetch_decoded_q         ),
-        .dec_stop_warp_i      ( dec_to_fetch_stop_warp_q       ),
-        .dec_decoded_branch_i ( dec_to_fetch_decoded_branch_q  ),
-        .dec_decoded_warp_id_i( dec_to_fetch_decoded_warp_id_q ),
-        .dec_decoded_next_pc_i( dec_to_fetch_decoded_next_pc_q ),
+        .dec_decoded_i           ( dec_to_fetch_decoded_q            ),
+        .dec_stop_warp_i         ( dec_to_fetch_stop_warp_q          ),
+        .dec_decoded_branch_i    ( dec_to_fetch_decoded_branch_q     ),
+        .dec_decoded_warp_id_i   ( dec_to_fetch_decoded_warp_id_q    ),
+        .dec_decoded_subwarp_id_i( dec_to_fetch_decoded_subwarp_id_q ),
+        .dec_decoded_next_pc_i   ( dec_to_fetch_decoded_next_pc_q    ),
 
         .warp_dp_addr_o   ( fe_to_iu_warp_dp_addr    ),
         .warp_tblock_idx_o( fe_to_iu_warp_tblock_idx ),
@@ -284,11 +292,12 @@ module compute_unit import bgpu_pkg::*; #(
         .bru_inactive_pc_i   ( bru_inactive_pc    )
     );
 
-    `FF(dec_to_fetch_decoded_q,         dec_to_fetch_decoded,         '0, clk_i, rst_ni)
-    `FF(dec_to_fetch_stop_warp_q,       dec_to_fetch_stop_warp,       '0, clk_i, rst_ni)
-    `FF(dec_to_fetch_decoded_branch_q,  dec_to_fetch_decoded_branch,  '0, clk_i, rst_ni)
-    `FF(dec_to_fetch_decoded_warp_id_q, dec_to_fetch_decoded_warp_id, '0, clk_i, rst_ni)
-    `FF(dec_to_fetch_decoded_next_pc_q, dec_to_fetch_decoded_next_pc, '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_q,            dec_to_fetch_decoded,            '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_stop_warp_q,          dec_to_fetch_stop_warp,          '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_branch_q,     dec_to_fetch_decoded_branch,     '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_warp_id_q,    dec_to_fetch_decoded_warp_id,    '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_next_pc_q,    dec_to_fetch_decoded_next_pc,    '0, clk_i, rst_ni)
+    `FF(dec_to_fetch_decoded_subwarp_id_q, dec_to_fetch_decoded_subwarp_id, '0, clk_i, rst_ni)
 
     // #######################################################################################
     // # Fetcher to Instruction Cache - Register                                             #
@@ -333,18 +342,20 @@ module compute_unit import bgpu_pkg::*; #(
         .mem_valid_i( imem_rsp_valid_i ),
         .mem_data_i ( imem_rsp_data_i  ),
 
-        .ic_ready_o   ( ic_to_fe_ready_d         ),
-        .fe_valid_i   ( fe_to_ic_valid_q         ),
-        .fe_pc_i      ( fe_to_ic_data_q.pc       ),
-        .fe_act_mask_i( fe_to_ic_data_q.act_mask ),
-        .fe_warp_id_i ( fe_to_ic_data_q.warp_id  ),
+        .ic_ready_o     ( ic_to_fe_ready_d           ),
+        .fe_valid_i     ( fe_to_ic_valid_q           ),
+        .fe_pc_i        ( fe_to_ic_data_q.pc         ),
+        .fe_act_mask_i  ( fe_to_ic_data_q.act_mask   ),
+        .fe_warp_id_i   ( fe_to_ic_data_q.warp_id    ),
+        .fe_subwarp_id_i( fe_to_ic_data_q.subwarp_id ),
 
-        .dec_ready_i  ( dec_to_ic_ready         ),
-        .ic_valid_o   ( ic_to_dec_valid         ),
-        .ic_pc_o      ( ic_to_dec_data.pc       ),
-        .ic_act_mask_o( ic_to_dec_data.act_mask ),
-        .ic_warp_id_o ( ic_to_dec_data.warp_id  ),
-        .ic_inst_o    ( ic_to_dec_data.inst     )
+        .dec_ready_i    ( dec_to_ic_ready           ),
+        .ic_valid_o     ( ic_to_dec_valid           ),
+        .ic_pc_o        ( ic_to_dec_data.pc         ),
+        .ic_act_mask_o  ( ic_to_dec_data.act_mask   ),
+        .ic_warp_id_o   ( ic_to_dec_data.warp_id    ),
+        .ic_inst_o      ( ic_to_dec_data.inst       ),
+        .ic_subwarp_id_o( ic_to_dec_data.subwarp_id )
     );
 
     // #######################################################################################
@@ -359,29 +370,32 @@ module compute_unit import bgpu_pkg::*; #(
         .RegIdxWidth    ( RegIdxWidth     ),
         .OperandsPerInst( OperandsPerInst )
     ) i_decoder (
-        .dec_ready_o  ( dec_to_ic_ready         ),
-        .ic_valid_i   ( ic_to_dec_valid         ),
-        .ic_pc_i      ( ic_to_dec_data.pc       ),
-        .ic_act_mask_i( ic_to_dec_data.act_mask ),
-        .ic_warp_id_i ( ic_to_dec_data.warp_id  ),
-        .ic_inst_i    ( ic_to_dec_data.inst     ),
+        .dec_ready_o    ( dec_to_ic_ready           ),
+        .ic_valid_i     ( ic_to_dec_valid           ),
+        .ic_pc_i        ( ic_to_dec_data.pc         ),
+        .ic_act_mask_i  ( ic_to_dec_data.act_mask   ),
+        .ic_warp_id_i   ( ic_to_dec_data.warp_id    ),
+        .ic_subwarp_id_i( ic_to_dec_data.subwarp_id ),
+        .ic_inst_i      ( ic_to_dec_data.inst       ),
 
         .disp_ready_i           ( ib_to_dec_ready_q                  ),
         .dec_valid_o            ( dec_to_ib_valid_d                  ),
         .dec_pc_o               ( dec_to_ib_data_d.pc                ),
         .dec_act_mask_o         ( dec_to_ib_data_d.act_mask          ),
         .dec_warp_id_o          ( dec_to_ib_data_d.warp_id           ),
+        .dec_subwarp_id_o       ( dec_to_ib_data_d.subwarp_id        ),
         .dec_inst_o             ( dec_to_ib_data_d.inst              ),
         .dec_dst_o              ( dec_to_ib_data_d.dst               ),
         .dec_operands_required_o( dec_to_ib_data_d.operands_required ),
         .dec_operands_o         ( dec_to_ib_data_d.operands          ),
 
-        .dec_decoded_o         ( dec_to_fetch_decoded         ),
-        .dec_decoded_control_o ( dec_to_fetch_control         ),
-        .dec_stop_warp_o       ( dec_to_fetch_stop_warp       ),
-        .dec_decoded_branch_o  ( dec_to_fetch_decoded_branch  ),
-        .dec_decoded_warp_id_o ( dec_to_fetch_decoded_warp_id ),
-        .dec_decoded_next_pc_o ( dec_to_fetch_decoded_next_pc )
+        .dec_decoded_o           ( dec_to_fetch_decoded            ),
+        .dec_decoded_control_o   ( dec_to_fetch_control            ),
+        .dec_stop_warp_o         ( dec_to_fetch_stop_warp          ),
+        .dec_decoded_branch_o    ( dec_to_fetch_decoded_branch     ),
+        .dec_decoded_warp_id_o   ( dec_to_fetch_decoded_warp_id    ),
+        .dec_decoded_subwarp_id_o( dec_to_fetch_decoded_subwarp_id ),
+        .dec_decoded_next_pc_o   ( dec_to_fetch_decoded_next_pc    )
     );
 
     // #######################################################################################

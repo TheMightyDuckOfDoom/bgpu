@@ -31,7 +31,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     // # Local Parameters                                                                    #
     // #######################################################################################
 
-    localparam int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1;
+    localparam int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
+    localparam int unsigned WidWidth       =  NumWarps > 1 ? $clog2(NumWarps)  : 1;
 
     localparam int unsigned CachelineAddrWidth = CachelineIdxBits > 0 ? PcWidth - CachelineIdxBits
                                                     : PcWidth;
@@ -40,26 +41,28 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     // # Type Definitions                                                                    #
     // #######################################################################################
 
-    typedef logic [    WidWidth-1:0] wid_t;
-    typedef logic [     PcWidth-1:0] pc_t;
-    typedef logic [   WarpWidth-1:0] act_mask_t;
-    typedef logic [EncInstWidth-1:0] enc_inst_t;
-
+    typedef logic [          WidWidth-1:0] wid_t;
+    typedef logic [           PcWidth-1:0] pc_t;
+    typedef logic [         WarpWidth-1:0] act_mask_t;
+    typedef logic [      EncInstWidth-1:0] enc_inst_t;
+    typedef logic [    SubwarpIdWidth-1:0] subwarp_id_t;
     typedef logic [CachelineAddrWidth-1:0] cache_addr_t;
 
     // Request from fetcher
     typedef struct packed {
-        pc_t       pc;
-        act_mask_t act_mask;
-        wid_t      wid;
+        pc_t         pc;
+        act_mask_t   act_mask;
+        wid_t        wid;
+        subwarp_id_t subwarp_id;
     } fetch_req_t;
 
     // Response to Decoder
     typedef struct packed {
-        pc_t        pc;
-        act_mask_t  act_mask;
-        wid_t       wid;
-        enc_inst_t enc_inst;
+        pc_t         pc;
+        act_mask_t   act_mask;
+        wid_t        wid;
+        subwarp_id_t subwarp_id;
+        enc_inst_t   enc_inst;
     } ic_rsp_t;
 
     // Memory response
@@ -191,10 +194,11 @@ module tb_instruction_cache import bgpu_pkg::*; #(
             @(posedge clk);
             #AcqDelay;
             if (fetch_req_valid && ic_ready) begin
-                grsp.pc       = fetch_req.pc;
-                grsp.act_mask = fetch_req.act_mask;
-                grsp.wid      = fetch_req.wid;
-                grsp.enc_inst = mem_data[fetch_req.pc];
+                grsp.pc         = fetch_req.pc;
+                grsp.act_mask   = fetch_req.act_mask;
+                grsp.wid        = fetch_req.wid;
+                grsp.subwarp_id = fetch_req.subwarp_id;
+                grsp.enc_inst   = mem_data[fetch_req.pc];
 
                 $display("Golden Model - PC: %0h, Warp ID: %0d, Active Mask: %0b, Instruction: %0h",
                          grsp.pc, grsp.wid, grsp.act_mask, grsp.enc_inst);
@@ -267,18 +271,20 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         .mem_valid_i( mem_rsp_valid ),
         .mem_data_i ( mem_rsp       ),
 
-        .ic_ready_o   ( ic_ready           ),
-        .fe_valid_i   ( fetch_req_valid    ),
-        .fe_pc_i      ( fetch_req.pc       ),
-        .fe_act_mask_i( fetch_req.act_mask ),
-        .fe_warp_id_i ( fetch_req.wid      ),
+        .ic_ready_o     ( ic_ready             ),
+        .fe_valid_i     ( fetch_req_valid      ),
+        .fe_pc_i        ( fetch_req.pc         ),
+        .fe_act_mask_i  ( fetch_req.act_mask   ),
+        .fe_warp_id_i   ( fetch_req.wid        ),
+        .fe_subwarp_id_i( fetch_req.subwarp_id ),
 
-        .dec_ready_i  ( dec_ready       ),
-        .ic_valid_o   ( ic_valid        ),
-        .ic_pc_o      ( ic_rsp.pc       ),
-        .ic_act_mask_o( ic_rsp.act_mask ),
-        .ic_warp_id_o ( ic_rsp.wid      ),
-        .ic_inst_o    ( ic_rsp.enc_inst )
+        .dec_ready_i    ( dec_ready         ),
+        .ic_valid_o     ( ic_valid          ),
+        .ic_pc_o        ( ic_rsp.pc         ),
+        .ic_act_mask_o  ( ic_rsp.act_mask   ),
+        .ic_warp_id_o   ( ic_rsp.wid        ),
+        .ic_subwarp_id_o( ic_rsp.subwarp_id ),
+        .ic_inst_o      ( ic_rsp.enc_inst   )
     );
 
     // ########################################################################################
@@ -341,12 +347,15 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 match = (grsp.pc == queued_rsp.pc) &&
                         (grsp.wid == queued_rsp.wid) &&
                         (grsp.act_mask == queued_rsp.act_mask) &&
-                        (grsp.enc_inst == queued_rsp.enc_inst);
+                        (grsp.enc_inst == queued_rsp.enc_inst) &&
+                        (grsp.subwarp_id == queued_rsp.subwarp_id);
 
                 assert(match) else begin
                     $display("Cycle %0d: Mismatch in decoder response", cycles);
                     $display("Expected: PC: %0h actual: %0h", grsp.pc, queued_rsp.pc);
                     $display("Expected: Warp ID: %0d actual: %0d", grsp.wid, queued_rsp.wid);
+                    $display("Expected: Subwarp ID: %0d actual: %0d",
+                        grsp.subwarp_id, queued_rsp.subwarp_id);
                     $display("Expected: Active Mask: %0b actual: %0b",
                         grsp.act_mask, queued_rsp.act_mask);
                     $display("Expected: Instruction: %0h actual: %0h",

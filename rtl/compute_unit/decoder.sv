@@ -18,53 +18,61 @@ module decoder import bgpu_pkg::*; #(
     parameter int unsigned OperandsPerInst = 2,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned WidWidth   = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type         wid_t      = logic [    WidWidth-1:0],
-    parameter type         reg_idx_t  = logic [ RegIdxWidth-1:0],
-    parameter type         pc_t       = logic [     PcWidth-1:0],
-    parameter type         act_mask_t = logic [   WarpWidth-1:0],
-    parameter type         enc_inst_t = logic [EncInstWidth-1:0]
+    parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter int unsigned WidWidth       = NumWarps > 1  ? $clog2(NumWarps)  : 1,
+    parameter type         wid_t          = logic [      WidWidth-1:0],
+    parameter type         reg_idx_t      = logic [   RegIdxWidth-1:0],
+    parameter type         pc_t           = logic [       PcWidth-1:0],
+    parameter type         act_mask_t     = logic [     WarpWidth-1:0],
+    parameter type         enc_inst_t     = logic [  EncInstWidth-1:0],
+    parameter type         subwarp_id_t   = logic [SubwarpIdWidth-1:0]
 ) (
     // From Instruction Cache
-    output logic      dec_ready_o,
-    input  logic      ic_valid_i,
-    input  pc_t       ic_pc_i,
-    input  act_mask_t ic_act_mask_i,
-    input  wid_t      ic_warp_id_i,
-    input  enc_inst_t ic_inst_i,
+    output logic        dec_ready_o,
+    input  logic        ic_valid_i,
+    input  pc_t         ic_pc_i,
+    input  act_mask_t   ic_act_mask_i,
+    input  wid_t        ic_warp_id_i,
+    input  subwarp_id_t ic_subwarp_id_i,
+    input  enc_inst_t   ic_inst_i,
 
     // To Dispatcher
-    input  logic      disp_ready_i,
-    output logic      dec_valid_o,
-    output pc_t       dec_pc_o,
-    output act_mask_t dec_act_mask_o,
-    output wid_t      dec_warp_id_o,
-    output inst_t     dec_inst_o,
-    output reg_idx_t  dec_dst_o,
-    output logic      [OperandsPerInst-1:0] dec_operands_required_o,
-    output reg_idx_t  [OperandsPerInst-1:0] dec_operands_o,
+    input  logic        disp_ready_i,
+    output logic        dec_valid_o,
+    output pc_t         dec_pc_o,
+    output act_mask_t   dec_act_mask_o,
+    output wid_t        dec_warp_id_o,
+    output subwarp_id_t dec_subwarp_id_o,
+    output inst_t       dec_inst_o,
+    output reg_idx_t    dec_dst_o,
+    output logic        [OperandsPerInst-1:0] dec_operands_required_o,
+    output reg_idx_t    [OperandsPerInst-1:0] dec_operands_o,
 
     // To Fetcher |-> tells it what the next PC is
-    output logic dec_decoded_o,
-    output logic dec_decoded_control_o,
-    output logic dec_stop_warp_o,
-    output logic dec_decoded_branch_o,
-    output wid_t dec_decoded_warp_id_o,
-    output pc_t  dec_decoded_next_pc_o
+    output logic        dec_decoded_o,
+    output logic        dec_decoded_control_o,
+    output logic        dec_stop_warp_o,
+    output logic        dec_decoded_branch_o,
+    output wid_t        dec_decoded_warp_id_o,
+    output subwarp_id_t dec_decoded_subwarp_id_o,
+    output pc_t         dec_decoded_next_pc_o
 );
     // Pass through signals
     assign dec_ready_o       = disp_ready_i;
     assign dec_pc_o          = ic_pc_i;
     assign dec_act_mask_o    = ic_act_mask_i;
     assign dec_warp_id_o     = ic_warp_id_i;
+    assign dec_subwarp_id_o  = ic_subwarp_id_i;
     assign dec_inst_o        = inst_t'(ic_inst_i[31:24]);
     assign dec_dst_o         = ic_inst_i[23:16];
     assign dec_operands_o[0] = ic_inst_i[15:8];
     assign dec_operands_o[1] = ic_inst_i[7:0];
 
     // Instruction was decoded if a handshake between Decoder and Dispatcher happend
-    assign dec_decoded_o         = ((ic_valid_i && dec_decoded_control_o) || dec_valid_o) && disp_ready_i;
-    assign dec_decoded_warp_id_o = dec_warp_id_o;
+    assign dec_decoded_o            = ((ic_valid_i && dec_decoded_control_o) || dec_valid_o)
+                                    && disp_ready_i;
+    assign dec_decoded_warp_id_o    = dec_warp_id_o;
+    assign dec_decoded_subwarp_id_o = ic_subwarp_id_i;
 
     // Stop the warp if the instruction is a stop instruction
     assign dec_stop_warp_o = ic_inst_i[31:24] == '1;
@@ -126,7 +134,12 @@ module decoder import bgpu_pkg::*; #(
                 dec_decoded_control_o = 1'b1;
             end : jump_instruction
             else begin : branch_instruction
+                // Op1 is a register holding the condition
+                // Op2 is an immediate value holding the offset
+                dec_operands_required_o[0] = 1'b1; // Register operand
+                dec_operands_required_o[1] = 1'b0; // Immediate value
 
+                dec_decoded_branch_o = 1'b1;
             end : branch_instruction
         end : decode_bru
     end

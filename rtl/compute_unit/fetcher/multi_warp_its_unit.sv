@@ -4,8 +4,8 @@
 
 `include "common_cells/registers.svh"
 
-/// Reconvergence Stack and General Information Storage for multiple warps
-module multi_warp_reconvergence_stack #(
+/// General Information Storage and ITS units for multiple warps
+module multi_warp_its_unit #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 32,
     /// Number of warps per compute unit
@@ -20,13 +20,15 @@ module multi_warp_reconvergence_stack #(
     parameter int unsigned AddressWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
-    parameter type tblock_id_t  = logic [ TblockIdBits-1:0],
-    parameter type addr_t       = logic [ AddressWidth-1:0],
-    parameter type wid_t        = logic [     WidWidth-1:0],
-    parameter type pc_t         = logic [      PcWidth-1:0],
-    parameter type act_mask_t   = logic [    WarpWidth-1:0]
+    parameter int unsigned WidWidth        = NumWarps > 1 ? $clog2(NumWarps)  : 1,
+    parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter type tblock_idx_t = logic [ TblockIdxBits-1:0],
+    parameter type tblock_id_t  = logic [  TblockIdBits-1:0],
+    parameter type addr_t       = logic [  AddressWidth-1:0],
+    parameter type wid_t        = logic [      WidWidth-1:0],
+    parameter type pc_t         = logic [       PcWidth-1:0],
+    parameter type act_mask_t   = logic [     WarpWidth-1:0],
+    parameter type subwarp_id_t = logic [SubwarpIdWidth-1:0]
 ) (
     /// Clock and reset
     input logic clk_i,
@@ -46,21 +48,23 @@ module multi_warp_reconvergence_stack #(
     output tblock_id_t tblock_done_id_o,
 
     /// From decode stage |-> is the instruction a branch or update normally to next instruction?
-    input logic instruction_decoded_i,
-    input logic decode_stop_warp_i,
-    input wid_t decode_wid_i,
-    input logic decode_branch_i,
-    input pc_t  decode_next_pc_i,
+    input logic        instruction_decoded_i,
+    input logic        decode_stop_warp_i,
+    input wid_t        decode_wid_i,
+    input subwarp_id_t decode_subwarp_id_i,
+    input logic        decode_branch_i,
+    input pc_t         decode_next_pc_i,
 
     /// From instruction buffer
     // Are there any instructions in flight?
     input  logic [NumWarps-1:0] ib_all_instr_finished_i,
 
     /// To/From Fetcher
-    input  logic      [NumWarps-1:0] warp_selected_i,
-    output logic      [NumWarps-1:0] warp_ready_o,
-    output pc_t       [NumWarps-1:0] warp_pc_o,
-    output act_mask_t [NumWarps-1:0] warp_act_mask_o,
+    input  logic        [NumWarps-1:0] warp_selected_i,
+    output logic        [NumWarps-1:0] warp_ready_o,
+    output pc_t         [NumWarps-1:0] warp_pc_o,
+    output act_mask_t   [NumWarps-1:0] warp_act_mask_o,
+    output subwarp_id_t [NumWarps-1:0] warp_subwarp_id_o,
 
     /// To Integer Unit
     output addr_t       [NumWarps-1:0] warp_dp_addr_o,    // Data / Parameter address
@@ -76,7 +80,7 @@ module multi_warp_reconvergence_stack #(
     // # Typedefs                                                                            #
     // #######################################################################################
 
-    // Data per warp stored in the reconvergence stack
+    // Data per warp
     typedef struct packed {
         logic        occupied;
         logic        finished;
@@ -89,7 +93,7 @@ module multi_warp_reconvergence_stack #(
     // # Signals                                                                             #
     // #######################################################################################
 
-    // Reconvergence stack data
+    // General stack data
     warp_data_t [NumWarps-1:0] warp_data_q, warp_data_d;
 
     logic [NumWarps-1:0] allocate_warp;
@@ -171,10 +175,10 @@ module multi_warp_reconvergence_stack #(
     `FF(warp_data_q, warp_data_d, '0, clk_i, rst_ni)
 
     // #######################################################################################
-    // # Per Warp Reconvergence Stacks                                                       #
+    // # Per Warp ITS units                                                                  #
     // #######################################################################################
 
-    for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_reconvergence_stack
+    for(genvar warp = 0; warp < NumWarps; warp++) begin : gen_its_unit
         warp_its_unit #(
             .PcWidth  ( PcWidth   ),
             .WarpWidth( WarpWidth )
@@ -187,7 +191,7 @@ module multi_warp_reconvergence_stack #(
 
             // From decode stage
             .instruction_decoded_i( instruction_decoded_i && (decode_wid_i == warp) ),
-            .decoded_subwarp_id_i ( '0                                              ), // TODO
+            .decoded_subwarp_id_i ( decode_subwarp_id_i                             ),
             .is_branch_i          ( decode_branch_i                                 ),
             .next_pc_i            ( decode_next_pc_i                                ),
 
@@ -195,17 +199,17 @@ module multi_warp_reconvergence_stack #(
             .selected_for_fetch_i( warp_selected_i[warp] ),
 
             // Stack outputs
-            .ready_for_fetch_o ( warp_ready     [warp] ),
-            .fetch_pc_o        ( warp_pc_o      [warp] ),
-            .fetch_act_mask_o  ( warp_act_mask_o[warp] ),
-            .fetch_subwarp_id_o( /* TODO */            )
+            .ready_for_fetch_o ( warp_ready       [warp] ),
+            .fetch_pc_o        ( warp_pc_o        [warp] ),
+            .fetch_act_mask_o  ( warp_act_mask_o  [warp] ),
+            .fetch_subwarp_id_o( warp_subwarp_id_o[warp] )
 
             // From branch unit
             // .bru_branch_i        ( bru_branch_i && (bru_branch_wid_i == warp) ),
             // .bru_branching_mask_i( bru_branching_mask_i                       ),
             // .bru_inactive_pc_i   ( bru_inactive_pc_i                          )
         );
-    end : gen_reconvergence_stack
+    end : gen_its_unit
 
     // #######################################################################################
     // # Outputs                                                                             #
@@ -256,4 +260,4 @@ module multi_warp_reconvergence_stack #(
 
     `endif
 
-endmodule : multi_warp_reconvergence_stack
+endmodule : multi_warp_its_unit

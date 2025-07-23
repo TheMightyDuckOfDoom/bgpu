@@ -21,14 +21,16 @@ module instruction_cache #(
     parameter int unsigned NumCachelines = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned WidWidth           =         NumWarps > 1 ? $clog2(NumWarps) : 1,
+    parameter int unsigned SubwarpIdWidth     =        WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter int unsigned WidWidth           =         NumWarps > 1 ? $clog2(NumWarps)  : 1,
     parameter int unsigned CachelineAddrWidth = CachelineIdxBits > 0 ? PcWidth - CachelineIdxBits
                                                     : PcWidth,
     parameter type         cache_addr_t = logic [CachelineAddrWidth-1:0],
     parameter type         wid_t        = logic [          WidWidth-1:0],
     parameter type         pc_t         = logic [           PcWidth-1:0],
     parameter type         act_mask_t   = logic [         WarpWidth-1:0],
-    parameter type         enc_inst_t   = logic [      EncInstWidth-1:0]
+    parameter type         enc_inst_t   = logic [      EncInstWidth-1:0],
+    parameter type         subwarp_id_t = logic [    SubwarpIdWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -44,19 +46,21 @@ module instruction_cache #(
     input enc_inst_t [(1 << CachelineIdxBits)-1:0] mem_data_i,
 
     // From Fetcher
-    output logic      ic_ready_o,
-    input  logic      fe_valid_i,
-    input  pc_t       fe_pc_i,
-    input  act_mask_t fe_act_mask_i,
-    input  wid_t      fe_warp_id_i,
+    output logic        ic_ready_o,
+    input  logic        fe_valid_i,
+    input  pc_t         fe_pc_i,
+    input  act_mask_t   fe_act_mask_i,
+    input  wid_t        fe_warp_id_i,
+    input  subwarp_id_t fe_subwarp_id_i,
 
     // To Decode
-    input  logic      dec_ready_i,
-    output logic      ic_valid_o,
-    output pc_t       ic_pc_o,
-    output act_mask_t ic_act_mask_o,
-    output wid_t      ic_warp_id_o,
-    output enc_inst_t ic_inst_o
+    input  logic        dec_ready_i,
+    output logic        ic_valid_o,
+    output pc_t         ic_pc_o,
+    output act_mask_t   ic_act_mask_o,
+    output wid_t        ic_warp_id_o,
+    output enc_inst_t   ic_inst_o,
+    output subwarp_id_t ic_subwarp_id_o
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -82,9 +86,10 @@ module instruction_cache #(
 
     // Fetch request
     typedef struct packed {
-        pc_t       pc;         // Program counter of the instruction
-        act_mask_t act_mask;   // Active mask of the warp
-        wid_t      warp_id;    // Warp ID of the instruction
+        pc_t         pc;         // Program counter of the instruction
+        act_mask_t   act_mask;   // Active mask of the warp
+        wid_t        warp_id;    // Warp ID of the instruction
+        subwarp_id_t subwarp_id; // Subwarp ID of the instruction
     } fetch_req_t;
 
     // Cache tag
@@ -140,11 +145,12 @@ module instruction_cache #(
         ic_ready_o = 1'b0;
 
         // Output to decoder
-        ic_valid_o    = 1'b0;
-        ic_pc_o       = '0;
-        ic_act_mask_o = '0;
-        ic_warp_id_o  = '0;
-        ic_inst_o     = '0;
+        ic_valid_o      = 1'b0;
+        ic_pc_o         = '0;
+        ic_act_mask_o   = '0;
+        ic_warp_id_o    = '0;
+        ic_subwarp_id_o = '0;
+        ic_inst_o       = '0;
 
         // Cache request
         cache_req    = 1'b0; // No lookup
@@ -172,9 +178,10 @@ module instruction_cache #(
                 cache_valid_d = cache_valids_q[cache_select];
 
                 // Store the active request
-                active_req_d.pc       = fe_pc_i;
-                active_req_d.act_mask = fe_act_mask_i;
-                active_req_d.warp_id  = fe_warp_id_i;
+                active_req_d.pc         = fe_pc_i;
+                active_req_d.act_mask   = fe_act_mask_i;
+                active_req_d.warp_id    = fe_warp_id_i;
+                active_req_d.subwarp_id = fe_subwarp_id_i;
             end
         end : idle_state
 
@@ -188,11 +195,12 @@ module instruction_cache #(
                 // -> Hit, send to decoder, check if we have a new request
 
                 // Send to decoder
-                ic_valid_o    = 1'b1;
-                ic_pc_o       = active_req_q.pc;
-                ic_act_mask_o = active_req_q.act_mask;
-                ic_warp_id_o  = active_req_q.warp_id;
-                ic_inst_o     = cache_data[
+                ic_valid_o      = 1'b1;
+                ic_pc_o         = active_req_q.pc;
+                ic_act_mask_o   = active_req_q.act_mask;
+                ic_warp_id_o    = active_req_q.warp_id;
+                ic_subwarp_id_o = active_req_q.subwarp_id;
+                ic_inst_o       = cache_data[
                     active_req_q.pc[CachelineIdxBits-1:0]
                 ];
 
@@ -213,9 +221,10 @@ module instruction_cache #(
                         cache_valid_d = cache_valids_q[cache_select];
 
                         // Store the active request
-                        active_req_d.pc       = fe_pc_i;
-                        active_req_d.act_mask = fe_act_mask_i;
-                        active_req_d.warp_id  = fe_warp_id_i;
+                        active_req_d.pc         = fe_pc_i;
+                        active_req_d.act_mask   = fe_act_mask_i;
+                        active_req_d.warp_id    = fe_warp_id_i;
+                        active_req_d.subwarp_id = fe_subwarp_id_i;
                     end else begin
                         // No new request, go back to idle state
                         state_d = IDLE;
@@ -260,11 +269,12 @@ module instruction_cache #(
 
         // Wait for decoder state
         else if (state_q == WAIT_FOR_DECODER) begin : wait_for_decoder_state
-            ic_valid_o = 1'b1;
-            ic_pc_o    = active_req_q.pc;
-            ic_act_mask_o = active_req_q.act_mask;
-            ic_warp_id_o  = active_req_q.warp_id;
-            ic_inst_o     = mem_data_q[
+            ic_valid_o      = 1'b1;
+            ic_pc_o         = active_req_q.pc;
+            ic_act_mask_o   = active_req_q.act_mask;
+            ic_warp_id_o    = active_req_q.warp_id;
+            ic_subwarp_id_o = active_req_q.subwarp_id;
+            ic_inst_o       = mem_data_q[
                 active_req_q.pc[CachelineIdxBits-1:0]
             ];
 
@@ -285,9 +295,10 @@ module instruction_cache #(
                     cache_valid_d = cache_valids_q[cache_select];
 
                     // Store the active request
-                    active_req_d.pc       = fe_pc_i;
-                    active_req_d.act_mask = fe_act_mask_i;
-                    active_req_d.warp_id  = fe_warp_id_i;
+                    active_req_d.pc         = fe_pc_i;
+                    active_req_d.act_mask   = fe_act_mask_i;
+                    active_req_d.warp_id    = fe_warp_id_i;
+                    active_req_d.subwarp_id = fe_subwarp_id_i;
                 end else begin
                     // No new request, go back to idle state
                     state_d = IDLE;

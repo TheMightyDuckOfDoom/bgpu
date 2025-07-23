@@ -93,9 +93,9 @@ module warp_its_unit #(
             sync_waiting_d = '0; // Reset all sync waiting flags to zero
 
             // Single PC for all threads
-            pc_act_mask_d[0].pc          = init_pc_i;
-            pc_act_mask_d[0].active_mask = '1;
-            pc_ready_d   [0]             = 1'b1;
+            pc_act_mask_d[1].pc          = init_pc_i;
+            pc_act_mask_d[1].active_mask = '1;
+            pc_ready_d   [1]             = 1'b1;
         end : init_pcs
         else begin : normal_operation
             for (int unsigned i = 0; i < WarpWidth; i++) begin : loop_pcs
@@ -168,6 +168,16 @@ module warp_its_unit #(
         // We can never be selected for fetching if we are not ready
         assert property (@(posedge clk_i) disable iff (!rst_ni) selected_for_fetch_i
                                                                     |-> ready_for_fetch != '0)
-            else $error("Reconvergence stack: Selected for fetching but not ready!");
+            else $error("ITS: Selected for fetching but not ready!");
+
+        // We can never be decoded if we are ready
+        assert property (@(posedge clk_i) disable iff (!rst_ni) instruction_decoded_i
+                                                     |-> !ready_for_fetch[decoded_subwarp_id_i])
+            else $error("ITS: Instruction decoded but ready for fetching!");
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni) instruction_decoded_i
+                                        |-> pc_act_mask_q[decoded_subwarp_id_i].active_mask != '0)
+            else $error("ITS: Instruction decoded but no active threads for subwarp!");
+
     `endif
 endmodule : warp_its_unit
