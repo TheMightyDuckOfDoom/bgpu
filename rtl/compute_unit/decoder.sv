@@ -134,10 +134,10 @@ module decoder import bgpu_pkg::*; #(
                 dec_decoded_control_o = 1'b1;
             end : jump_instruction
             else begin : branch_instruction
-                // Op1 is a register holding the condition
-                // Op2 is an immediate value holding the offset
-                dec_operands_required_o[0] = 1'b1; // Register operand
-                dec_operands_required_o[1] = 1'b0; // Immediate value
+                // Op1 is an immediate value holding the offset
+                // Op2 is a register holding the condition
+                dec_operands_required_o[0] = 1'b0; // Immediate value
+                dec_operands_required_o[1] = 1'b1; // Register Operand
 
                 dec_decoded_branch_o = 1'b1;
             end : branch_instruction

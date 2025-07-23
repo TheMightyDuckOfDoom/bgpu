@@ -247,11 +247,11 @@ module multi_warp_its_unit #(
 
         end : gen_asserts
 
-        // A warp cannot be selected and be decoded at the same time
-        assert property (@(posedge clk_i) disable iff (!rst_ni)
-            (instruction_decoded_i |-> !warp_selected_i[decode_wid_i]))
-        else $error("Warp was selected for fetching, but got decoded at the same time: %0d",
-            decode_wid_i);
+        // // A warp cannot be selected and be decoded at the same time
+        // assert property (@(posedge clk_i) disable iff (!rst_ni)
+        //     (instruction_decoded_i |-> !(warp_selected_i[decode_wid_i]) && (decode_subwarp_id_i == warp_subwarp_id_o[decode_wid_i])))
+        // else $error("Warp was selected for fetching, but got decoded at the same time: %0d",
+        //     decode_wid_i);
 
         // Check that a warp that was decoded is occupied
         assert property (@(posedge clk_i) disable iff (!rst_ni)

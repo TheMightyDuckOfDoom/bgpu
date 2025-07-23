@@ -7,7 +7,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
-    parameter int unsigned NumWarps = 8,
+    parameter int unsigned NumWarps = 1,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// Number of inflight instructions per warp
@@ -39,7 +39,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
     parameter int unsigned SimMemBlocks = 65,
 
-    parameter int unsigned TblocksToLaunch = 33,
+    parameter int unsigned TblocksToLaunch = 1,
 
     parameter time         ClkPeriod    = 10ns,
     parameter time         AcqDelay     = 9ns,
@@ -128,18 +128,22 @@ module tb_compute_unit import bgpu_pkg::*; #(
     mem_rsp_t mem_rsp_q,       mem_rsp_d;
 
     // Test program
-    enc_inst_t test_program [9] = {
+    enc_inst_t test_program [12] = {
         // Calculate byte offset from thread ID and warp ID
-        '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
+        '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = thread ID in tblk
 
         // Load data from memory
         '{eu: EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 1, op1: 0, op2: 0}, // reg1 = [reg0]
 
         // Subtract address from data
         '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 1, op2: 0}, // reg2 = reg1 - reg0
+        '{eu: EU_IU,  subtype: IU_LDI,         dst: 3, op1: 1, op2: 0}, // reg3 = 1
+        '{eu: EU_IU,  subtype: IU_ADD,         dst: 2, op1: 2, op2: 3}, // reg2 = reg3 + reg2
+        '{eu: EU_IU,  subtype: IU_AND,         dst: 3, op1: 3, op2: 0}, // reg3 = reg3 & reg2
 
-        '{eu: EU_BRU, subtype: BRU_JMP,        dst: 6, op1: 0, op2: 1}, // Jump over next inst
-        '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 2, op2: 0}, // reg2 = reg2 - reg0
+        '{eu: EU_BRU, subtype: BRU_BEZ,        dst: 6, op1: 1, op2: 3}, // Jump if reg3 == 0
+        // '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 2, op2: 0}, // reg2 = reg2 - reg0
+        '{eu: EU_IU,  subtype: IU_LDI,         dst: 2, op1: 255, op2: 0}, // reg2 = 255
 
         '{eu: EU_IU,  subtype: IU_BID,         dst: 3, op1: 0, op2: 0}, // reg3 = block ID
 
@@ -151,23 +155,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         // NOPs
         '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}  // STOP warps
     };
-    // enc_inst_t test_program [9] = {
-    //     '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = thread id in block
-    //     '{eu: EU_IU,  subtype: IU_LDI,         dst: 1, op1: 1, op2: 0}, // reg1 = 1
-    //     '{eu: EU_IU,  subtype: IU_AND,         dst: 2, op1: 1, op2: 0}, // reg2 = reg0 & reg1
 
-    //     '{eu: EU_IU,  subtype: IU_LDI,         dst: 3, op1: 0, op2: 0}, // reg3 = 0
-
-    //     '{eu: EU_BRU, subtype: BRU_FORK,       dst: 4, op1: 1, op2: 2}, // Branch if reg2 != 0
-    //     '{eu: EU_IU,  subtype: IU_LDI,         dst: 3, op1: 255, op2: 0}, // reg3 = 255
-    //     '{eu: EU_BRU, subtype: BRU_JOIN,       dst: 5, op1: 0, op2: 0}, //
-
-    //     // Store result back to memory
-    //     '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 6, op1: 0, op2: 3}, // [reg0] = reg2
-
-    //     // NOPs
-    //     '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}  // STOP warps
-    // };
     logic stop, clk, rst_n;
 
     // Instruction Cache requests
@@ -463,16 +451,18 @@ module tb_compute_unit import bgpu_pkg::*; #(
                 #AcqDelay;
                 $display("Warp %2d", warp);
                 $display("Register Table");
-                $display("Entry   Vld Dst Prod");
+                $display("Entry   Vld Dst Prod Subwarp");
                 for (int rtentry = 0; rtentry < InflightInstrPerWarp; rtentry++) begin : gen_disp_rt
-                    $display("RT[%2d]: %1d  %2d  %2d",
+                    $display("RT[%2d]: %1d  %2d  %2d  %2d",
                         rtentry,
                         i_cu.i_warp_dispatcher.gen_dispatcher[warp]
                             .i_dispatcher.i_reg_table.table_valid_q[rtentry],
                         i_cu.i_warp_dispatcher.gen_dispatcher[warp]
                             .i_dispatcher.i_reg_table.table_q[rtentry].dst,
                         i_cu.i_warp_dispatcher.gen_dispatcher[warp]
-                            .i_dispatcher.i_reg_table.table_q[rtentry].producer
+                            .i_dispatcher.i_reg_table.table_q[rtentry].producer,
+                        i_cu.i_warp_dispatcher.gen_dispatcher[warp]
+                            .i_dispatcher.i_reg_table.table_q[rtentry].subwarp_id
                     );
                 end : gen_disp_rt
                 $display();

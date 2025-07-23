@@ -111,6 +111,11 @@ module branch_unit import bgpu_pkg::*; #(
                     result[i] = (operands[1][i] != '0) ? 'd1 : '0;
                 end
 
+                BRU_BEZ: begin // Branch if zero
+                    // Result contains the condition
+                    result[i] = (operands[1][i] != '0) ? '0 : 'd1;
+                end
+
                 default: begin
                     result[i] = '1; // Default case, should not happen
                 end
@@ -133,6 +138,15 @@ module branch_unit import bgpu_pkg::*; #(
                 for (int unsigned i = 0; i < WarpWidth; i++) begin
                     // Set active mask for threads that are not zero
                     bru_branching_mask_d[i] = opc_to_eu_act_mask_i[i] && (operands[1][i] != '0);
+                end
+            end
+            if (opc_to_eu_inst_sub_i == BRU_BEZ) begin
+                // New branch instruction
+                bru_branch_d = 1'b1;
+
+                for (int unsigned i = 0; i < WarpWidth; i++) begin
+                    // Set active mask for threads that are not zero
+                    bru_branching_mask_d[i] = opc_to_eu_act_mask_i[i] && (operands[1][i] == '0);
                 end
             end
         end

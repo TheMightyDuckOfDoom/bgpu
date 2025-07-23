@@ -63,6 +63,9 @@ module warp_its_unit #(
     // # Signals                                                                             #
     // #######################################################################################
 
+    // Program Counter is in use
+    logic [WarpWidth-1:0] valid_pc_q, valid_pc_d;
+
     // Program Counter and active mask for each thread
     pc_act_mask_t [WarpWidth-1:0] pc_act_mask_q, pc_act_mask_d;
 
@@ -79,6 +82,9 @@ module warp_its_unit #(
     logic [WarpWidth-1:0] pc_selected_for_fetch;
     pc_act_mask_t         selected_pc_act_mask;
 
+    // Uniform branch
+    logic is_branch_uniform;
+
     // #######################################################################################
     // # Combinatorial Logic                                                                 #
     // #######################################################################################
@@ -86,49 +92,93 @@ module warp_its_unit #(
     // Main logic
     always_comb begin : main_logic
         // Default
+        valid_pc_d     = valid_pc_q;
         pc_act_mask_d  = pc_act_mask_q;
         pc_ready_d     = pc_ready_q;
         sync_waiting_d = sync_waiting_q;
 
+        is_branch_uniform = 1'b0;
+
         // Initialization
         if (init_i) begin : init_pcs
             // Reset all PCs and masks
+            valid_pc_d     = '0; // Invalidate all PCs
             pc_act_mask_d  = '0; // Reset all PCs and active masks
             pc_ready_d     = '0; // Reset all PC ready flags to zero
             sync_waiting_d = '0; // Reset all sync waiting flags to zero
 
             // Single PC for all threads
-            pc_act_mask_d[1].pc          = init_pc_i;
-            pc_act_mask_d[1].active_mask = '1;
-            pc_ready_d   [1]             = 1'b1;
+            valid_pc_d   [0]             = 1'b1;
+            pc_act_mask_d[0].pc          = init_pc_i;
+            pc_act_mask_d[0].active_mask = '1;
+            pc_ready_d   [0]             = 1'b1;
         end : init_pcs
         else begin : normal_operation
             for (int unsigned i = 0; i < WarpWidth; i++) begin : loop_pcs
-                // PC is selcted for fetching
-                if (pc_selected_for_fetch[i]) begin : selected_for_fetch
-                    // No longer ready for fetching
-                    pc_ready_d[i] = 1'b0;
-                end : selected_for_fetch
-                // PC got decoded
-                else if (instruction_decoded_i
-                    && (decoded_subwarp_id_i == i[SubwarpIdWidth-1:0]))
-                begin : decoded
-                    if (is_branch_i) begin : is_branch
-                        // TODO
-                    end
-                    else begin : normal_instruction
-                        // Update PC to next PC
+                if (valid_pc_q[i]) begin : valid_pc
+                    // PC is selected for fetching
+                    if (pc_selected_for_fetch[i]) begin : selected_for_fetch
+                        // No longer ready for fetching
+                        pc_ready_d[i] = 1'b0;
+                    end : selected_for_fetch
+
+                    // Decoded instruction by the Decoder
+                    if (instruction_decoded_i
+                        && (decoded_subwarp_id_i == i[SubwarpIdWidth-1:0]))
+                    begin : decoded_normal_instruction
+                        // Update PC to next instruction
                         pc_act_mask_d[i].pc = next_pc_i;
+                        // We are ready again for fetching if it was not a branch instruction
+                        pc_ready_d[i] = !is_branch_i;
+                    end : decoded_normal_instruction
+
+                    // Branch from Branch Unit
+                    if (bru_branch_i) begin
+                        // Check if all active threads are branching
+                        if (pc_act_mask_q[i].active_mask == bru_branching_mask_i)
+                        begin : branch_all_active
+                            // All threads are branching to the same target PC
+                            pc_act_mask_d[i].pc = bru_branch_pc_i;
+
+                            // Set uniform branch flag
+                            is_branch_uniform = 1'b1;
+                        end : branch_all_active
+                        // Check if some threads are branching
+                        else if (bru_branching_mask_i != '0) begin : branch_some_active
+                            // Mask off the branching threads from using this PC
+                            pc_act_mask_d[i].active_mask = pc_act_mask_q[i].active_mask
+                                                            & (~bru_branching_mask_i);
+                        end : branch_some_active
+
                         // We are ready again for fetching
                         pc_ready_d[i] = 1'b1;
                     end
-                end : decoded
+                end : valid_pc
             end : loop_pcs
+
+            // If a branch is not uniform, then we need to allocate a new PC
+            if (bru_branch_i && (!is_branch_uniform)) begin : allocate_new_pc
+                // Find first free PC
+                for (int unsigned i = 0; i < WarpWidth; i++) begin : loop_over_free_pcs
+                    if (!valid_pc_q[i]) begin : found_free_pc
+                        // Allocate new PC
+                        valid_pc_d[i]                = 1'b1;
+                        pc_act_mask_d[i].pc          = bru_branch_pc_i;
+                        pc_act_mask_d[i].active_mask = bru_branching_mask_i;
+                        
+                        // Is ready for fetching
+                        pc_ready_d[i]                = 1'b1;
+
+                        // No need to check further, we found a free PC
+                        break;
+                    end : found_free_pc
+                end : loop_over_free_pcs
+            end : allocate_new_pc
         end : normal_operation
     end : main_logic
 
     // PCs are ready for fetching if they are ready and not waiting for a sync
-    assign ready_for_fetch = pc_ready_q & (~sync_waiting_q);
+    assign ready_for_fetch = valid_pc_q & pc_ready_q & (~sync_waiting_q);
 
     // Arbitration logic among ready PCs
     rr_arb_tree #(
@@ -162,6 +212,7 @@ module warp_its_unit #(
     // # Sequential Logic                                                                    #
     // #######################################################################################
 
+    `FF(valid_pc_q,     valid_pc_d,     '0, clk_i, rst_ni)
     `FF(pc_act_mask_q,  pc_act_mask_d,  '0, clk_i, rst_ni)
     `FF(pc_ready_q,     pc_ready_d,     '0, clk_i, rst_ni)
     `FF(sync_waiting_q, sync_waiting_d, '0, clk_i, rst_ni)
@@ -180,9 +231,20 @@ module warp_its_unit #(
                                                      |-> !ready_for_fetch[decoded_subwarp_id_i])
             else $error("ITS: Instruction decoded but ready for fetching!");
 
+        // Decoded instruction must be for a valid subwarp
         assert property (@(posedge clk_i) disable iff (!rst_ni) instruction_decoded_i
-                                        |-> pc_act_mask_q[decoded_subwarp_id_i].active_mask != '0)
-            else $error("ITS: Instruction decoded but no active threads for subwarp!");
+                                        |-> valid_pc_q[decoded_subwarp_id_i])
+            else $error("ITS: Instruction decoded but no valid PC for subwarp %0d!",
+                        decoded_subwarp_id_i);
+
+        for(genvar i = 0; i < WarpWidth; i++) begin : gen_assertions
+            // If a PC is valid, then it must have a active mask with at least one active thread
+            assert property (@(posedge clk_i) disable iff (!rst_ni) valid_pc_q[i]
+                |-> pc_act_mask_q[i].active_mask != '0)
+                else $error("ITS: Valid PC but no active threads in active mask!");
+        end : gen_assertions
+
+        // A branch mask can only partially match with a single valid PC
 
     `endif
 endmodule : warp_its_unit
