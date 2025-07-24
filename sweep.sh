@@ -23,8 +23,8 @@ do
                 echo "Passed!"
                 break
             else
-                # Retry if the simulation fails with "verilator internal fault"
-                if [ "$(echo "$result" | grep -c "verilator internal fault")" -gt 0 ]; then
+                # Retry if the simulation fails with "Verilator internal fault"
+                if [ "$(echo "$result" | grep -c "Verilator internal fault")" -gt 0 ]; then
                     echo "Verilator internal fault detected, retrying..."
                     if [ $try -eq 5 ]; then
                         echo "Failed after 5 retries due to Verilator internal fault."
