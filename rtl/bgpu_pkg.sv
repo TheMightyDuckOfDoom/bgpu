@@ -23,12 +23,12 @@ typedef enum logic [5:0] {
     IU_AND  = 'h07, // Bitwise AND operands
     IU_OR   = 'h08, // Bitwise OR operands
     IU_XOR  = 'h09, // Bitwise XOR operands
-    IU_SLL  = 'h0A, // Shift left logical
+    IU_SHL  = 'h0A, // Shift left logical
 
     IU_LDI  = 'h0B, // Load immediate -> concatenate operands register index
     IU_ADDI = 'h0C, // Add immediate -> add immediate value to first operand
     IU_SUBI = 'h0D, // Subtract immediate -> subtract immediate value from first operand
-    IU_SLLI = 'h0E  // Shift left logical immediate
+    IU_SHLI = 'h0E  // Shift left logical immediate
 } iu_subtype_e;
 
 typedef enum logic [5:0] {
@@ -82,11 +82,11 @@ typedef struct packed {
         IU_AND,\
         IU_OR,\
         IU_XOR,\
-        IU_SLL,\
+        IU_SHL,\
         IU_LDI,\
         IU_ADDI,\
         IU_SUBI,\
-        IU_SLLI\
+        IU_SHLI\
     }
 
     // JMP and SYNC never reach the BRU, as they are handled by the decoder

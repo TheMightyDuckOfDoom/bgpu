@@ -117,7 +117,7 @@ module integer_unit import bgpu_pkg::*; #(
                 IU_XOR:  result[i] = operands[1][i] ^ operands[0][i]; // XOR
 
                 // Shift left logical, immediate
-                IU_SLL, IU_SLLI: result[i] = operands[1][i] << operands[0][i];
+                IU_SHL, IU_SHLI: result[i] = operands[1][i] << operands[0][i];
 
                 default: begin
                     result[i] = '1; // Default case, should not happen

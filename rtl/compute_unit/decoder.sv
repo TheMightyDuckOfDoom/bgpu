@@ -98,13 +98,13 @@ module decoder import bgpu_pkg::*; #(
         if (dec_inst_o.eu == EU_IU) begin : decode_iu
             // Two register operands
             if (dec_inst_o.subtype inside {
-                IU_ADD, IU_SUB, IU_AND, IU_OR, IU_XOR, IU_SLL
+                IU_ADD, IU_SUB, IU_AND, IU_OR, IU_XOR, IU_SHL
             })
                 dec_operands_required_o = '1;
 
             // First operand is an immediate, second is a register
             if (dec_inst_o.subtype inside {
-                IU_ADDI, IU_SUBI, IU_SLLI
+                IU_ADDI, IU_SUBI, IU_SHLI
             }) begin
                 dec_operands_required_o[0] = 1'b0;
                 dec_operands_required_o[1] = 1'b1;
