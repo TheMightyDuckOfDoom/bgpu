@@ -19,8 +19,8 @@ module fetcher #(
     parameter int unsigned WarpWidth = 32,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 4,
-    // How many bits are used to identify a thread block?
-    parameter int unsigned TblockIdBits = 4,
+    // How many bits are used to identify a thread group?
+    parameter int unsigned TgroupIdBits = 4,
     // Memory Address width in bits
     parameter int unsigned AddressWidth = 32,
 
@@ -28,7 +28,7 @@ module fetcher #(
     parameter int unsigned WidWidth       =  NumWarps > 1 ? $clog2(NumWarps)  : 1,
     parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
     parameter type tblock_idx_t = logic [ TblockIdxBits-1:0],
-    parameter type tblock_id_t  = logic [  TblockIdBits-1:0],
+    parameter type tgroup_id_t  = logic [  TgroupIdBits-1:0],
     parameter type addr_t       = logic [  AddressWidth-1:0],
     parameter type wid_t        = logic [      WidWidth-1:0],
     parameter type pc_t         = logic [       PcWidth-1:0],
@@ -45,12 +45,12 @@ module fetcher #(
     input  pc_t         allocate_pc_i,
     input  addr_t       allocate_dp_addr_i, // Data / Parameter address
     input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
-    input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
+    input  tgroup_id_t  allocate_tgroup_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
     input  logic       tblock_done_ready_i,
     output logic       tblock_done_o,
-    output tblock_id_t tblock_done_id_o,
+    output tgroup_id_t tblock_done_id_o,
 
     /// From instruction buffer
     // Which warp has space for a new instruction?
@@ -165,7 +165,7 @@ module fetcher #(
         .WarpWidth    ( WarpWidth     ),
         .AddressWidth ( AddressWidth  ),
         .TblockIdxBits( TblockIdxBits ),
-        .TblockIdBits ( TblockIdBits  )
+        .TgroupIdBits ( TgroupIdBits  )
     ) i_its_unit (
         .clk_i             ( clk_i  ),
         .rst_ni            ( rst_ni ),
@@ -177,7 +177,7 @@ module fetcher #(
         .allocate_pc_i        ( allocate_pc_i         ),
         .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
         .allocate_tblock_idx_i( allocate_tblock_idx_i ),
-        .allocate_tblock_id_i ( allocate_tblock_id_i  ),
+        .allocate_tgroup_id_i ( allocate_tgroup_id_i  ),
 
         .tblock_done_ready_i( tblock_done_ready_i ),
         .tblock_done_o      ( tblock_done_o       ),

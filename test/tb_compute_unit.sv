@@ -34,8 +34,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
     parameter int unsigned IClineIdxBits = 2,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
-    // How many bits are used to identify a thread block?
-    parameter int unsigned TblockIdBits = 8,
+    // How many bits are used to identify a thread group?
+    parameter int unsigned TgroupIdBits = 8,
 
     parameter int unsigned SimMemBlocks = 65,
 
@@ -75,7 +75,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     typedef logic  [      ICAddrWidth-1:0] imem_addr_t;
     typedef logic  [     AddressWidth-1:0] addr_t;
     typedef logic  [    TblockIdxBits-1:0] tblock_idx_t;
-    typedef logic  [     TblockIdBits-1:0] tblock_id_t;
+    typedef logic  [     TgroupIdBits-1:0] tgroup_id_t;
     typedef logic  [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
 
     typedef struct packed {
@@ -104,7 +104,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         pc_t pc;
         addr_t dp_addr;
         tblock_idx_t tblock_idx;
-        tblock_id_t  tblock_id;
+        tgroup_id_t  tgroup_id;
     } warp_insert_t;
 
     // #######################################################################################
@@ -117,7 +117,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
     // Warp completion
     logic       tblock_done;
-    tblock_id_t tblock_done_id;
+    tgroup_id_t tblock_done_id;
 
     // Memory request
     logic     mem_ready, mem_req_valid;
@@ -208,7 +208,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .NumIClines            ( NumIClines             ),
         .IClineIdxBits         ( IClineIdxBits          ),
         .TblockIdxBits         ( TblockIdxBits          ),
-        .TblockIdBits          ( TblockIdBits           )
+        .TgroupIdBits          ( TgroupIdBits           )
     `endif
     ) i_cu (
         .clk_i ( clk   ),
@@ -219,7 +219,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .allocate_pc_i        ( warp_insert.pc         ),
         .allocate_dp_addr_i   ( warp_insert.dp_addr    ),
         .allocate_tblock_idx_i( warp_insert.tblock_idx ),
-        .allocate_tblock_id_i ( warp_insert.tblock_id  ),
+        .allocate_tgroup_id_i ( warp_insert.tgroup_id  ),
 
         .tblock_done_ready_i( 1'b1           ),
         .tblock_done_o      ( tblock_done    ),
@@ -262,7 +262,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             warp_insert.pc         = '0;
             warp_insert.dp_addr    =       addr_t'(tblocks_launched);
             warp_insert.tblock_idx = tblock_idx_t'(tblocks_launched);
-            warp_insert.tblock_id  =  tblock_id_t'(tblocks_launched);
+            warp_insert.tgroup_id  =  tgroup_id_t'(tblocks_launched);
 
             if (warp_free) begin
                 tblocks_launched++;

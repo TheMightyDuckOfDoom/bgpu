@@ -40,8 +40,8 @@ module compute_unit import bgpu_pkg::*; #(
     parameter int unsigned IClineIdxBits = 2,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
-    // How many bits are used to identify a thread block?
-    parameter int unsigned TblockIdBits = 8,
+    // How many bits are used to identify a thread group?
+    parameter int unsigned TgroupIdBits = 8,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned BlockAddrWidth  = AddressWidth - BlockIdxBits,
@@ -49,7 +49,7 @@ module compute_unit import bgpu_pkg::*; #(
     parameter int unsigned ThreadIdxWidth  = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
     parameter int unsigned ICAddrWidth     = IClineIdxBits > 0 ? PcWidth - IClineIdxBits : PcWidth,
     parameter type tblock_idx_t = logic      [       TblockIdxBits-1:0],
-    parameter type tblock_id_t  = logic      [        TblockIdBits-1:0],
+    parameter type tgroup_id_t  = logic      [        TgroupIdBits-1:0],
     parameter type addr_t       = logic      [        AddressWidth-1:0],
     parameter type imem_addr_t  = logic      [         ICAddrWidth-1:0],
     parameter type enc_inst_t   = logic      [        EncInstWidth-1:0],
@@ -72,12 +72,12 @@ module compute_unit import bgpu_pkg::*; #(
     input  pc_t         allocate_pc_i,
     input  addr_t       allocate_dp_addr_i, // Data / Parameter address
     input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
-    input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
+    input  tgroup_id_t  allocate_tgroup_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
     input  logic       tblock_done_ready_i,
     output logic       tblock_done_o,
-    output tblock_id_t tblock_done_id_o,
+    output tgroup_id_t tblock_done_id_o,
 
     /// Instruction Memory Request
     input  logic       imem_ready_i,
@@ -251,7 +251,7 @@ module compute_unit import bgpu_pkg::*; #(
         .WarpWidth    ( WarpWidth     ),
         .AddressWidth ( AddressWidth  ),
         .TblockIdxBits( TblockIdxBits ),
-        .TblockIdBits ( TblockIdBits  )
+        .TgroupIdBits ( TgroupIdBits  )
     ) i_fetcher (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
@@ -261,7 +261,7 @@ module compute_unit import bgpu_pkg::*; #(
         .allocate_pc_i        ( allocate_pc_i         ),
         .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
         .allocate_tblock_idx_i( allocate_tblock_idx_i ),
-        .allocate_tblock_id_i ( allocate_tblock_id_i  ),
+        .allocate_tgroup_id_i ( allocate_tgroup_id_i  ),
 
         .tblock_done_ready_i( tblock_done_ready_i ),
         .tblock_done_o      ( tblock_done_o       ),

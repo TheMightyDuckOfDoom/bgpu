@@ -45,8 +45,8 @@ module compute_cluster #(
     parameter int unsigned IClineIdxBits = 2,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
-    // How many bits are used to identify a thread block?
-    parameter int unsigned TblockIdBits = 8,
+    // How many bits are used to identify a thread group?
+    parameter int unsigned TgroupIdBits = 8,
 
     // Instruction Memory AXI Request and Response types
     parameter type imem_axi_req_t  = logic,
@@ -58,7 +58,7 @@ module compute_cluster #(
 
     /// Dependent parameter, do **not** overwrite.
     parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
-    parameter type tblock_id_t  = logic [ TblockIdBits-1:0],
+    parameter type tgroup_id_t  = logic [ TgroupIdBits-1:0],
     parameter type addr_t       = logic [ AddressWidth-1:0],
     parameter type pc_t         = logic [      PcWidth-1:0]
 ) (
@@ -72,12 +72,12 @@ module compute_cluster #(
     input  pc_t         allocate_pc_i,
     input  addr_t       allocate_dp_addr_i, // Data / Parameter address
     input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
-    input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
+    input  tgroup_id_t  allocate_tgroup_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
     input  logic       tblock_done_ready_i,
     output logic       tblock_done_o,
-    output tblock_id_t tblock_done_id_o,
+    output tgroup_id_t tblock_done_id_o,
 
     /// Instruction Memory AXI Request and Response
     output imem_axi_req_t  imem_req_o,
@@ -150,7 +150,7 @@ module compute_cluster #(
 
     // Compute Unit thread block completion
     logic       [ComputeUnits-1:0] cu_done_ready, cu_done;
-    tblock_id_t [ComputeUnits-1:0] cu_done_id;
+    tgroup_id_t [ComputeUnits-1:0] cu_done_id;
 
     // Compute Unit Instruction Memory Interface
     cu_imem_axi_req_t  [ComputeUnits-1:0] cu_imem_axi_req;
@@ -322,7 +322,7 @@ module compute_cluster #(
 
     // Thread block completion
     stream_arbiter #(
-        .DATA_T   ( tblock_id_t ),
+        .DATA_T   ( tgroup_id_t ),
         .N_INP    ( ComputeUnits ),
         .ARBITER  ( "rr"         )
     ) i_tblock_done_arbiter (
@@ -360,7 +360,7 @@ module compute_cluster #(
             .NumIClines            ( NumIClines             ),
             .IClineIdxBits         ( IClineIdxBits          ),
             .TblockIdxBits         ( TblockIdxBits          ),
-            .TblockIdBits          ( TblockIdBits           )
+            .TgroupIdBits          ( TgroupIdBits           )
         ) i_cu (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
@@ -370,7 +370,7 @@ module compute_cluster #(
             .allocate_pc_i        ( allocate_pc_i         ),
             .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
             .allocate_tblock_idx_i( allocate_tblock_idx_i ),
-            .allocate_tblock_id_i ( allocate_tblock_id_i  ),
+            .allocate_tgroup_id_i ( allocate_tgroup_id_i  ),
 
             .tblock_done_ready_i( cu_done_ready[cu] ),
             .tblock_done_o      ( cu_done      [cu] ),

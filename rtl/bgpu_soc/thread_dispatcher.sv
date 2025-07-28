@@ -13,12 +13,12 @@ module thread_dispatcher #(
     parameter int unsigned AddressWidth = 32,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
-    // How many bits are used to identify a thread block?
-    parameter int unsigned TblockIdBits = 8,
+    // How many bits are used to identify a thread group?
+    parameter int unsigned TgroupIdBits = 8,
 
     /// Dependent parameter, do **not** overwrite.
     parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
-    parameter type tblock_id_t  = logic [ TblockIdBits-1:0],
+    parameter type tgroup_id_t  = logic [ TgroupIdBits-1:0],
     parameter type addr_t       = logic [ AddressWidth-1:0],
     parameter type pc_t         = logic [      PcWidth-1:0]
 ) (
@@ -32,7 +32,7 @@ module thread_dispatcher #(
     input  pc_t         pc_i,
     input  addr_t       dp_addr_i,
     input  tblock_idx_t number_of_tblocks_i,
-    input  tblock_id_t  tblock_id_i,
+    input  tgroup_id_t  tgroup_id_i,
 
     // Interface to start a new thread block -> to compute clusters
     input  logic        warp_free_i, // The is atleas one free warp that can start a new block
@@ -40,16 +40,8 @@ module thread_dispatcher #(
     output pc_t         allocate_pc_o,
     output addr_t       allocate_dp_addr_o, // Data / Parameter address
     output tblock_idx_t allocate_tblock_idx_o, // Block index -> used to calculate the thread id
-    output tblock_id_t  allocate_tblock_id_o  // Block id -> unique identifier for the block
+    output tgroup_id_t  allocate_tgroup_id_o  // Block id -> unique identifier for the block
 );
-
-    // #######################################################################################
-    // # Local Parameters                                                                    #
-    // #######################################################################################
-
-    // #######################################################################################
-    // # Typedefs                                                                            #
-    // #######################################################################################
 
     // #######################################################################################
     // # Signals                                                                             #
@@ -59,7 +51,7 @@ module thread_dispatcher #(
     pc_t         pc_q,                pc_d;
     addr_t       dp_addr_q,           dp_addr_d;
     tblock_idx_t number_of_tblocks_q, number_of_tblocks_d;
-    tblock_id_t  tblock_id_q,         tblock_id_d;
+    tgroup_id_t  tgroup_id_q,         tgroup_id_d;
 
     // How many thread blocks have been dispatched for the request?
     tblock_idx_t dispatched_tblocks_q, dispatched_tblocks_d;
@@ -73,7 +65,7 @@ module thread_dispatcher #(
         pc_d                = pc_q;
         dp_addr_d           = dp_addr_q;
         number_of_tblocks_d = number_of_tblocks_q;
-        tblock_id_d         = tblock_id_q;
+        tgroup_id_d         = tgroup_id_q;
 
         dispatched_tblocks_d = dispatched_tblocks_q;
 
@@ -82,7 +74,7 @@ module thread_dispatcher #(
         allocate_pc_o         = '0;
         allocate_dp_addr_o    = '0;
         allocate_tblock_idx_o = '0;
-        allocate_tblock_id_o  = '0;
+        allocate_tgroup_id_o  = '0;
 
         // We are ready for a new request if we are not currently dispatching
         if (dispatched_tblocks_q != number_of_tblocks_q) begin : new_request
@@ -93,7 +85,7 @@ module thread_dispatcher #(
                 pc_d                = pc_i;
                 dp_addr_d           = dp_addr_i;
                 number_of_tblocks_d = number_of_tblocks_i;
-                tblock_id_d         = tblock_id_i;
+                tgroup_id_d         = tgroup_id_i;
 
                 // We can make the first request
                 dispatched_tblocks_d = '0;
@@ -102,7 +94,7 @@ module thread_dispatcher #(
                 allocate_pc_o         = pc_i;
                 allocate_dp_addr_o    = dp_addr_i;
                 allocate_tblock_idx_o = '0; // The first block has index 0
-                allocate_tblock_id_o  = tblock_id_i;
+                allocate_tgroup_id_o  = tgroup_id_i;
 
                 if (warp_free_i) begin : first_warp_dispatched
                     dispatched_tblocks_d = 'd1;
@@ -114,7 +106,7 @@ module thread_dispatcher #(
             allocate_pc_o         = pc_q;
             allocate_dp_addr_o    = dp_addr_q;
             allocate_tblock_idx_o = dispatched_tblocks_q;
-            allocate_tblock_id_o  = tblock_id_q; // Same ID for all tblocks in a group
+            allocate_tgroup_id_o  = tgroup_id_q; // Same ID for all tblocks in a group
 
             // Go to the next block if we can allocate the tblock
             if (warp_free_i) begin : allocate_next_warp
@@ -131,14 +123,9 @@ module thread_dispatcher #(
     `FF(pc_q,                pc_d,                '0, clk_i, rst_ni)
     `FF(dp_addr_q,           dp_addr_d,           '0, clk_i, rst_ni)
     `FF(number_of_tblocks_q, number_of_tblocks_d, '0, clk_i, rst_ni)
-    `FF(tblock_id_q,         tblock_id_d,         '0, clk_i, rst_ni)
+    `FF(tgroup_id_q,         tgroup_id_d,         '0, clk_i, rst_ni)
 
     // Number of already dispatched thread blocks
     `FF(dispatched_tblocks_q, dispatched_tblocks_d, '0, clk_i, rst_ni)
-
-    // #######################################################################################
-    // # Assertions                                                                          #
-    // #######################################################################################
-
 
 endmodule : thread_dispatcher

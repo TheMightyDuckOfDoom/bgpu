@@ -43,8 +43,8 @@ module compute_cluster_synth_wrapper #(
     parameter int unsigned IClineIdxBits = 2,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
-    // How many bits are used to identify a thread block?
-    parameter int unsigned TblockIdBits = 8,
+    // How many bits are used to identify a thread group?
+    parameter int unsigned TgroupIdBits = 8,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned ImemAxiIdWidth = ComputeUnits > 1 ? $clog2(ComputeUnits) + 1 : 1,
@@ -66,7 +66,7 @@ module compute_cluster_synth_wrapper #(
     parameter type block_mask_t = logic [BlockWidth     - 1:0],
 
     parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
-    parameter type tblock_id_t  = logic [ TblockIdBits-1:0],
+    parameter type tgroup_id_t  = logic [ TgroupIdBits-1:0],
     parameter type addr_t       = logic [ AddressWidth-1:0],
     parameter type pc_t         = logic [      PcWidth-1:0]
 ) (
@@ -80,12 +80,12 @@ module compute_cluster_synth_wrapper #(
     input  pc_t         allocate_pc_i,
     input  addr_t       allocate_dp_addr_i, // Data / Parameter address
     input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
-    input  tblock_id_t  allocate_tblock_id_i,  // Block id -> unique identifier for the block
+    input  tgroup_id_t  allocate_tgroup_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
     input  logic       tblock_done_ready_i,
     output logic       tblock_done_o,
-    output tblock_id_t tblock_done_id_o,
+    output tgroup_id_t tblock_done_id_o,
 
     /// Instruction Memory AXI Request and Response
     output imem_axi_id_t     imem_axi_ar_id_o,
@@ -317,7 +317,7 @@ module compute_cluster_synth_wrapper #(
         .NumIClines            ( NumIClines             ),
         .IClineIdxBits         ( IClineIdxBits          ),
         .TblockIdxBits         ( TblockIdxBits          ),
-        .TblockIdBits          ( TblockIdBits           ),
+        .TgroupIdBits          ( TgroupIdBits           ),
 
         .imem_axi_req_t ( imem_axi_req_t  ),
         .imem_axi_resp_t( imem_axi_resp_t ),
@@ -333,7 +333,7 @@ module compute_cluster_synth_wrapper #(
         .allocate_pc_i        ( allocate_pc_i         ),
         .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
         .allocate_tblock_idx_i( allocate_tblock_idx_i ),
-        .allocate_tblock_id_i ( allocate_tblock_id_i  ),
+        .allocate_tgroup_id_i ( allocate_tgroup_id_i  ),
 
         .tblock_done_ready_i( tblock_done_ready_i ),
         .tblock_done_o      ( tblock_done_o       ),
