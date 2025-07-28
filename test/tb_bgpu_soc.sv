@@ -6,8 +6,6 @@
 module tb_bgpu_soc #(
     // Memory Address width in bits
     parameter int unsigned AddressWidth = 32,
-    // OBI Debug Bus Width
-    parameter int unsigned DbgWidth = 32,
 
     parameter time ClkPeriodJtag = 50ns,
     parameter time ClkPeriod     = 10ns,
@@ -58,8 +56,7 @@ module tb_bgpu_soc #(
     // #######################################################################################
 
     bgpu_soc #(
-        .AddressWidth( AddressWidth ),
-        .DbgWidth    ( DbgWidth     )
+        .AddressWidth( AddressWidth )
     ) i_bgpu_soc (
         .ext_clk_i ( clk   ),
         .ext_rst_ni( rst_n ),
