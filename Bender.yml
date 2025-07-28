@@ -86,6 +86,7 @@ sources:
 
           - test/tb_compute_cluster.sv
 
+          - test/tb_thread_dispatcher.sv
           - test/tb_bgpu_soc.sv
 
     - target: asic

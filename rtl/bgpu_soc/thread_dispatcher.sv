@@ -77,7 +77,7 @@ module thread_dispatcher #(
         allocate_tgroup_id_o  = '0;
 
         // We are ready for a new request if we are not currently dispatching
-        if (dispatched_tblocks_q != number_of_tblocks_q) begin : new_request
+        if (dispatched_tblocks_q == number_of_tblocks_q) begin : new_request
             ready_o = 1'b1;
 
             if (start_i) begin : start_request
@@ -87,18 +87,7 @@ module thread_dispatcher #(
                 number_of_tblocks_d = number_of_tblocks_i;
                 tgroup_id_d         = tgroup_id_i;
 
-                // We can make the first request
                 dispatched_tblocks_d = '0;
-
-                allocate_warp_o       = 1'b1;
-                allocate_pc_o         = pc_i;
-                allocate_dp_addr_o    = dp_addr_i;
-                allocate_tblock_idx_o = '0; // The first block has index 0
-                allocate_tgroup_id_o  = tgroup_id_i;
-
-                if (warp_free_i) begin : first_warp_dispatched
-                    dispatched_tblocks_d = 'd1;
-                end : first_warp_dispatched
             end : start_request
         end : new_request
         else begin : dispatch_warp

@@ -14,15 +14,26 @@ jobs:
   # Main testbench for BGPU SoC
   tb_bpu_soc:
     runs-on: self-hosted
+    needs: [tb_thread_dispatcher, tb_compute_cluster]
     steps:
       - name: Checkout
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_bgpu_soc
 
+  # Thread Dispatcher Testbench
+  tb_thread_dispatcher:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_thread_dispatcher
+
   # Main testbench for compute cluster
   tb_compute_cluster:
     runs-on: self-hosted
+    needs: [tb_compute_unit]
     steps:
       - name: Checkout
         uses: actions/checkout@master
