@@ -8,9 +8,12 @@ package:
         - "Tobias Senti <git@tsenti.li>"
 
 dependencies:
-    axi:                { git: "https://github.com/pulp-platform/axi",                version: 0.39.8 }
-    common_cells:       { git: "https://github.com/pulp-platform/common_cells",       version: 1.38.0 }
-    tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic", version: 0.2.13 }
+    axi:                { git: "https://github.com/pulp-platform/axi",                version: 0.39.8           }
+    common_cells:       { git: "https://github.com/pulp-platform/common_cells",       version: 1.38.0           }
+    obi:                { git: "https://github.com/pulp-platform/obi",                version: 0.1.7            }
+    register_interface: { git: "https://github.com/pulp-platform/register_interface", version: 0.4.5            }
+    riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",      rev: "verilator-phsauter" }
+    tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic", version: 0.2.13           }
     # hpdcache:     { git: "https://github.com/openhwgroup/cv-hpdcache",    rev: 724dcede54123f69bfac64842d8ee52833d4fd77 }
 
 sources:
@@ -52,6 +55,8 @@ sources:
           - rtl/compute_cluster/compute_cluster.sv
           - rtl/compute_cluster/compute_cluster_synth_wrapper.sv
 
+          - rtl/bgpu_soc/bgpu_soc.sv
+
     - target: any(sim, gowin_sim, xilinx_sim)
       files:
           - test/util/rand_stream_mst.sv
@@ -59,6 +64,7 @@ sources:
           - test/util/rand_stream_slv.sv
           - test/util/axi_sim_mem.sv
           - test/util/axi_dumper.sv
+          - test/util/jtag_driver_simple_bgpu.sv
 
     - target: sim
       files:
@@ -78,6 +84,8 @@ sources:
           - test/tb_compute_unit.sv
 
           - test/tb_compute_cluster.sv
+
+          - test/tb_bgpu_soc.sv
 
     - target: asic
       files:

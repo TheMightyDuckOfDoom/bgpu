@@ -87,6 +87,9 @@ module compute_cluster #(
     output mem_axi_req_t  mem_req_o,
     input  mem_axi_resp_t mem_rsp_i
 );
+    // #######################################################################################
+    // # Local Parameters                                                                    #
+    // #######################################################################################
 
     // I-Cacheline width in bits
     localparam int unsigned ImemDataWidth    = (1 << IClineIdxBits) * EncInstWidth;
