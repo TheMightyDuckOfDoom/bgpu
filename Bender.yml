@@ -55,6 +55,7 @@ sources:
           - rtl/compute_cluster/compute_cluster.sv
           - rtl/compute_cluster/compute_cluster_synth_wrapper.sv
 
+          - rtl/bgpu_soc/thread_dispatcher.sv
           - rtl/bgpu_soc/bgpu_soc.sv
 
     - target: any(sim, gowin_sim, xilinx_sim)

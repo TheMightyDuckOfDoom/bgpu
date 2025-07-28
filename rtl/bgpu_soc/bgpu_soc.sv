@@ -12,9 +12,7 @@
 // - Dummy Memory
 module bgpu_soc #(
     // Memory Address width in bits
-    parameter int unsigned AddressWidth = 32,
-    // OBI Debug Bus Width
-    parameter int unsigned DbgWidth = 32
+    parameter int unsigned AddressWidth = 32
 ) (
     // Clock and reset
     input logic ext_clk_i,
@@ -31,6 +29,10 @@ module bgpu_soc #(
     // # Local Parameters                                                                    #
     // #######################################################################################
 
+    // Width of the debug buses
+    localparam int unsigned DbgWidth = 32;
+
+    // OBI configuration for the debug interface
     localparam obi_pkg::obi_cfg_t DbgObiCfg = obi_pkg::obi_default_cfg(AddressWidth, DbgWidth,
         1, obi_pkg::ObiMinimalOptionalConfig);
 
