@@ -138,6 +138,16 @@ jobs:
               run: cp xilinx/out/bgpu_soc_yosys.v xilinx/out/post_synth.v
             - name: Post Synthesis Simulation
               run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: bgpu-xilinx-synthesis-results
+                path: |
+                    bgpu_soc.vcd
+                    xilinx/out/bgpu_soc_yosys.v
+                    xilinx/yosys.f
+                    xilinx/yosys.log
 
     bgpu-asic:
         runs-on: self-hosted
