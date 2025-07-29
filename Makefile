@@ -60,7 +60,7 @@ lint-verible: verilator/verible_lint.f $(SRCS) $(TB_SRCS)
 
 # Generate filelist for Verilator simulation
 verilator/verilator_tb.f: $(BENDER_DEPS)
-	$(BENDER) script verilator $(BENDER_TARGET_SIM) -t verilator -t tech_cells_generic_exclude_deprecated --no-default-target > $@
+	$(BENDER) script verilator $(BENDER_TARGET_SIM) -t verilator -t tech_cells_generic_exclude_deprecated -t tech_cells_generic_exclude_xilinx_xpm --no-default-target > $@
 
 # Translate RTL to C++ using Verilator
 verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)
@@ -141,7 +141,7 @@ gowin-eda-report:
 	lynx gowin/out/$(TOP)/impl/gwsynthesis/$(TOP)_syn.rpt.html -dump -width 256 > gowin/gowin_eda_report.rpt
 	sed -i 's/\&nbsp/     /g' gowin/gowin_eda_report.rpt
 	sed -i '1,10d' gowin/gowin_eda_report.rpt
-	grep -A 43 "Resource Usage Summary" gowin/gowin_eda_report.rpt 
+	grep -A 64 "Resource Usage Summary" gowin/gowin_eda_report.rpt 
 
 gowin-yosys-gen-report: gowin/scripts/yosys_timing_eda.tcl
 	echo "set top_design $(TOP)"  >  gowin/run_timing.tcl
@@ -153,7 +153,7 @@ gowin-yosys-report:
 	lynx gowin/out/$(TOP)_yosys/impl/gwsynthesis/$(TOP)_yosys_syn.rpt.html -dump -width 256 > gowin/gowin_yosys_report.rpt
 	sed -i 's/\&nbsp/     /g' gowin/gowin_yosys_report.rpt
 	sed -i '1,10d' gowin/gowin_yosys_report.rpt
-	grep -A 43 "Resource Usage Summary" gowin/gowin_yosys_report.rpt 
+	grep -A 64 "Resource Usage Summary" gowin/gowin_yosys_report.rpt 
 
 gowin-report:
 	tail -n 64 gowin/gowin.log

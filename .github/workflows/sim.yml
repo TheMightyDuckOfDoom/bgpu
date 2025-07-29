@@ -66,7 +66,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@master
       - name: Simulate
-        run: make tb_compute_unit BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make tb_compute_unit BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
 
   # Instruction Cache Testbench
   tb_instruction_cache:
@@ -91,7 +91,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@master
       - name: Simulate
-        run: make tb_instruction_cache BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make tb_instruction_cache BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
 
   # Tag Queue Testbench
   tb_tag_queue:
@@ -125,7 +125,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@master
       - name: Simulate
-        run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
 
   tb_register_file_bank_dualport:
     runs-on: self-hosted
@@ -170,7 +170,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@master
       - name: Simulate
-        run: make tb_register_opc_stage BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make tb_register_opc_stage BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
 
   tb_register_opc_stage_single_bank:
     runs-on: self-hosted

@@ -290,9 +290,9 @@ module bgpu_soc #(
         .BusWidth( DbgWidth ),
         .IdWidth ( 1        )
     ) i_dm_top (
-        .clk_i     ( clk      ),
-        .rst_ni    ( rst_n    ),
-        .testmode_i( testmode ),
+        .clk_i     ( clk        ),
+        .rst_ni    ( rst_n      ),
+        .testmode_i( testmode_i ),
 
         .ndmreset_o   ( /* Unused */ ),
         .dmactive_o   ( /* Unused */ ),
@@ -582,9 +582,9 @@ module bgpu_soc #(
         .SpillAr      ( 1'b1                 ),
         .SpillR       ( 1'b1                 )
     ) i_mem_mux (
-        .clk_i ( clk      ),
-        .rst_ni( rst_n    ),
-        .test_i( testmode ),
+        .clk_i ( clk        ),
+        .rst_ni( rst_n      ),
+        .test_i( testmode_i ),
 
         .slv_reqs_i ( cc_mem_axi_req ),
         .slv_resps_o( cc_mem_axi_rsp ),
@@ -652,9 +652,9 @@ module bgpu_soc #(
         .SpillAr      ( 1'b1                  ),
         .SpillR       ( 1'b1                  )
     ) i_imem_mux (
-        .clk_i ( clk      ),
-        .rst_ni( rst_n    ),
-        .test_i( testmode ),
+        .clk_i ( clk        ),
+        .rst_ni( rst_n      ),
+        .test_i( testmode_i ),
 
         .slv_reqs_i ( cc_imem_axi_req ),
         .slv_resps_o( cc_imem_axi_rsp ),
@@ -782,9 +782,9 @@ module bgpu_soc #(
         .SpillAr      ( 1'b1                    ),
         .SpillR       ( 1'b1                    )
     ) i_mctrl_mux (
-        .clk_i ( clk      ),
-        .rst_ni( rst_n    ),
-        .test_i( testmode ),
+        .clk_i ( clk        ),
+        .rst_ni( rst_n      ),
+        .test_i( testmode_i ),
 
         .slv_reqs_i ( {imem_mctrl_axi_req, mem_mctrl_axi_req, dbg_mctrl_axi_req} ),
         .slv_resps_o( {imem_mctrl_axi_rsp, mem_mctrl_axi_rsp, dbg_mctrl_axi_rsp} ),

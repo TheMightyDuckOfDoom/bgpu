@@ -10,6 +10,6 @@ set_option -top_module $top_design
 set_option -disable_io_insertion 1
 set_option -verilog_std sysv2017
 
-add_file ../$top_design.v
+add_file ../${top_design}_yosys.v
 add_file -type sdc ../../xilinx/dummy_constraints.xdc
 run syn
