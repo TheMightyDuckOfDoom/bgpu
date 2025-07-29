@@ -153,9 +153,9 @@ assign O = S0_true ? I0_internal : (S1_true ? I1_internal : INIT_OUT);
 endmodule
 
 module BUFGMUX(
-    input I0,
-    input I1,
-    input S,
+    input  I0,
+    input  I1,
+    input  S,
     output O
 );
 
@@ -169,7 +169,8 @@ module BUFGMUX(
         .S1     ( 1'b1 ),
         .S0     ( 1'b1 ),
         .IGNORE0( 1'b0 ),
-        .IGNORE1( 1'b0 )
+        .IGNORE1( 1'b0 ),
+        .O      ( O    )
     );
 
 endmodule

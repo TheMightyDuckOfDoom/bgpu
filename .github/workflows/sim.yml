@@ -21,6 +21,24 @@ jobs:
       - name: Simulate
         run: make tb_bgpu_soc
 
+  gowin_tb_bpu_soc:
+    runs-on: self-hosted
+    needs: [tb_thread_dispatcher, tb_compute_cluster, gowin_tb_compute_unit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_bgpu_soc BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+
+  xilinx_tb_bpu_soc:
+    runs-on: self-hosted
+    needs: [tb_thread_dispatcher, tb_compute_cluster, xilinx_tb_compute_unit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Simulate
+        run: make tb_bgpu_soc BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
+
   # Thread Dispatcher Testbench
   tb_thread_dispatcher:
     runs-on: self-hosted

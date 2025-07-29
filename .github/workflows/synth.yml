@@ -18,7 +18,16 @@ jobs:
               run: cp gowin/out/compute_unit_yosys.v gowin/out/post_synth.v
             - name: Post Synthesis Simulation
               run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
-
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: cu-gowin-synthesis-results-on-failure
+                path: |
+                    cu.vcd
+                    gowin/out/compute_unit_yosys.v
+                    gowin/gowin-yosys.f
+                    gowin/gowin.log
     cu-gowin-eda:
         runs-on: self-hosted
         steps:
@@ -42,6 +51,16 @@ jobs:
               run: cp xilinx/out/compute_unit_yosys.v xilinx/out/post_synth.v
             - name: Post Synthesis Simulation
               run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: cu-xilinx-synthesis-results-on-failure
+                path: |
+                    cu.vcd
+                    xilinx/out/compute_unit_yosys.v
+                    xilinx/yosys.f
+                    xilinx/yosys.log
 
     cu-asic:
         runs-on: self-hosted
@@ -66,6 +85,16 @@ jobs:
               run: DISPLAY=:1.0 make gowin-yosys-gen-report TOP=compute_cluster_synth_wrapper
             - name: Show report
               run: make gowin-yosys-report TOP=compute_cluster_synth_wrapper
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: cc-gowin-synthesis-results-on-failure
+                path: |
+                    cc.vcd
+                    gowin/out/compute_cluster_yosys.v
+                    gowin/gowin-yosys.f
+                    gowin/gowin.log
 
     cc-gowin-eda:
         runs-on: self-hosted
@@ -86,7 +115,16 @@ jobs:
               run: make xilinx-yosys TOP=compute_cluster_synth_wrapper
             - name: Report Area
               run: tail -n 32 xilinx/yosys.log
-
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: cc-xilinx-synthesis-results-on-failure
+                path: |
+                    cc.vcd
+                    xilinx/out/compute_cluster_yosys.v
+                    xilinx/yosys.f
+                    xilinx/yosys.log
     cc-asic:
         runs-on: self-hosted
         steps:
@@ -114,6 +152,16 @@ jobs:
               run: cp gowin/out/bgpu_soc_yosys.v gowin/out/post_synth.v
             - name: Post Synthesis Simulation
               run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: bgpu-gowin-synthesis-results-on-failure
+                path: |
+                    bgpu_soc.vcd
+                    gowin/out/bgpu_soc_yosys.v
+                    gowin/gowin-yosys.f
+                    gowin/gowin.log
 
     bgpu-gowin-eda:
         runs-on: self-hosted
@@ -142,7 +190,7 @@ jobs:
               uses: actions/upload-artifact@v4
               if: failure()
               with:
-                name: bgpu-xilinx-synthesis-results
+                name: bgpu-xilinx-synthesis-results-on-failure
                 path: |
                     bgpu_soc.vcd
                     xilinx/out/bgpu_soc_yosys.v

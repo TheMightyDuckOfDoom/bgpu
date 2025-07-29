@@ -110,6 +110,7 @@ sources:
           - test/tb_register_opc_stage.sv
           - test/tb_instruction_cache.sv
           - test/tb_compute_unit.sv
+          - test/tb_bgpu_soc.sv
       
     - target: any(gowin_yosys, gowin_eda, gowin_sim)
       files:
@@ -121,11 +122,13 @@ sources:
 
     - target: xilinx_sim
       files:
+          - xilinx/lib/cells_sim.v
           - xilinx/lib/RAMB36E1.v
           - test/tb_register_file_bank.sv
           - test/tb_register_opc_stage.sv
           - test/tb_instruction_cache.sv
           - test/tb_compute_unit.sv
+          - test/tb_bgpu_soc.sv
 
     - target: xilinx_yosys
       files:
