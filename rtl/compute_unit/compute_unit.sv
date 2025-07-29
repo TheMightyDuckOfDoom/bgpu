@@ -66,6 +66,9 @@ module compute_unit import bgpu_pkg::*; #(
     input logic clk_i,
     input logic rst_ni,
 
+    // Testmode
+    input logic testmode_i,
+
     // Interface to start a new thread block on this compute unit
     output logic        warp_free_o, // The is atleas one free warp that can start a new block
     input  logic        allocate_warp_i,
@@ -309,10 +312,10 @@ module compute_unit import bgpu_pkg::*; #(
     stream_register #(
         .T( fe_to_ic_data_t )
     ) i_fe_to_ic_reg (
-        .clk_i     ( clk_i  ),
-        .rst_ni    ( rst_ni ),
-        .clr_i     ( 1'b0   ),
-        .testmode_i( 1'b0   ),
+        .clk_i     ( clk_i      ),
+        .rst_ni    ( rst_ni     ),
+        .clr_i     ( 1'b0       ),
+        .testmode_i( testmode_i ),
 
         .valid_i( fe_to_ic_valid_d ),
         .ready_o( ic_to_fe_ready_q ),
@@ -409,10 +412,10 @@ module compute_unit import bgpu_pkg::*; #(
     stream_register #(
         .T( dec_to_ib_data_t )
     ) i_dec_to_ib_reg (
-        .clk_i     ( clk_i  ),
-        .rst_ni    ( rst_ni ),
-        .clr_i     ( 1'b0   ),
-        .testmode_i( 1'b0   ),
+        .clk_i     ( clk_i      ),
+        .rst_ni    ( rst_ni     ),
+        .clr_i     ( 1'b0       ),
+        .testmode_i( testmode_i ),
 
         .valid_i( dec_to_ib_valid_d ),
         .ready_o( ib_to_dec_ready_q ),
@@ -559,6 +562,8 @@ module compute_unit import bgpu_pkg::*; #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
+        .testmode_i( testmode_i ),
+
         .fe_to_iu_warp_dp_addr_i   ( fe_to_iu_warp_dp_addr    ),
         .fe_to_iu_warp_tblock_idx_i( fe_to_iu_warp_tblock_idx ),
 
@@ -591,6 +596,8 @@ module compute_unit import bgpu_pkg::*; #(
     ) i_load_store_unit (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
+
+        .testmode_i( testmode_i ),
 
         .eu_to_opc_ready_o   ( lsu_to_opc_ready                ),
         .opc_to_eu_valid_i   ( opc_to_lsu_valid                ),
@@ -632,6 +639,8 @@ module compute_unit import bgpu_pkg::*; #(
     ) i_branch_unit (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
+
+        .testmode_i( testmode_i ),
 
         .eu_to_opc_ready_o   ( bru_to_opc_ready                ),
         .opc_to_eu_valid_i   ( opc_to_bru_valid                ),

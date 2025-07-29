@@ -36,6 +36,9 @@ module integer_unit import bgpu_pkg::*; #(
     input logic clk_i,
     input logic rst_ni,
 
+    // Testmode
+    input logic testmode_i,
+
     // From Fetcher
     input  addr_t       [NumWarps-1:0] fe_to_iu_warp_dp_addr_i, // Data / Parameter address
     input  tblock_idx_t [NumWarps-1:0] fe_to_iu_warp_tblock_idx_i, // Block index
@@ -143,10 +146,10 @@ module integer_unit import bgpu_pkg::*; #(
     stream_register #(
         .T( eu_to_opc_t )
     ) i_reg (
-        .clk_i     ( clk_i  ),
-        .rst_ni    ( rst_ni ),
-        .clr_i     ( 1'b0   ),
-        .testmode_i( 1'b0   ),
+        .clk_i     ( clk_i      ),
+        .rst_ni    ( rst_ni     ),
+        .clr_i     ( 1'b0       ),
+        .testmode_i( testmode_i ),
 
         .valid_i( opc_to_eu_valid_i ),
         .ready_o( eu_to_opc_ready_o ),

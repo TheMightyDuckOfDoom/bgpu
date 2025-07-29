@@ -49,6 +49,9 @@ module load_store_unit import bgpu_pkg::*; #(
     input logic clk_i,
     input logic rst_ni,
 
+    /// Testmode
+    input logic testmode_i,
+
     /// Memory Request
     input  logic        mem_ready_i,
     output logic        mem_req_valid_o,
@@ -405,10 +408,10 @@ module load_store_unit import bgpu_pkg::*; #(
     stream_register #(
         .T( coalesce_splitter_to_wdata_t )
     ) i_cs_to_wdata_reg (
-        .clk_i     ( clk_i  ),
-        .rst_ni    ( rst_ni ),
-        .clr_i     ( 1'b0   ),
-        .testmode_i( 1'b0   ),
+        .clk_i     ( clk_i      ),
+        .rst_ni    ( rst_ni     ),
+        .clr_i     ( 1'b0       ),
+        .testmode_i( testmode_i ),
 
         .valid_i( cs_to_wdata_valid_d ),
         .ready_o( wdata_to_cs_ready_q ),

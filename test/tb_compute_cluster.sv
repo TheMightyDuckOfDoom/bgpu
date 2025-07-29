@@ -204,6 +204,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
 
+        .testmode_i( 1'b0 ),
+
         .warp_free_o          ( warp_free              ),
         .allocate_warp_i      ( allocate_warp          ),
         .allocate_pc_i        ( warp_insert.pc         ),

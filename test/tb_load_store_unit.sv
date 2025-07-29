@@ -321,6 +321,8 @@ module tb_load_store_unit import bgpu_pkg::*; #(
         .clk_i  ( clk   ),
         .rst_ni ( rst_n ),
 
+        .testmode_i( 1'b0 ),
+
         .mem_ready_i      ( mem_ready       ),
         .mem_req_valid_o  ( mem_req_valid   ),
         .mem_req_id_o     ( mem_req.id      ),

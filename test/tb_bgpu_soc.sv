@@ -61,6 +61,8 @@ module tb_bgpu_soc #(
         .ext_clk_i ( clk   ),
         .ext_rst_ni( rst_n ),
 
+        .testmode_i( 1'b0 ),
+
         .jtag_tck_i  ( jtag_tck    ),
         .jtag_tdi_i  ( jtag_tdi    ),
         .jtag_tdo_o  ( jtag_tdo    ),

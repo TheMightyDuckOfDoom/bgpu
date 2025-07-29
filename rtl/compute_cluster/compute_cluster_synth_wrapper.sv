@@ -74,6 +74,9 @@ module compute_cluster_synth_wrapper #(
     input  logic clk_i,
     input  logic rst_ni,
 
+    /// Testmode
+    input  logic testmode_i,
+
     // Interface to start a new thread block on this compute cluster
     output logic        warp_free_o, // The is atleas one free warp that can start a new block
     input  logic        allocate_warp_i,
@@ -327,6 +330,8 @@ module compute_cluster_synth_wrapper #(
     ) i_cc (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
+
+        .testmode_i( testmode_i ),
 
         .warp_free_o          ( warp_free_o           ),
         .allocate_warp_i      ( allocate_warp_i       ),

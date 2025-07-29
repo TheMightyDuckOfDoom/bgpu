@@ -66,6 +66,9 @@ module compute_cluster #(
     input  logic clk_i,
     input  logic rst_ni,
 
+    /// Testmode
+    input  logic testmode_i,
+
     // Interface to start a new thread block on this compute cluster
     output logic        warp_free_o, // The is atleas one free warp that can start a new block
     input  logic        allocate_warp_i,
@@ -198,9 +201,9 @@ module compute_cluster #(
         .SpillAr      ( 1'b1                 ),
         .SpillR       ( 1'b1                 )
     ) i_mem_mux (
-        .clk_i ( clk_i  ),
-        .rst_ni( rst_ni ),
-        .test_i( 1'b0   ),
+        .clk_i ( clk_i      ),
+        .rst_ni( rst_ni     ),
+        .test_i( testmode_i ),
 
         .slv_reqs_i ( cu_mem_axi_req ),
         .slv_resps_o( cu_mem_axi_rsp ),
@@ -267,9 +270,9 @@ module compute_cluster #(
         .SpillAr      ( 1'b0                  ),
         .SpillR       ( 1'b0                  )
     ) i_imem_mux (
-        .clk_i ( clk_i  ),
-        .rst_ni( rst_ni ),
-        .test_i( 1'b0   ),
+        .clk_i ( clk_i      ),
+        .rst_ni( rst_ni     ),
+        .test_i( testmode_i ),
 
         .slv_reqs_i ( cu_imem_axi_req ),
         .slv_resps_o( cu_imem_axi_rsp ),
@@ -364,6 +367,8 @@ module compute_cluster #(
         ) i_cu (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
+
+            .testmode_i( testmode_i ),
 
             .warp_free_o          ( cu_warp_free[cu]      ),
             .allocate_warp_i      ( cu_allocate [cu]      ),

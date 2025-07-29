@@ -57,6 +57,9 @@ module bgpu_soc #(
     input logic ext_clk_i,
     input logic ext_rst_ni,
 
+    // Testmode
+    input logic testmode_i,
+
     /// JTAG interface
     input  logic jtag_tck_i,
     input  logic jtag_tdi_i,
@@ -95,9 +98,12 @@ module bgpu_soc #(
     // Width of the thread idx inside a warp
     localparam int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
 
-    // Width of the memory axi id
+    // Width of the memory axi id for the Compute Clusters
     localparam int unsigned MemCcAxiIdWidth = $clog2(ComputeUnitsPerCluster)
                                                 + OutstandingReqIdxWidth + ThreadIdxWidth;
+
+    // Widht of the memory axi id
+    localparam int unsigned MemAxiIdWidth = $clog2(ComputeClusters) + MemCcAxiIdWidth;
 
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -127,9 +133,13 @@ module bgpu_soc #(
     typedef logic [     BlockWidth-1:0] block_mask_t;
     typedef logic [ BlockWidth * 8-1:0] block_data_t;
     typedef logic [MemCcAxiIdWidth-1:0] mem_cc_axi_id_t;
+    typedef logic [  MemAxiIdWidth-1:0] mem_axi_id_t;
 
     // Compute Cluster Data Memory AXI types
     `AXI_TYPEDEF_ALL(cc_mem_axi, addr_t, mem_cc_axi_id_t, block_data_t, block_mask_t, logic)
+
+    // Data Memory AXI types
+    `AXI_TYPEDEF_ALL(mem_axi, addr_t, mem_axi_id_t, block_data_t, block_mask_t, logic)
 
     // Debug Manager OBI, Register Interface and AXI types
 
@@ -169,12 +179,15 @@ module bgpu_soc #(
     /// Compute Cluster signals
 
     // Instruction Memory AXI
-    cc_imem_axi_req_t  [ComputeClusters-1:0] cc_imem_req;
-    cc_imem_axi_resp_t [ComputeClusters-1:0] cc_imem_rsp;
+    cc_imem_axi_req_t  [ComputeClusters-1:0] cc_imem_axi_req;
+    cc_imem_axi_resp_t [ComputeClusters-1:0] cc_imem_axi_rsp;
 
     // Data Memory AXI
-    cc_mem_axi_req_t  [ComputeClusters-1:0] cc_mem_req;
-    cc_mem_axi_resp_t [ComputeClusters-1:0] cc_mem_rsp;
+    cc_mem_axi_req_t  [ComputeClusters-1:0] cc_mem_axi_req;
+    cc_mem_axi_resp_t [ComputeClusters-1:0] cc_mem_axi_rsp;
+
+    mem_axi_req_t  mem_axi_req;
+    mem_axi_resp_t mem_axi_rsp;
 
     // Warp allocation
     logic warp_free, allocate_warp;
@@ -464,6 +477,8 @@ module bgpu_soc #(
             .clk_i ( clk   ),
             .rst_ni( rst_n ),
 
+            .testmode_i( testmode_i ),
+
             .warp_free_o          ( cc_warp_free    [i]    ),
             .allocate_warp_i      ( cc_allocate_warp[i]    ),
             .allocate_pc_i        ( cc_allocate_pc         ),
@@ -475,12 +490,51 @@ module bgpu_soc #(
             .tblock_done_o      ( cc_done      [i] ),
             .tblock_done_id_o   ( cc_done_id   [i] ),
 
-            .imem_req_o( cc_imem_req[i] ),
-            .imem_rsp_i( cc_imem_rsp[i] ),
+            .imem_req_o( cc_imem_axi_req[i] ),
+            .imem_rsp_i( cc_imem_axi_rsp[i] ),
 
-            .mem_req_o( cc_mem_req[i] ),
-            .mem_rsp_i( cc_mem_rsp[i] )
+            .mem_req_o( cc_mem_axi_req[i] ),
+            .mem_rsp_i( cc_mem_axi_rsp[i] )
         );
     end : gen_compute_clusters
+
+    // #######################################################################################
+    // # Compute Cluster Mem Interconnect                                                    #
+    // #######################################################################################
+
+    axi_mux #(
+        .SlvAxiIDWidth( MemCcAxiIdWidth      ),
+        .slv_aw_chan_t( cc_mem_axi_aw_chan_t ),
+        .mst_aw_chan_t( mem_axi_aw_chan_t    ),
+        .w_chan_t     ( cc_mem_axi_w_chan_t  ),
+        .slv_b_chan_t ( cc_mem_axi_b_chan_t  ),
+        .mst_b_chan_t ( mem_axi_b_chan_t     ),
+        .slv_ar_chan_t( cc_mem_axi_ar_chan_t ),
+        .mst_ar_chan_t( mem_axi_ar_chan_t    ),
+        .slv_r_chan_t ( cc_mem_axi_r_chan_t  ),
+        .mst_r_chan_t ( mem_axi_r_chan_t     ),
+        .slv_req_t    ( cc_mem_axi_req_t     ),
+        .slv_resp_t   ( cc_mem_axi_resp_t    ),
+        .mst_req_t    ( mem_axi_req_t        ),
+        .mst_resp_t   ( mem_axi_resp_t       ),
+        .NoSlvPorts   ( ComputeClusters      ),
+        .MaxWTrans    ( ComputeClusters      ), // This might need adjustment
+        .FallThrough  ( 1'b0                 ),
+        .SpillAw      ( 1'b1                 ),
+        .SpillW       ( 1'b1                 ),
+        .SpillB       ( 1'b1                 ),
+        .SpillAr      ( 1'b1                 ),
+        .SpillR       ( 1'b1                 )
+    ) i_mem_mux (
+        .clk_i ( clk      ),
+        .rst_ni( rst_n    ),
+        .test_i( testmode ),
+
+        .slv_reqs_i ( cc_mem_axi_req ),
+        .slv_resps_o( cc_mem_axi_rsp ),
+
+        .mst_req_o ( mem_axi_req ),
+        .mst_resp_i( mem_axi_rsp )
+    );
 
 endmodule : bgpu_soc

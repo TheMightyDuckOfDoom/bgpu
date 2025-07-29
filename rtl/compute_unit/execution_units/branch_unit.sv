@@ -38,6 +38,9 @@ module branch_unit import bgpu_pkg::*; #(
     input logic clk_i,
     input logic rst_ni,
 
+    // Testmode
+    input logic testmode_i,
+
     // From Operand Collector
     output logic         eu_to_opc_ready_o,
     input  logic         opc_to_eu_valid_i,
@@ -185,10 +188,10 @@ module branch_unit import bgpu_pkg::*; #(
     stream_register #(
         .T( eu_to_opc_t )
     ) i_reg (
-        .clk_i     ( clk_i  ),
-        .rst_ni    ( rst_ni ),
-        .clr_i     ( 1'b0   ),
-        .testmode_i( 1'b0   ),
+        .clk_i     ( clk_i      ),
+        .rst_ni    ( rst_ni     ),
+        .clr_i     ( 1'b0       ),
+        .testmode_i( testmode_i ),
 
         .valid_i( opc_to_eu_valid_i ),
         .ready_o( eu_to_opc_ready_o ),
