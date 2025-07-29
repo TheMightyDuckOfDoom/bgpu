@@ -1,4 +1,4 @@
-name: Simulate
+name: Simulation
 on: [push, pull_request, workflow_dispatch]
 jobs:
   # Sweep multiple compute unit configurations
@@ -20,24 +20,6 @@ jobs:
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_bgpu_soc
-
-  gowin_tb_bpu_soc:
-    runs-on: self-hosted
-    needs: [tb_thread_dispatcher, tb_compute_cluster, gowin_tb_compute_unit]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_bgpu_soc BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
-
-  xilinx_tb_bpu_soc:
-    runs-on: self-hosted
-    needs: [tb_thread_dispatcher, tb_compute_cluster, xilinx_tb_compute_unit]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_bgpu_soc BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
 
   # Thread Dispatcher Testbench
   tb_thread_dispatcher:
@@ -68,24 +50,6 @@ jobs:
       - name: Simulate
         run: make tb_compute_unit
 
-  gowin_tb_compute_unit:
-    runs-on: self-hosted
-    needs: [gowin_tb_instruction_cache, tb_tag_queue, tb_operand_collector, gowin_tb_register_opc_stage, tb_load_store_unit]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_compute_unit BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
-
-  xilinx_tb_compute_unit:
-    runs-on: self-hosted
-    needs: [xilinx_tb_instruction_cache, tb_tag_queue, tb_operand_collector, xilinx_tb_register_opc_stage, tb_load_store_unit]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_compute_unit BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
-
   # Instruction Cache Testbench
   tb_instruction_cache:
     runs-on: self-hosted
@@ -94,22 +58,6 @@ jobs:
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_instruction_cache
-
-  gowin_tb_instruction_cache:
-    runs-on: self-hosted
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_instruction_cache BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
-
-  xilinx_tb_instruction_cache:
-    runs-on: self-hosted
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_instruction_cache BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
 
   # Tag Queue Testbench
   tb_tag_queue:
@@ -128,22 +76,6 @@ jobs:
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0"
-
-  gowin_tb_register_file_bank_singleport:
-    runs-on: self-hosted
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
-
-  xilinx_tb_register_file_bank_singleport:
-    runs-on: self-hosted
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
 
   tb_register_file_bank_dualport:
     runs-on: self-hosted
@@ -171,24 +103,6 @@ jobs:
         uses: actions/checkout@master
       - name: Simulate
         run: make tb_register_opc_stage
-
-  gowin_tb_register_opc_stage:
-    runs-on: self-hosted
-    needs: [gowin_tb_register_file_bank_singleport, tb_operand_collector]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_register_opc_stage BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
-
-  xilinx_tb_register_opc_stage:
-    runs-on: self-hosted
-    needs: [xilinx_tb_register_file_bank_singleport, tb_operand_collector]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-      - name: Simulate
-        run: make tb_register_opc_stage BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
 
   tb_register_opc_stage_single_bank:
     runs-on: self-hosted

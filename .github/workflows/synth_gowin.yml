@@ -1,4 +1,4 @@
-name: Synthesis
+name: Gowin Synthesis
 on: [push, pull_request, workflow_dispatch]
 jobs:
     cu-gowin-yosys:
@@ -38,40 +38,6 @@ jobs:
             - name: Show report
               run: make gowin-eda-report TOP=compute_unit
 
-    cu-xilinx-yosys:
-        runs-on: self-hosted
-        steps:
-            - name: Checkout
-              uses: actions/checkout@master
-            - name: Yosys Synthesis for Xilinx FPGA
-              run: make xilinx-yosys TOP=compute_unit
-            - name: Report Area
-              run: tail -n 32 xilinx/yosys.log
-            - name: Copy netlist...
-              run: cp xilinx/out/compute_unit_yosys.v xilinx/out/post_synth.v
-            - name: Post Synthesis Simulation
-              run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
-            - name: Archive Results on Failure
-              uses: actions/upload-artifact@v4
-              if: failure()
-              with:
-                name: cu-xilinx-synthesis-results-on-failure
-                path: |
-                    cu.vcd
-                    xilinx/out/compute_unit_yosys.v
-                    xilinx/yosys.f
-                    xilinx/yosys.log
-
-    cu-asic:
-        runs-on: self-hosted
-        steps:
-            - name: Checkout
-              uses: actions/checkout@master
-            - name: Synthesis for ASIC
-              run: make asic TOP=compute_unit
-            - name: Report Area
-              run: make asic-report TOP=compute_unit
-
     cc-gowin-yosys:
         runs-on: self-hosted
         steps:
@@ -105,35 +71,6 @@ jobs:
               run: DISPLAY=:1.0 make gowin-eda TOP=compute_cluster_synth_wrapper
             - name: Show report
               run: make gowin-eda-report TOP=compute_cluster_synth_wrapper
-
-    cc-xilinx-yosys:
-        runs-on: self-hosted
-        steps:
-            - name: Checkout
-              uses: actions/checkout@master
-            - name: Yosys Synthesis for Xilinx FPGA
-              run: make xilinx-yosys TOP=compute_cluster_synth_wrapper
-            - name: Report Area
-              run: tail -n 32 xilinx/yosys.log
-            - name: Archive Results on Failure
-              uses: actions/upload-artifact@v4
-              if: failure()
-              with:
-                name: cc-xilinx-synthesis-results-on-failure
-                path: |
-                    cc.vcd
-                    xilinx/out/compute_cluster_yosys.v
-                    xilinx/yosys.f
-                    xilinx/yosys.log
-    cc-asic:
-        runs-on: self-hosted
-        steps:
-            - name: Checkout
-              uses: actions/checkout@master
-            - name: Synthesis for ASIC
-              run: make asic TOP=compute_cluster_synth_wrapper
-            - name: Report Area
-              run: make asic-report TOP=compute_cluster_synth_wrapper
 
     bgpu-gowin-yosys:
         runs-on: self-hosted
@@ -172,37 +109,3 @@ jobs:
               run: DISPLAY=:1.0 make gowin-eda TOP=bgpu_soc
             - name: Show report
               run: make gowin-eda-report TOP=bgpu_soc
-
-    bgpu-xilinx-yosys:
-        runs-on: self-hosted
-        steps:
-            - name: Checkout
-              uses: actions/checkout@master
-            - name: Yosys Synthesis for Xilinx FPGA
-              run: make xilinx-yosys TOP=bgpu_soc
-            - name: Report Area
-              run: tail -n 32 xilinx/yosys.log
-            - name: Copy netlist...
-              run: cp xilinx/out/bgpu_soc_yosys.v xilinx/out/post_synth.v
-            - name: Post Synthesis Simulation
-              run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
-            - name: Archive Results on Failure
-              uses: actions/upload-artifact@v4
-              if: failure()
-              with:
-                name: bgpu-xilinx-synthesis-results-on-failure
-                path: |
-                    bgpu_soc.vcd
-                    xilinx/out/bgpu_soc_yosys.v
-                    xilinx/yosys.f
-                    xilinx/yosys.log
-
-    bgpu-asic:
-        runs-on: self-hosted
-        steps:
-            - name: Checkout
-              uses: actions/checkout@master
-            - name: Synthesis for ASIC
-              run: make asic TOP=bgpu_soc
-            - name: Report Area
-              run: make asic-report TOP=bgpu_soc

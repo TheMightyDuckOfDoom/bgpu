@@ -1,0 +1,32 @@
+name: ASIC Synthesis
+on: [push, pull_request, workflow_dispatch]
+jobs:
+    cu-asic:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Synthesis for ASIC
+              run: make asic TOP=compute_unit
+            - name: Report Area
+              run: make asic-report TOP=compute_unit
+
+    cc-asic:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Synthesis for ASIC
+              run: make asic TOP=compute_cluster_synth_wrapper
+            - name: Report Area
+              run: make asic-report TOP=compute_cluster_synth_wrapper
+
+    bgpu-asic:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Synthesis for ASIC
+              run: make asic TOP=bgpu_soc
+            - name: Report Area
+              run: make asic-report TOP=bgpu_soc

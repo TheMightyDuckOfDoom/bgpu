@@ -1,0 +1,70 @@
+name: Xilinx Synthesis
+on: [push, pull_request, workflow_dispatch]
+jobs:
+    cu-xilinx-yosys:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Yosys Synthesis for Xilinx FPGA
+              run: make xilinx-yosys TOP=compute_unit
+            - name: Report Area
+              run: tail -n 32 xilinx/yosys.log
+            - name: Copy netlist...
+              run: cp xilinx/out/compute_unit_yosys.v xilinx/out/post_synth.v
+            - name: Post Synthesis Simulation
+              run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: cu-xilinx-synthesis-results-on-failure
+                path: |
+                    cu.vcd
+                    xilinx/out/compute_unit_yosys.v
+                    xilinx/yosys.f
+                    xilinx/yosys.log
+
+    cc-xilinx-yosys:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Yosys Synthesis for Xilinx FPGA
+              run: make xilinx-yosys TOP=compute_cluster_synth_wrapper
+            - name: Report Area
+              run: tail -n 32 xilinx/yosys.log
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: cc-xilinx-synthesis-results-on-failure
+                path: |
+                    cc.vcd
+                    xilinx/out/compute_cluster_yosys.v
+                    xilinx/yosys.f
+                    xilinx/yosys.log
+
+    bgpu-xilinx-yosys:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Yosys Synthesis for Xilinx FPGA
+              run: make xilinx-yosys TOP=bgpu_soc
+            - name: Report Area
+              run: tail -n 32 xilinx/yosys.log
+            - name: Copy netlist...
+              run: cp xilinx/out/bgpu_soc_yosys.v xilinx/out/post_synth.v
+            - name: Post Synthesis Simulation
+              run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: bgpu-xilinx-synthesis-results-on-failure
+                path: |
+                    bgpu_soc.vcd
+                    xilinx/out/bgpu_soc_yosys.v
+                    xilinx/yosys.f
+                    xilinx/yosys.log
