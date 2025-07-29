@@ -157,4 +157,18 @@ module mem_to_axi #(
     assign mem_rsp_id_o   = mem_rsp.id;
     assign mem_rsp_data_o = mem_rsp.data;
 
+    // #######################################################################################
+    // # Assertions                                                                          #
+    // #######################################################################################
+
+    `ifndef SYNTHESIS
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            axi_rsp_i.r_valid |-> axi_rsp_i.r.resp == axi_pkg::RESP_OKAY)
+            else $error("AXI R Response is not OKAY, but valid. Response: %0h", axi_rsp_i.r.resp);
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            axi_rsp_i.b_valid |-> axi_rsp_i.b.resp == axi_pkg::RESP_OKAY)
+            else $error("AXI B Response is not OKAY, but valid. Response: %0h", axi_rsp_i.b.resp);
+    `endif
+
 endmodule : mem_to_axi

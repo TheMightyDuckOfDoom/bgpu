@@ -77,6 +77,7 @@ typedef struct packed {
         IU_WID,\
         IU_BID,\
         IU_TBID,\
+        IU_DPA,\
         IU_ADD,\
         IU_SUB,\
         IU_AND,\

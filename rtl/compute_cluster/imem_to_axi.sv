@@ -14,6 +14,10 @@ module imem_to_axi #(
     parameter type imem_addr_t = logic,
     parameter type imem_data_t = logic
 ) (
+    /// Clock and Reset
+    input  logic clk_i,
+    input  logic rst_ni,
+
     /// Instruction Memory Request -> From Compute Unit
     output logic       imem_ready_o,
     input  logic       imem_req_valid_i,
@@ -66,4 +70,13 @@ module imem_to_axi #(
     assign imem_rsp_valid_o  = axi_rsp_i.r_valid;
     assign imem_rsp_data_o   = axi_rsp_i.r.data;
 
+    // #######################################################################################
+    // # Assertions                                                                          #
+    // #######################################################################################
+
+    `ifndef SYNTHESIS
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            axi_rsp_i.r_valid |-> axi_rsp_i.r.resp == axi_pkg::RESP_OKAY)
+            else $error("AXI Response is not OKAY, but valid. Response: %0h", axi_rsp_i.r.resp);
+    `endif
 endmodule : imem_to_axi

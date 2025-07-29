@@ -4,9 +4,6 @@
 
 /// BGPU SoC top-level module testbench
 module tb_bgpu_soc #(
-    // Memory Address width in bits
-    parameter int unsigned AddressWidth = 32,
-
     parameter time ClkPeriodJtag = 50ns,
     parameter time ClkPeriod     = 10ns,
 
@@ -55,11 +52,9 @@ module tb_bgpu_soc #(
     // # DUT                                                                                 #
     // #######################################################################################
 
-    bgpu_soc #(
-        .AddressWidth( AddressWidth )
-    ) i_bgpu_soc (
-        .ext_clk_i ( clk   ),
-        .ext_rst_ni( rst_n ),
+    bgpu_soc i_bgpu_soc (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
 
         .testmode_i( 1'b0 ),
 
@@ -175,8 +170,85 @@ module tb_bgpu_soc #(
     // # Testbench                                                                           #
     // #######################################################################################
 
+    task automatic dispatch_threads(
+        input int unsigned pc,
+        input int unsigned dp_addr,
+        input int unsigned number_of_tblocks,
+        input int unsigned tgroup_id
+    );
+        jtag_write_reg32('hFFFFFF00, pc, 1'b1);
+        jtag_write_reg32('hFFFFFF04, dp_addr, 1'b1);
+        jtag_write_reg32('hFFFFFF08, number_of_tblocks, 1'b1);
+        jtag_write_reg32('hFFFFFF0C, tgroup_id, 1'b1);
+
+        // Start dispatch
+        jtag_write_reg32('hFFFFFF10, 0, 1'b0);
+    endtask
+
+    task automatic dispatch_status(
+        output logic finished
+    );
+        logic [31:0] status;
+
+        jtag_read_reg32('hFFFFFF10, status);
+
+        $display("@%t | [DISPATCH] Status: Start Dispatch: %d Running: %d Finished %d", $time,
+            status[0], status[1], status[2]);
+        $display("@%t | [DISPATCH] Finished Threads: %d", $time,
+            status[31:4]);
+
+        finished = status[2];
+    endtask
+
+    int unsigned prog [$] = {
+        'h04000000,
+        'h42010000,
+        'h0c020004,
+        'h42020200,
+        'h0c000008,
+        'h42000000,
+        'h02030000,
+        'h00040000,
+        'h0e050304,
+        'h0e060402,
+        'h05050506,
+        'h05060205,
+        'h42060600,
+        'h05070005,
+        'h42070700,
+        'h0c080501,
+        'h05090208,
+        'h42090900,
+        'h050a0008,
+        'h420a0a00,
+        'h0c0b0502,
+        'h050c020b,
+        'h420c0c00,
+        'h050d000b,
+        'h420d0d00,
+        'h0c0e0503,
+        'h0502020e,
+        'h42020200,
+        'h0500000e,
+        'h42000000,
+        'h05080108,
+        'h050b010b,
+        'h050e010e,
+        'h05010105,
+        'h0505090a,
+        'h45080805,
+        'h05050c0d,
+        'h450b0b05,
+        'h05000200,
+        'h450e0e00,
+        'h05000607,
+        'h45010100,
+        'hff000000
+    };
+
     initial begin : testbench_logic
         logic [31:0] idcode;
+        logic finished;
 
         // Wait for reset to be released
         #ClkPeriodJtag;
@@ -190,9 +262,20 @@ module tb_bgpu_soc #(
         // Init JTAG
         jtag_init();
 
-        // Memory test
-        for(int i = 0; i < 10; i++) begin
-            jtag_write_reg32(i * 4, i * 'h12345678, 1'b1);
+        // Write program to memory
+        for(int i = 0; i < prog.size(); i++) begin
+            jtag_write_reg32(i * 4, prog[i], 1'b1);
+        end
+
+        // Dispatch some threads
+        dispatch_threads('h0, 'h1, 24, 'h2);
+
+        while(1) begin
+            dispatch_status(finished);
+            if (finished) begin
+                $display("@%t | [DISPATCH] All threads finished", $time);
+                break;
+            end
         end
 
         $display("Finished!");

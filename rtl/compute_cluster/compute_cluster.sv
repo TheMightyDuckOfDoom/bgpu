@@ -102,7 +102,7 @@ module compute_cluster #(
     localparam int unsigned ImemAddrWidth    = PcWidth - IClineIdxBits;
     // Address in bytes
     localparam int unsigned ImemAxiAddrWidth = PcWidth + $clog2(EncInstWidth / 8);
-    // AXI ID width for the Compute Unit IMEM
+    // AXI ID width for the Compute Cluster IMEM
     localparam int unsigned ImemCcAxiIdWidth = ComputeUnits > 1 ? $clog2(ComputeUnits) + 1 : 1;
 
     // Width of the data block address -> blockwise address
@@ -289,6 +289,9 @@ module compute_cluster #(
             .imem_addr_t( imem_addr_t        ),
             .imem_data_t( imem_data_t        )
         ) i_imem_to_axi (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
             .imem_ready_o    ( imem_ready    [cu] ),
             .imem_req_valid_i( imem_req_valid[cu] ),
             .imem_req_addr_i ( imem_req_addr [cu] ),

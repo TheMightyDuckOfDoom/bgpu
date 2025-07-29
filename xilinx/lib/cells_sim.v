@@ -152,6 +152,28 @@ assign O = S0_true ? I0_internal : (S1_true ? I1_internal : INIT_OUT);
 
 endmodule
 
+module BUFGMUX(
+    input I0,
+    input I1,
+    input S,
+    output O
+);
+
+    BUFGCTRL #(
+        .IS_CE0_INVERTED(1'b1)
+    ) i_bufgctrl (
+        .CE0    ( S    ),
+        .CE1    ( S    ),
+        .I0     ( I0   ),
+        .I1     ( I1   ),
+        .S1     ( 1'b1 ),
+        .S0     ( 1'b1 ),
+        .IGNORE0( 1'b0 ),
+        .IGNORE1( 1'b0 )
+    );
+
+endmodule
+
 module BUFHCE(
     (* clkbuf_driver *)
     output O,
@@ -3205,6 +3227,9 @@ endmodule
 `endif
 *)
 `endif
+/* verilator lint_off WIDTHEXPAND */
+/* verilator lint_off WIDTHTRUNC */
+/* verilator lint_off COMBDLY */
 module DSP48E1 (
     output [29:0] ACOUT,
     output [17:0] BCOUT,
@@ -3949,5 +3974,8 @@ module DSP48E1 (
     endgenerate
 
 endmodule
+/* verilator lint_on WIDTHEXPAND */
+/* verilator lint_on WIDTHTRUNC */
+/* verilator lint_on COMBDLY */
 
 // TODO: DSP48E2 (Ultrascale).

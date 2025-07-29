@@ -84,11 +84,11 @@ tb-all: $(TBS)
 
 # Generate filelist for Vivado synthesis
 xilinx/vivado.f: $(BENDER_DEPS)
-	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -D SYNTHESIS > $@
+	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
 
 # Generate filelist for Yosys synthesis
 xilinx/yosys.f: $(BENDER_DEPS)
-	$(BENDER) script flist-plus -t xilinx_yosys -t tech_cells_generic_exclude_tc_sram -D SYNTHESIS > $@
+	$(BENDER) script flist-plus -t xilinx_yosys -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
 
 # Run Vivado synthesis
 xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/dummy_constraints.xdc xilinx/run_vivado.sh

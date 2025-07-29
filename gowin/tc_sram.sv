@@ -86,12 +86,15 @@ module tc_sram #(
             // Upper bits of address is the BRAM select
             if (BramsInColumn == 1)
                 assign bram_sel = '0; // Only one BRAM in this column, so select 0
-            else begin : gen_multirow_bram_sel
+            else if (BramsInColumn < 8) begin : gen_multirow_bram_sel
                 always_comb begin
                     bram_sel = '0;
                     bram_sel[BramSelBits-1:0] = addr_i[0][AddrWidth-1-:BramSelBits];
                 end
             end : gen_multirow_bram_sel
+            else begin
+                $error("BramsInColumn %0d exceeds 8 -> not implemented", BramsInColumn);
+            end
 
             // Build address for the current BRAM
             always_comb begin : bram_addr_logic

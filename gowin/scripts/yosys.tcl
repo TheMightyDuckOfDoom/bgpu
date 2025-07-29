@@ -8,6 +8,13 @@ exec mkdir -p gowin/out
 
 #nowidelut: better results
 #nolutram: 138k B does not support SSRAMs/LUTRAMs
-synth_gowin -top $top_design -noiopads -nowidelut -nolutram
+synth_gowin -top $top_design -noiopads -nowidelut -nolutram -run :coarse
 
-write_verilog -simple-lhs -decimal -attr2comment -renameprefix gen gowin/out/$top_design.v
+# Needed to avoid later crash, see:
+# - https://github.com/YosysHQ/yosys/issues/4349
+# - https://github.com/YosysHQ/yosys/issues/4451
+splitnets -format __v
+
+synth_gowin -top $top_design -noiopads -nowidelut -nolutram -run coarse:
+
+write_verilog -simple-lhs -decimal -attr2comment -renameprefix gen gowin/out/${top_design}_yosys.v

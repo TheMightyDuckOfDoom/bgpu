@@ -150,7 +150,7 @@ module multi_warp_its_unit #(
     end : next_pc_ready_logic
 
     // We can allocate a new warp if there is at least one warp that is not active
-    always begin : warp_free
+    always_comb begin : warp_free
         warp_free_o = 1'b0;
         for (int i = 0; i < NumWarps; i++) begin : check
             if (!warp_data_q[i].occupied) begin
