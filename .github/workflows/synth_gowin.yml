@@ -34,6 +34,7 @@ jobs:
                     gowin/out/compute_unit_yosys.v
                     gowin/gowin-yosys.f
                     gowin/gowin.log
+
     cu-gowin-eda:
         runs-on: self-hosted
         steps:

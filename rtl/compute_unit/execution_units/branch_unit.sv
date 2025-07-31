@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: SHL-0.51
 
 `include "common_cells/registers.svh"
+`include "bgpu.svh"
 
 /// Branch Unit
 module branch_unit import bgpu_pkg::*; #(

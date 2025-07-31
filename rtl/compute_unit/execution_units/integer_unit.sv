@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu.svh"
+
 /// Integer Unit
 // Performs integer alu operations
 module integer_unit import bgpu_pkg::*; #(

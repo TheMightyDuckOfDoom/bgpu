@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu.svh"
+
 /// Testbench for Load Store Unit
 module tb_load_store_unit import bgpu_pkg::*; #(
     // Simulation parameters
