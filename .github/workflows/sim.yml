@@ -1,103 +1,181 @@
 name: Simulation
 on: [push, pull_request, workflow_dispatch]
 jobs:
-  # Sweep multiple compute unit configurations
-  sweep_tb_compute_unit:
+  # Bender update
+  bender_update:
     runs-on: self-hosted
-    needs: tb_compute_unit
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Check .bender cache
+        id: check-cache
+        uses: actions/cache@v4
+        with:
+          path: .bender
+          key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
+      - name: Bender update on cache miss
+        if: steps.check-cache.outputs.cache-hit != 'true'
+        run: bender update
+      - name: Insert into cache on cache miss
+        if: steps.check-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
+
+  # Sweep multiple compute unit configurations
+  sweep_tb_compute_unit:
+    runs-on: self-hosted
+    needs: [bender_update, tb_compute_unit]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Sweep Parameters in Testbench
         run: ./sweep.sh
 
   # Main testbench for BGPU SoC
   tb_bpu_soc:
     runs-on: self-hosted
-    needs: [tb_thread_dispatcher, tb_compute_cluster]
+    needs: [bender_update, tb_thread_dispatcher, tb_compute_cluster]
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_bgpu_soc
 
   # Thread Dispatcher Testbench
   tb_thread_dispatcher:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_thread_dispatcher
 
   # Main testbench for compute cluster
   tb_compute_cluster:
     runs-on: self-hosted
-    needs: [tb_compute_unit]
+    needs: [bender_update, tb_compute_unit]
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_compute_cluster
 
   # Main testbench for compute unit
   tb_compute_unit:
     runs-on: self-hosted
-    needs: [tb_instruction_cache, tb_tag_queue, tb_operand_collector, tb_register_opc_stage, tb_load_store_unit]
+    needs: [bender_update, tb_instruction_cache, tb_tag_queue, tb_operand_collector, tb_register_opc_stage, tb_load_store_unit]
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_compute_unit
 
   # Instruction Cache Testbench
   tb_instruction_cache:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_instruction_cache
 
   # Tag Queue Testbench
   tb_tag_queue:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_tag_queue
 
   # Register File Bank Testbenches
   tb_register_file_bank_singleport:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0"
 
   tb_register_file_bank_dualport:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b1"
 
   # Operand Collector Testbench
   tb_operand_collector:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_operand_collector
 
   # Register Operand Collector Stage Testbenches
   tb_register_opc_stage:
     runs-on: self-hosted
-    needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
+    needs: [bender_update, tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
     steps:
       - name: Checkout
         uses: actions/checkout@master
@@ -106,61 +184,99 @@ jobs:
 
   tb_register_opc_stage_single_bank:
     runs-on: self-hosted
-    needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
+    needs: [bender_update, tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_register_opc_stage VERILATOR_ARGS="-GNumBanks=1"
 
   tb_register_opc_stage_single_warp:
     runs-on: self-hosted
-    needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
+    needs: [bender_update, tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_register_opc_stage VERILATOR_ARGS="-GNumWarps=1"
 
   tb_register_opc_stage_single_warp_single_bank:
     runs-on: self-hosted
-    needs: [tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
+    needs: [bender_update, tb_register_file_bank_singleport, tb_register_file_bank_dualport, tb_operand_collector]
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_register_opc_stage VERILATOR_ARGS="-GNumWarps=1 -GNumBanks=1"
 
   # Load Store Unit Testbenches
   tb_coalesce_comparator:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_coalesce_comparator
     
   tb_coalesce_splitter:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_coalesce_splitter
 
   tb_wdata_assembler:
     runs-on: self-hosted
+    needs: bender_update
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_wdata_assembler
 
   tb_load_store_unit:
     runs-on: self-hosted
-    needs: [tb_coalesce_comparator, tb_coalesce_splitter, tb_wdata_assembler]
+    needs: [bender_update, tb_coalesce_comparator, tb_coalesce_splitter, tb_wdata_assembler]
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_load_store_unit

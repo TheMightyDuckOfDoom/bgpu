@@ -24,7 +24,7 @@ jobs:
 
   lint-license:
     name: Lint License Headers
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: lint license
         uses: pulp-platform/pulp-actions/lint-license@v2
