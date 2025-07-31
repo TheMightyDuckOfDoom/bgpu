@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: SHL-0.51
 
 `include "common_cells/registers.svh"
+`include "bgpu.svh"
 
 /// Load Store Unit
 // Performs load and store operations

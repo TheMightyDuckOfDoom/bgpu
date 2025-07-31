@@ -2,6 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "bgpu.svh"
+
 /// Decoder
 module decoder import bgpu_pkg::*; #(
     /// Width of the Program Counter
