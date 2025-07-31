@@ -26,6 +26,9 @@ yosys plugin -i slang.so
 yosys read_slang --top $top_design -F $sv_flist \
         --compat-mode --keep-hierarchy \
         --allow-use-before-declare --ignore-unknown-modules
+yosys check
+
+yosys write_verilog out/${top_design}_slang.v
 
 # preserve hierarchy of selected modules/instances
 # 't' means type as in select all instances of this type/module

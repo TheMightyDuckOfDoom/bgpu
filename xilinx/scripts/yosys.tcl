@@ -12,6 +12,12 @@ synth_xilinx -top $top_design -family xc7 -noclkbuf -noiopad -nowidelut -abc9 -f
 # - https://github.com/YosysHQ/yosys/issues/4349
 # - https://github.com/YosysHQ/yosys/issues/4451
 splitnets -format __v
+stat -tech xilinx
+yosys rename -wire -suffix _reg t:*dff*
+select -write xilinx/out/${top_design}_registers.rpt t:*dff*
+# rename all other cells
+autoname t:*dff* %n
+clean -purge
 
 synth_xilinx -top $top_design -family xc7 -noclkbuf -noiopad -nowidelut -abc9 -flatten -run coarse:
 

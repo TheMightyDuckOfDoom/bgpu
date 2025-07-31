@@ -104,7 +104,9 @@ module tb_thread_dispatcher #(
         .allocate_pc_o        ( warp_req.pc         ),
         .allocate_dp_addr_o   ( warp_req.dp_addr    ),
         .allocate_tblock_idx_o( warp_req.tblock_idx ),
-        .allocate_tgroup_id_o ( warp_req.tgroup_id  )
+        .allocate_tgroup_id_o ( warp_req.tgroup_id  ),
+
+        .dispatched_tblocks_o()
     );
 
     // #######################################################################################

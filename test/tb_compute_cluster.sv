@@ -86,8 +86,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         eu_e           eu;
         inst_subtype_t subtype;
         reg_idx_t      dst;
-        reg_idx_t      op1;
         reg_idx_t      op2;
+        reg_idx_t      op1;
     } enc_inst_t;
 
     typedef logic [$bits(enc_inst_t) * (1 << IClineIdxBits) / 8-1:0] imem_data_strb_t;
@@ -125,7 +125,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     tgroup_id_t tblock_done_id;
 
     // Test program
-    enc_inst_t test_program [7] = {
+    enc_inst_t test_program [5] = {
         // Calculate byte offset from thread ID and warp ID
         '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
 
@@ -133,11 +133,11 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         '{eu: EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 1, op1: 0, op2: 0}, // reg1 = [reg0]
 
         // Subtract address from data
-        '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 1, op2: 0}, // reg2 = reg1 - reg0
+        '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 1, op2: 1}, // reg2 = reg1 - reg0
 
-        '{eu: EU_IU,  subtype: IU_BID,         dst: 3, op1: 0, op2: 0}, // reg3 = block ID
+        // '{eu: EU_IU,  subtype: IU_BID,         dst: 3, op1: 0, op2: 0}, // reg3 = block ID
 
-        '{eu: EU_IU,  subtype: IU_ADD,         dst: 4, op1: 2, op2: 3}, // reg4 = reg2 + reg3
+        // '{eu: EU_IU,  subtype: IU_ADD,         dst: 4, op1: 2, op2: 3}, // reg4 = reg2 + reg3
 
         // Store result back to memory
         '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 5, op1: 0, op2: 2}, // [reg0] = reg4

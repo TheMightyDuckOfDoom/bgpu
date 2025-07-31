@@ -14,6 +14,11 @@ synth_gowin -top $top_design -noiopads -nowidelut -nolutram -run :coarse
 # - https://github.com/YosysHQ/yosys/issues/4349
 # - https://github.com/YosysHQ/yosys/issues/4451
 splitnets -format __v
+yosys rename -wire -suffix _reg t:*dff*
+select -write gowin/out/${top_design}_registers.rpt t:*dff*
+# rename all other cells
+autoname t:*dff* %n
+clean -purge
 
 synth_gowin -top $top_design -noiopads -nowidelut -nolutram -run coarse:
 

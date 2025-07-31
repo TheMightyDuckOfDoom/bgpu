@@ -138,6 +138,7 @@ sources:
       defines:
           POST: ~
       files:
+          - /usr/local/share/yosys/simlib.v
           - xilinx/lib/cells_sim.v
           - xilinx/lib/RAMB36E1.v
           - xilinx/out/post_synth.v

@@ -40,7 +40,9 @@ module thread_dispatcher #(
     output pc_t         allocate_pc_o,
     output addr_t       allocate_dp_addr_o, // Data / Parameter address
     output tblock_idx_t allocate_tblock_idx_o, // Block index -> used to calculate the thread id
-    output tgroup_id_t  allocate_tgroup_id_o  // Block id -> unique identifier for the block
+    output tgroup_id_t  allocate_tgroup_id_o, // Block id -> unique identifier for the block
+
+    output tblock_idx_t dispatched_tblocks_o // How many thread blocks have been dispatched
 );
 
     // #######################################################################################
@@ -103,6 +105,8 @@ module thread_dispatcher #(
             end : allocate_next_warp
         end : dispatch_warp
     end : main_logic
+
+    assign dispatched_tblocks_o = dispatched_tblocks_q;
 
     // #######################################################################################
     // # Sequential Logic                                                                    #

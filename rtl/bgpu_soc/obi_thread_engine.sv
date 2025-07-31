@@ -84,7 +84,8 @@ module obi_thread_engine #(
     obi_id_t   obi_rid_q;
 
     // Thread Dispatcher ready
-    logic dispatcher_ready;
+    logic        dispatcher_ready;
+    tblock_idx_t dispatched_tblocks;
 
     // #######################################################################################
     // # Combinational Logic                                                                 #
@@ -155,6 +156,7 @@ module obi_thread_engine #(
                         obi_rdata_d[1] = running_q;        // Running
                         obi_rdata_d[2] = finished_q;       // Finished
                         obi_rdata_d[TblockIdxBits+3:4] = finished_tblocks_q; // Finished tblocks
+                        obi_rdata_d[31:32-TblockIdxBits] = dispatched_tblocks;
                     end
                 end : status_reg
                 default: begin : obi_error
@@ -224,7 +226,9 @@ module obi_thread_engine #(
         .allocate_pc_o        ( allocate_pc_o        ),
         .allocate_dp_addr_o   ( allocate_dp_addr_o   ),
         .allocate_tblock_idx_o( allocate_tblock_idx_o),
-        .allocate_tgroup_id_o ( allocate_tgroup_id_o )
+        .allocate_tgroup_id_o ( allocate_tgroup_id_o ),
+
+        .dispatched_tblocks_o( dispatched_tblocks )
     );
 
     // #######################################################################################

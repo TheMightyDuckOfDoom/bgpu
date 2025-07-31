@@ -1,4 +1,4 @@
-name: Simulate
+name: Gowin Simulation
 on: [push, pull_request, workflow_dispatch]
 jobs:
   # Main testbench for BGPU SoC
@@ -31,7 +31,7 @@ jobs:
         run: make tb_instruction_cache BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
 
   # Register File Bank Testbenches
-   gowin_tb_register_file_bank_singleport:
+  gowin_tb_register_file_bank_singleport:
     runs-on: self-hosted
     steps:
       - name: Checkout

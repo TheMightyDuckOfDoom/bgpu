@@ -125,7 +125,7 @@ module integer_unit import bgpu_pkg::*; #(
                 default: begin
                     result[i] = '1; // Default case, should not happen
                     `ifndef SYNTHESIS
-                        $fatal("Instruction subtype not implemented: %0h", opc_to_eu_inst_sub_i);
+                        $fatal(1, "Instruction subtype not implemented: %0h", opc_to_eu_inst_sub_i);
                     `endif
                 end
             endcase

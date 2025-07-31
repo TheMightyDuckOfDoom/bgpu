@@ -33,7 +33,7 @@ report_utilization -hierarchical -hierarchical_percentages
 #start_gui
 
 # exec mkdir -p out
-# write_verilog -force -mode funcsim out/$top.v
+write_verilog -force -mode funcsim out/${top}_vivado.v
 
 # Write out bitfile
 ## write_bitstream -force my_proj.bit

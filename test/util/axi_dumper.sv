@@ -153,6 +153,7 @@ module axi_dumper #(
                     $fwrite(f, r_string);
                     $fwrite(f, "\n");
                 end
+                $fflush(f);
             end
         end
     end

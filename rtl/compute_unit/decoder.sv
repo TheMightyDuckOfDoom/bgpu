@@ -66,8 +66,8 @@ module decoder import bgpu_pkg::*; #(
     assign dec_subwarp_id_o  = ic_subwarp_id_i;
     assign dec_inst_o        = inst_t'(ic_inst_i[31:24]);
     assign dec_dst_o         = ic_inst_i[23:16];
-    assign dec_operands_o[0] = ic_inst_i[15:8];
-    assign dec_operands_o[1] = ic_inst_i[7:0];
+    assign dec_operands_o[1] = ic_inst_i[15:8];
+    assign dec_operands_o[0] = ic_inst_i[7:0];
 
     // Instruction was decoded if a handshake between Decoder and Dispatcher happend
     assign dec_decoded_o            = ((ic_valid_i && dec_decoded_control_o) || dec_valid_o)

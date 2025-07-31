@@ -25,12 +25,12 @@ module bgpu_soc #(
     parameter int unsigned ComputeUnitsPerCluster = 1,
     /// Encoded instruction width, has to be 32
     parameter int unsigned EncInstWidth = 32,
-    /// Width of the Program Counter
+    /// Width of the Program Counter in instructions
     parameter int unsigned PcWidth = MctrlAddressWidth - $clog2(EncInstWidth),
-    /// Number of warps
-    parameter int unsigned NumWarps = 8,
+    /// Number of warps per compute unit
+    parameter int unsigned NumWarps = 1,
     /// Number of threads per warp
-    parameter int unsigned WarpWidth = 4,
+    parameter int unsigned WarpWidth = 1,
     /// Number of inflight instructions per warp
     parameter int unsigned InflightInstrPerWarp = 4,
     /// How many registers can each warp access as operand or destination, has to be 8
@@ -38,9 +38,9 @@ module bgpu_soc #(
     /// How many operands each instruction can have, has to be 2
     parameter int unsigned OperandsPerInst = 2,
     /// How many register banks are available
-    parameter int unsigned NumBanks = 4,
+    parameter int unsigned NumBanks = 1,
     /// How many operand collectors are available
-    parameter int unsigned NumOperandCollectors = 6,
+    parameter int unsigned NumOperandCollectors = 1,
     /// Should the register banks be dual ported?
     parameter bit          DualPortRegisterBanks = 1'b0,
     /// Width of the registers
@@ -49,14 +49,14 @@ module bgpu_soc #(
     parameter int unsigned AddressWidth = MctrlAddressWidth,
     // Memory Block index width -> Memory request width is 2^BlockIdxBits bytes
     parameter int unsigned BlockIdxBits = 4,
-    // Width of the id for requests queue
-    parameter int unsigned OutstandingReqIdxWidth = 3,
+    // Width of the id for load/store requests queue -> 2^OutstandingReqIdxWidth memory requests per CU
+    parameter int unsigned OutstandingReqIdxWidth = 1,
     // Number of cache lines in the instruction cache
     parameter int unsigned NumIClines = 8,
-    // Number of bits for the instruction cache line index
+    // Number of bits for the instruction cache line index -> 2^IClineIdxBits instructions per line
     parameter int unsigned IClineIdxBits = 2,
     // How many bits are used to index thread blocks inside a thread group?
-    parameter int unsigned TblockIdxBits = 8,
+    parameter int unsigned TblockIdxBits = 8, // Determines max number of thread blocks per group
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8
 ) (
@@ -596,6 +596,9 @@ module bgpu_soc #(
     // TODO: Here we could place a data cache
 
     // Adjust Data width to match the memory controller
+    // initial if(BlockWidth * 8 != MctrlWidth)
+    //     $error("Block width (%0d) != Mctrl width (%0d), breaks yosys post_synth sim", BlockWidth * 8, MctrlWidth);
+
     axi_dw_converter #(
         .AxiMaxReads        ( ComputeClusters         ),
         .AxiSlvPortDataWidth( BlockWidth * 8          ),
@@ -794,45 +797,24 @@ module bgpu_soc #(
     );
 
     // TODO: Here before the memory controller we should put a Last Level Cache
-
 `ifndef SYNTHESIS
-    axi_sim_mem #(
-        .AddrWidth        ( AddressWidth     ),
-        .DataWidth        ( MctrlWidth       ),
-        .IdWidth          ( MctrlAxiIdWidth  ),
-        .UserWidth        ( 1                ),
-        .NumPorts         ( 1                ),
-        .axi_req_t        ( mctrl_axi_req_t  ),
-        .axi_rsp_t        ( mctrl_axi_resp_t ),
-        .WarnUninitialized( 1'b1             ),
-        .UninitializedData( "ones"           ),
-        .ClearErrOnAccess ( 1'b0             ),
-        .ApplDelay        ( 1ns              ),
-        .AcqDelay         ( 9ns              )
-    ) i_mem (
+    axi_dumper #(
+        .BusName   ( "mctrl"          ),
+        .LogAW     ( 1'b1             ),
+        .LogAR     ( 1'b1             ),
+        .LogW      ( 1'b1             ),
+        .LogB      ( 1'b1             ),
+        .LogR      ( 1'b1             ),
+        .axi_req_t ( mctrl_axi_req_t  ),
+        .axi_resp_t( mctrl_axi_resp_t )
+    ) i_mctrl_monitor (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
 
-        .axi_req_i( mctrl_axi_req ),
-        .axi_rsp_o( mctrl_axi_rsp ),
-
-        .mon_w_valid_o     ( /* Unused */ ),
-        .mon_w_addr_o      ( /* Unused */ ),
-        .mon_w_data_o      ( /* Unused */ ),
-        .mon_w_id_o        ( /* Unused */ ),
-        .mon_w_user_o      ( /* Unused */ ),
-        .mon_w_beat_count_o( /* Unused */ ),
-        .mon_w_last_o      ( /* Unused */ ),
-
-        .mon_r_valid_o     ( /* Unused */ ),
-        .mon_r_addr_o      ( /* Unused */ ),
-        .mon_r_data_o      ( /* Unused */ ),
-        .mon_r_id_o        ( /* Unused */ ),
-        .mon_r_user_o      ( /* Unused */ ),
-        .mon_r_beat_count_o( /* Unused */ ),
-        .mon_r_last_o      ( /* Unused */ )
+        .axi_req_i ( mctrl_axi_req ),
+        .axi_resp_i( mctrl_axi_rsp )
     );
-`else
+`endif
     localparam int unsigned DummyMemAddressWidth = 10;
     logic [DummyMemAddressWidth-1:0] mem_addr;
 
@@ -848,7 +830,7 @@ module bgpu_soc #(
         .IdWidth     ( MctrlAxiIdWidth      ),
         .NumBanks    ( 1                    ),
         .BufDepth    ( 1                    ),
-        .HideStrb    ( 1'b1                 ),
+        .HideStrb    ( 1'b0                 ), /// This currently is buggy when enabled
         .OutFifoDepth( 1                    )
     ) i_axi_to_mem (
         .clk_i ( clk   ),
@@ -894,5 +876,4 @@ module bgpu_soc #(
     );
 
     `FF(mem_rvalid, mem_req, 1'b0, clk, rst_n)
-`endif
 endmodule : bgpu_soc

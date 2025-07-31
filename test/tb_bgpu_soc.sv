@@ -8,7 +8,9 @@ module tb_bgpu_soc #(
     parameter time ClkPeriod     = 10ns,
 
     parameter time ApplyDelay = 1ns,
-    parameter time AcqDelay   = 0.9ns
+    parameter time AcqDelay   = 0.9ns,
+
+    parameter int unsigned MaxCycles = 1000000
 ) ();
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -135,6 +137,7 @@ module tb_bgpu_soc #(
     task automatic jtag_read_reg32(
         input logic [31:0] addr,
         output logic [31:0] data,
+        input bit display_read = 1'b0,
         input int unsigned idle_cycles = 10
     );
         automatic dm::sbcs_t sbcs = dm::sbcs_t'{sbreadonaddr: 1'b1, sbaccess: 2, default: '0};
@@ -142,7 +145,8 @@ module tb_bgpu_soc #(
         jtag_write(dm::SBAddress0, addr[31:0]);
         jtag_dbg.wait_idle(idle_cycles);
         jtag_dbg.read_dmi_exp_backoff(dm::SBData0, data);
-        $display("@%t | [JTAG] Read 0x%h from 0x%h", $time, data, addr);
+        if (display_read)
+            $display("@%t | [JTAG] Read 0x%h from 0x%h", $time, data, addr);
     endtask
 
     task automatic jtag_write_reg32(
@@ -195,7 +199,9 @@ module tb_bgpu_soc #(
         $display("@%t | [DISPATCH] Status: Start Dispatch: %d Running: %d Finished %d", $time,
             status[0], status[1], status[2]);
         $display("@%t | [DISPATCH] Finished Threads: %d", $time,
-            status[31:4]);
+            status[8+3:4]);
+        $display("@%t | [DISPATCH] Dispatched Threads: %d", $time,
+            status[31:32-8]);
 
         finished = status[2];
     endtask
@@ -207,48 +213,43 @@ module tb_bgpu_soc #(
         'h42020200,
         'h0c000008,
         'h42000000,
-        'h02030000,
-        'h00040000,
-        'h0e050304,
-        'h0e060402,
-        'h05050506,
-        'h05060205,
-        'h42060600,
-        'h05070005,
-        'h42070700,
-        'h0c080501,
-        'h05090208,
-        'h42090900,
-        'h050a0008,
-        'h420a0a00,
-        'h0c0b0502,
-        'h050c020b,
-        'h420c0c00,
-        'h050d000b,
-        'h420d0d00,
-        'h0c0e0503,
-        'h0502020e,
+        'h0c030200,
+        'h42030300,
+        'h0c040204,
+        'h42040400,
+        'h0c050208,
+        'h42050500,
+        'h0c02020c,
         'h42020200,
-        'h0500000e,
+        'h0c060000,
+        'h42060600,
+        'h0c070004,
+        'h42070700,
+        'h0c080008,
+        'h42080800,
+        'h0c00000c,
         'h42000000,
-        'h05080108,
-        'h050b010b,
-        'h050e010e,
-        'h05010105,
-        'h0505090a,
-        'h45080805,
-        'h05050c0d,
-        'h450b0b05,
+        'h0c090100,
+        'h0c0a0104,
+        'h0c0b0108,
+        'h0c01010c,
+        'h05030306,
+        'h45090309,
+        'h05030407,
+        'h450a030a,
+        'h05030508,
+        'h450b030b,
         'h05000200,
-        'h450e0e00,
-        'h05000607,
-        'h45010100,
+        'h45010001,
         'hff000000
     };
 
+    localparam int DataPerMatrix = 2 ** 2;
+
     initial begin : testbench_logic
-        logic [31:0] idcode;
+        logic [31:0] idcode, data;
         logic finished;
+        int offset;
 
         // Wait for reset to be released
         #ClkPeriodJtag;
@@ -263,12 +264,30 @@ module tb_bgpu_soc #(
         jtag_init();
 
         // Write program to memory
+        offset = 0;
         for(int i = 0; i < prog.size(); i++) begin
-            jtag_write_reg32(i * 4, prog[i], 1'b1);
+            jtag_write_reg32(offset, prog[i], 1'b1);
+            offset += 4;
         end
 
+        // Write Data to memory
+        for(int j = 0; j < 3; j++) begin
+            for(int i = 0; i < DataPerMatrix; i++) begin
+                jtag_write_reg32(offset, i + 1, 1'b1);
+                offset += 4;
+            end
+        end
+
+        // Write Parameters to memory
+        jtag_write_reg32(offset, prog.size() * 4, 1'b1);
+        offset += 4;
+        jtag_write_reg32(offset, (prog.size() + DataPerMatrix) * 4, 1'b1);
+        offset += 4;
+        jtag_write_reg32(offset, (prog.size() + DataPerMatrix * 2) * 4, 1'b1);
+        offset += 4;
+
         // Dispatch some threads
-        dispatch_threads('h0, 'h1, 24, 'h2);
+        dispatch_threads('h0, (prog.size() + DataPerMatrix * 3) * 4, 1, 'h2);
 
         while(1) begin
             dispatch_status(finished);
@@ -278,9 +297,26 @@ module tb_bgpu_soc #(
             end
         end
 
+        // Read back results
+        offset = prog.size() * 4;
+        for(int j = 0; j < 3; j++) begin
+            $display("@%t | [RESULTS] Reading back results for matrix %0d", $time, j);
+            for(int i = 0; i < DataPerMatrix; i++) begin
+                jtag_read_reg32(offset, data);
+                $display("@%t | [RESULTS] Result %0d: 0x%h", $time, i, data);
+                offset += 4;
+            end
+        end
+
         $display("Finished!");
         $dumpflush;
         $finish();
     end : testbench_logic
+
+    initial begin : check_timeout
+        // Check for timeout
+        repeat(MaxCycles) @(posedge clk);
+        $fatal(1, "@%t | [TESTBENCH] Timeout reached, test did not finish in time!", $time);
+    end : check_timeout
 
 endmodule : tb_bgpu_soc
