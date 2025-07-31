@@ -8,5 +8,6 @@ for i in {1..5}; do
     else
         echo "Run $i failed, retrying..."
         sleep 5
+        exit
     fi
 done
