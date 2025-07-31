@@ -48,6 +48,9 @@ module compute_cluster #(
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
+    // Compute Cluster ID
+    parameter int unsigned ClusterId = 0,
+
     // Instruction Memory AXI Request and Response types
     parameter type imem_axi_req_t  = logic,
     parameter type imem_axi_resp_t = logic,
@@ -366,7 +369,9 @@ module compute_cluster #(
             .NumIClines            ( NumIClines             ),
             .IClineIdxBits         ( IClineIdxBits          ),
             .TblockIdxBits         ( TblockIdxBits          ),
-            .TgroupIdBits          ( TgroupIdBits           )
+            .TgroupIdBits          ( TgroupIdBits           ),
+            .ClusterId             ( ClusterId              ),
+            .ComputeUnitId         ( cu                     )
         ) i_cu (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),

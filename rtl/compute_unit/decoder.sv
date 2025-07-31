@@ -114,10 +114,10 @@ module decoder import bgpu_pkg::*; #(
         // Load Store Unit
         else if (dec_inst_o.eu == EU_LSU) begin : decode_lsu
             // LSU instructions always have two operands register operands
-            // Operand 0 is the address
-            // Operand 1 is the data to store
-            dec_operands_required_o[0] = 1'b1;
-            dec_operands_required_o[1] = 1'b1;
+            // Operand 1 is the address
+            // Operand 0 is the data to store
+            dec_operands_required_o[0] = dec_inst_o.subtype inside `INST_STORE; // Data
+            dec_operands_required_o[1] = 1'b1; // Address
         end : decode_lsu
 
         // Branch Unit

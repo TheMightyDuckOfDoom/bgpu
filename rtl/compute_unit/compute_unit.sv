@@ -43,6 +43,11 @@ module compute_unit import bgpu_pkg::*; #(
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
+    // Compute Cluster this Compute Unit is part of
+    parameter int unsigned ClusterId = 0,
+    // Compute Unit ID inside the Compute Cluster
+    parameter int unsigned ComputeUnitId = 0,
+
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned BlockAddrWidth  = AddressWidth - BlockIdxBits,
     parameter int unsigned BlockWidth      = 1 << BlockIdxBits, // In bytes
@@ -685,4 +690,56 @@ module compute_unit import bgpu_pkg::*; #(
         .oup_ready_i( opc_to_eu_ready )
     );
 
+`ifndef SYNTHESIS
+    initial begin : lsu_dumper
+        integer f;
+        string data, filename;
+
+        filename = $sformatf("lsu_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
+        f = $fopen(filename, "w");
+
+        while(1) begin
+            @(posedge clk_i);
+            if (opc_to_lsu_valid && lsu_to_opc_ready) begin
+                data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
+                    $time(), opc_to_eu_data.tag, opc_to_eu_data.inst.subtype,
+                    opc_to_eu_data.tag[WidWidth-1:0], opc_to_eu_data.act_mask, opc_to_eu_data.dst);
+
+                for(int i = 0; i < OperandsPerInst; i++) begin
+                    data = {data, $sformatf(", Operand%0d:", i)};
+                    for(int thread = 0; thread < WarpWidth; thread++) begin
+                        data = {data, $sformatf(" (t%0d: 0x%h)", thread,
+                            opc_to_eu_data.operands[i][thread * RegWidth +: RegWidth])};
+                    end
+                end
+                $fwrite(f, "%s\n", data);
+                $fflush(f);
+            end
+        end
+    end : lsu_dumper
+
+    initial begin : result_dumper
+        integer f;
+        string data, filename;
+
+        filename = $sformatf("results_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
+        f = $fopen(filename, "w");
+
+        while(1) begin
+            @(posedge clk_i);
+            if (eu_to_opc_valid && opc_to_eu_ready) begin
+                data = $sformatf("%t: Tag: %0d, Warp: %0d, ActMask: %b, Dst: r%0d, Data: ", $time(),
+                    eu_to_opc_data.tag, eu_to_opc_data.tag[WidWidth-1:0], eu_to_opc_data.act_mask,
+                    eu_to_opc_data.dst);
+
+                for(int thread = 0; thread < WarpWidth; thread++) begin
+                    data = {data, $sformatf(" (t%0d: 0x%h)", thread,
+                        eu_to_opc_data.data[thread * RegWidth +: RegWidth])};
+                end
+                $fwrite(f, "%s\n", data);
+                $fflush(f);
+            end
+        end
+    end : result_dumper
+`endif
 endmodule : compute_unit

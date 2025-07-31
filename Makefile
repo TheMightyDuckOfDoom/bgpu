@@ -42,7 +42,7 @@ verilator/verilator_lint.f: $(BENDER_DEPS)
 
 # Lint using Verilator
 lint-verilator: verilator/verilator_lint.f verilator/config.vlt $(SRCS) $(TB_SRCS)
-	$(VERILATOR) -lint-only $(VERILATOR_FLAGS) $(VERILATOR_ARGS) -f $< --top $(TOP)
+	$(VERILATOR) -lint-only $(VERILATOR_FLAGS) $(VERILATOR_ARGS) -f $< --timing --top $(TOP)
 
 # Generate filelist for Verilator linting
 verilator/verible_lint.f: $(BENDER_DEPS)

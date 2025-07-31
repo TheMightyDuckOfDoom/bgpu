@@ -404,9 +404,9 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                     end else begin
                         $error("Golden Model: Unsupported store instruction %0h", inst);
                     end
-                    block_addr = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                    block_addr = int'(eu_req.src_data[1][thread * RegWidth +: AddressWidth])
                         / BlockWidth;
-                    block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                    block_offset = int'(eu_req.src_data[1][thread * RegWidth +: AddressWidth])
                         % BlockWidth;
                     for (int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
                         // Check that we're not storing outside of a block
@@ -437,9 +437,9 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                     end
                     $display("Golden Model: Thread %0d is performing a LOAD operation of size",
                         thread, size);
-                    block_addr = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                    block_addr = int'(eu_req.src_data[1][thread * RegWidth +: AddressWidth])
                         / BlockWidth;
-                    block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                    block_offset = int'(eu_req.src_data[1][thread * RegWidth +: AddressWidth])
                         % BlockWidth;
                     for (int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
                         // Check that we're not reading outside of a block
@@ -468,9 +468,9 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                     end
                     $display("Golden Model: Thread %0d is performing a STORE operation of size",
                         thread, size);
-                    block_addr = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                    block_addr = int'(eu_req.src_data[1][thread * RegWidth +: AddressWidth])
                         / BlockWidth;
-                    block_offset = int'(eu_req.src_data[0][thread * RegWidth +: AddressWidth])
+                    block_offset = int'(eu_req.src_data[1][thread * RegWidth +: AddressWidth])
                         % BlockWidth;
                     for (int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
                         // Check that we're not storing outside of a block
@@ -479,7 +479,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                         end
                         // Write byte to golden memory -> OR data together
                         golden_mem[block_addr][block_offset] = golden_mem[block_addr][block_offset]
-                            | eu_req.src_data[1][thread * RegWidth + i * 8 +: 8];
+                            | eu_req.src_data[0][thread * RegWidth + i * 8 +: 8];
 
                         $display("Golden Model: Thread %0d, Block Addr=%0d, Offset=%0d, Data=%h",
                                  thread, block_addr, block_offset,
@@ -621,8 +621,8 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                 for (int thread = 0; thread < WarpWidth; thread++) begin
                     if (non_zero_mask[thread]) begin
                         $display("\tThread %0d, Addr=%h Data=%h",
-                                 thread, eu_req.src_data[0][thread * RegWidth +: RegWidth],
-                                 eu_req.src_data[1][thread * RegWidth +: RegWidth]);
+                                 thread, eu_req.src_data[1][thread * RegWidth +: RegWidth],
+                                 eu_req.src_data[0][thread * RegWidth +: RegWidth]);
                     end
                 end
             end

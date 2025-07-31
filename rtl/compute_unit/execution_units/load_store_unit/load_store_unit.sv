@@ -173,10 +173,10 @@ module load_store_unit import bgpu_pkg::*; #(
     // # Combinational logic                                                                 #
     // #######################################################################################
 
-    // Operand 0 is the address for load/store operations
+    // Operand 1 is the address for load/store operations
     // Truncate to address width
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_addr
-        assign opc_to_eu_addr[i] = opc_to_eu_operands_i[0][i*RegWidth +: AddressWidth];
+        assign opc_to_eu_addr[i] = opc_to_eu_operands_i[1][i*RegWidth +: AddressWidth];
     end : gen_addr
 
     // Check if the instruction is a write
@@ -382,7 +382,7 @@ module load_store_unit import bgpu_pkg::*; #(
         .req_id_i     ( insert_buff_id                          ),
         .addr_valid_i ( opc_to_eu_act_mask_i                    ),
         .addr_i       ( opc_to_eu_addr                          ),
-        .wdata_i      ( opc_to_eu_operands_i[1]                 ),
+        .wdata_i      ( opc_to_eu_operands_i[0]                 ),
         .write_width_i( opc_to_eu_width                         ),
 
         .req_ready_i      ( wdata_to_cs_ready_q       ),

@@ -25,6 +25,7 @@ jobs:
               with:
                 name: cu-xilinx-synthesis-results-on-failure
                 path: |
+                    *.log
                     cu.vcd
                     xilinx/out/compute_unit_yosys.v
                     xilinx/yosys.f
@@ -50,6 +51,7 @@ jobs:
               with:
                 name: cc-xilinx-synthesis-results-on-failure
                 path: |
+                    *.log
                     cc.vcd
                     xilinx/out/compute_cluster_yosys.v
                     xilinx/yosys.f
@@ -79,6 +81,7 @@ jobs:
               with:
                 name: bgpu-xilinx-synthesis-results-on-failure
                 path: |
+                    *.log
                     bgpu_soc.vcd
                     xilinx/out/bgpu_soc_yosys.v
                     xilinx/yosys.f

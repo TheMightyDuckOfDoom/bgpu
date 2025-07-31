@@ -30,7 +30,7 @@ module bgpu_soc #(
     /// Number of warps per compute unit
     parameter int unsigned NumWarps = 1,
     /// Number of threads per warp
-    parameter int unsigned WarpWidth = 1,
+    parameter int unsigned WarpWidth = 4,
     /// Number of inflight instructions per warp
     parameter int unsigned InflightInstrPerWarp = 4,
     /// How many registers can each warp access as operand or destination, has to be 8
@@ -522,6 +522,7 @@ module bgpu_soc #(
             .IClineIdxBits         ( IClineIdxBits          ),
             .TblockIdxBits         ( TblockIdxBits          ),
             .TgroupIdBits          ( TgroupIdBits           ),
+            .ClusterId             ( i                      ),
 
             .imem_axi_req_t ( cc_imem_axi_req_t  ),
             .imem_axi_resp_t( cc_imem_axi_resp_t ),

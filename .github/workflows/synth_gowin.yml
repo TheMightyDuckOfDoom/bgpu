@@ -29,6 +29,7 @@ jobs:
               with:
                 name: cu-gowin-synthesis-results-on-failure
                 path: |
+                    *.log
                     cu.vcd
                     gowin/out/compute_unit_yosys.v
                     gowin/gowin-yosys.f
@@ -72,6 +73,7 @@ jobs:
               with:
                 name: cc-gowin-synthesis-results-on-failure
                 path: |
+                    *.log
                     cc.vcd
                     gowin/out/compute_cluster_yosys.v
                     gowin/gowin-yosys.f
@@ -120,6 +122,7 @@ jobs:
               with:
                 name: bgpu-gowin-synthesis-results-on-failure
                 path: |
+                    *.log
                     bgpu_soc.vcd
                     gowin/out/bgpu_soc_yosys.v
                     gowin/gowin-yosys.f

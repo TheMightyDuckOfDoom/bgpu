@@ -136,7 +136,7 @@ module multi_warp_its_unit #(
         for (int i = 0; i < NumWarps; i++) begin : update
             // If the warp is finished and all instructions are finished |-> deallocate the warp and notify
             if (warp_data_q[i].occupied && warp_finished[i]
-                && ib_all_instr_finished_i[i] && (!tblock_done_o)) begin
+                && ib_all_instr_finished_i[i]) begin
 
                 tblock_done_o    = 1'b1;
                 tblock_done_id_o = warp_data_q[i].tblock_id;
@@ -145,6 +145,8 @@ module multi_warp_its_unit #(
                 if (tblock_done_ready_i) begin
                     warp_data_d[i].occupied = 1'b0;
                 end
+
+                break; // No need to check further warps
             end
         end : update
     end : next_pc_ready_logic
