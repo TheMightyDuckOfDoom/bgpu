@@ -6,6 +6,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Verible Lint
         uses: chipsalliance/verible-linter-action@main
         with:
@@ -19,15 +24,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Verilator Lint
         run: make lint-verilator
 
   lint-license:
     name: Lint License Headers
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: lint license
-        uses: pulp-platform/pulp-actions/lint-license@v2
+        uses: pulp-platform/pulp-actions/lint-license@v2.4.3
         with:
           license: |
             Copyright (\d{4}(-\d{4})?\s)?(Tobias Senti|ETH Zurich and University of Bologna)

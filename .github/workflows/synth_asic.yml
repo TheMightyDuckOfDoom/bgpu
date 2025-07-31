@@ -6,6 +6,11 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@master
+            - name: Restore .bender from cache
+              uses: actions/cache@v4
+              with:
+                path: .bender
+                key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
             - name: Synthesis for ASIC
               run: make asic TOP=compute_unit
             - name: Report Area
@@ -16,6 +21,11 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@master
+            - name: Restore .bender from cache
+              uses: actions/cache@v4
+              with:
+                path: .bender
+                key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
             - name: Synthesis for ASIC
               run: make asic TOP=compute_cluster_synth_wrapper
             - name: Report Area
@@ -26,6 +36,11 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@master
+            - name: Restore .bender from cache
+              uses: actions/cache@v4
+              with:
+                path: .bender
+                key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
             - name: Synthesis for ASIC
               run: make asic TOP=bgpu_soc
             - name: Report Area
