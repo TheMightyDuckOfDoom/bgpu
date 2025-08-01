@@ -10,8 +10,8 @@
 
 /// BGPU SoC top-level module
 // Contains:
+// - Control Domain
 // - Compute Clusters
-// - JTAG debug interface
 // - Dummy Memory
 module bgpu_soc #(
     /// Width of the data bus to the memory controller
@@ -107,12 +107,8 @@ module bgpu_soc #(
     // Width of the memory axi id
     localparam int unsigned MemAxiIdWidth = $clog2(ComputeClusters) + MemCcAxiIdWidth;
 
-    // Width of the debug buses
-    localparam int unsigned DbgWidth = 32;
-
-    // OBI configuration for the debug interface
-    localparam obi_pkg::obi_cfg_t DbgObiCfg = obi_pkg::obi_default_cfg(AddressWidth + 1, DbgWidth,
-        MemAxiIdWidth, obi_pkg::ObiMinimalOptionalConfig);
+    // Width of the control domain buses
+    localparam int unsigned CtrlWidth = 32;
 
     // With of the Memory Controller AXI ID
     localparam int unsigned MctrlAxiIdWidth = MemAxiIdWidth + 2;
@@ -121,8 +117,6 @@ module bgpu_soc #(
     // # Typedefs                                                                            #
     // #######################################################################################
 
-    typedef logic [     DbgWidth-1:0] dbg_data_t;
-    typedef logic [   DbgWidth/8-1:0] dbg_be_t;
     typedef logic [ AddressWidth-1:0] addr_t;
     typedef logic [      PcWidth-1:0] pc_t;
     typedef logic [TblockIdxBits-1:0] tblock_idx_t;
@@ -175,39 +169,18 @@ module bgpu_soc #(
     // Memory Controller AXI types
     `AXI_TYPEDEF_ALL(mctrl_axi, mctrl_addr_t, mctrl_axi_id_t, mctrl_data_t, mctrl_strb_t, logic)
 
-    // Debug Manager OBI, Register Interface and AXI types
-    `OBI_TYPEDEF_DEFAULT_ALL(dbg_obi, DbgObiCfg)
-    `REG_BUS_TYPEDEF_ALL(dbg_req_reg, addr_t, dbg_data_t,
-        dbg_be_t)
-    `AXI_TYPEDEF_ALL(dbg_axi, addr_t, mem_axi_id_t, dbg_data_t, dbg_be_t, logic)
+    // Control Domain AXI types
+    typedef logic [  CtrlWidth-1:0] ctrl_data_t;
+    typedef logic [CtrlWidth/8-1:0] ctrl_be_t;
+
+    `AXI_TYPEDEF_ALL(ctrl_axi, addr_t, mem_axi_id_t, ctrl_data_t, ctrl_be_t, logic)
 
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
 
-    // Clock, reset and testmode
+    // Clock and Reset from Control Domain
     logic clk, rst_n;
-
-    // dbg req bus
-    dbg_obi_req_t dbg_req_obi_req, mctrl_obi_req, thread_engine_obi_req;
-    dbg_obi_rsp_t dbg_req_obi_rsp, mctrl_obi_rsp, thread_engine_obi_rsp;
-
-    // DMI signals
-    logic dmi_rst_n;
-
-    logic [DbgWidth-1:0] dm_master_addr;
-
-    logic         dmi_req_valid,  dmi_req_ready;
-    dm::dmi_req_t dmi_req;
-
-    logic          dmi_resp_valid, dmi_resp_ready;
-    dm::dmi_resp_t dmi_resp;
-
-    dbg_req_reg_req_t dbg_req_reg_req;
-    dbg_req_reg_rsp_t dbg_req_reg_rsp;
-
-    dbg_axi_req_t  dbg_axi_req;
-    dbg_axi_resp_t dbg_axi_rsp;
 
     /// Compute Cluster signals
 
@@ -244,213 +217,44 @@ module bgpu_soc #(
     logic       [ComputeClusters-1:0] cc_done, cc_done_ready;
     tgroup_id_t [ComputeClusters-1:0] cc_done_id;
 
+    // Control Domain AXI
+    ctrl_axi_req_t  ctrl_axi_req;
+    ctrl_axi_resp_t ctrl_axi_rsp;
+
     /// Memory Controller signals
-    mctrl_mem_axi_req_t  mem_mctrl_axi_req, imem_mctrl_axi_req, dbg_mctrl_axi_req;
-    mctrl_mem_axi_resp_t mem_mctrl_axi_rsp, imem_mctrl_axi_rsp, dbg_mctrl_axi_rsp;
+    mctrl_mem_axi_req_t  mem_mctrl_axi_req, imem_mctrl_axi_req, ctrl_mctrl_axi_req;
+    mctrl_mem_axi_resp_t mem_mctrl_axi_rsp, imem_mctrl_axi_rsp, ctrl_mctrl_axi_rsp;
 
     mctrl_axi_req_t  mctrl_axi_req;
     mctrl_axi_resp_t mctrl_axi_rsp;
 
     // #######################################################################################
-    // # Clock and Reset                                                                     #
+    // # Control Domain                                                                      #
     // #######################################################################################
 
-    assign clk   = clk_i;
-    assign rst_n = rst_ni;
-
-    // #######################################################################################
-    // # JTAG Debug Interface                                                                #
-    // #######################################################################################
-
-    dmi_jtag #(
-        .IdcodeValue( 32'h00000DB3 )
-    ) i_dmi_jtag (
-        .clk_i     ( clk        ),
-        .rst_ni    ( rst_n      ),
-        .testmode_i( testmode_i ),
-
-        .dmi_rst_no     ( dmi_rst_n      ),
-        .dmi_req_o      ( dmi_req        ),
-        .dmi_req_valid_o( dmi_req_valid  ),
-        .dmi_req_ready_i( dmi_req_ready  ),
-
-        .dmi_resp_i      ( dmi_resp       ),
-        .dmi_resp_ready_o( dmi_resp_ready ),
-        .dmi_resp_valid_i( dmi_resp_valid ),
-
-        .tck_i   ( jtag_tck_i   ),
-        .tms_i   ( jtag_tms_i   ),
-        .trst_ni ( jtag_trst_ni ),
-        .td_i    ( jtag_tdi_i   ),
-        .td_o    ( jtag_tdo_o   ),
-        .tdo_oe_o( /* Unused */ )
-    );
-
-    dm_obi_top #(
-        .BusWidth( DbgWidth ),
-        .IdWidth ( 1        )
-    ) i_dm_top (
-        .clk_i     ( clk        ),
-        .rst_ni    ( rst_n      ),
-        .testmode_i( testmode_i ),
-
-        .ndmreset_o   ( /* Unused */ ),
-        .dmactive_o   ( /* Unused */ ),
-        .debug_req_o  ( /* Unused */ ),
-        .unavailable_i( 1'b0         ),
-        .hartinfo_i   ( '0           ),
-
-        .slave_req_i   ( 1'b0         ),
-        .slave_we_i    ( 1'b0         ),
-        .slave_addr_i  ( '0           ),
-        .slave_be_i    ( '0           ),
-        .slave_wdata_i ( '0           ),
-        .slave_aid_i   ( '0           ),
-        .slave_gnt_o   ( /* Unused */ ),
-        .slave_rvalid_o( /* Unused */ ),
-        .slave_rdata_o ( /* Unused */ ),
-        .slave_rid_o   ( /* Unused */ ),
-
-        .master_req_o      ( dbg_req_obi_req.req     ),
-        .master_addr_o     ( dm_master_addr          ),
-        .master_we_o       ( dbg_req_obi_req.a.we    ),
-        .master_wdata_o    ( dbg_req_obi_req.a.wdata ),
-        .master_be_o       ( dbg_req_obi_req.a.be    ),
-        .master_gnt_i      ( dbg_req_obi_rsp.gnt     ),
-        .master_rvalid_i   ( dbg_req_obi_rsp.rvalid  ),
-        .master_rdata_i    ( dbg_req_obi_rsp.r.rdata ),
-        .master_err_i      ( dbg_req_obi_rsp.r.err   ),
-        .master_other_err_i( 1'b0                    ),
-
-        .dmi_rst_ni     ( dmi_rst_n     ),
-        .dmi_req_valid_i( dmi_req_valid ),
-        .dmi_req_ready_o( dmi_req_ready ),
-        .dmi_req_i      ( dmi_req       ),
-
-        .dmi_resp_valid_o( dmi_resp_valid ),
-        .dmi_resp_ready_i( dmi_resp_ready ),
-        .dmi_resp_o      ( dmi_resp       )
-    );
-
-    // Assign additional signals
-    assign dbg_req_obi_req.a.addr       = dm_master_addr[AddressWidth:0];
-    assign dbg_req_obi_req.a.aid        = '0;
-    assign dbg_req_obi_req.a.a_optional = '0;
-
-    // OBI Demux
-    obi_demux #(
-        .ObiCfg     ( DbgObiCfg     ),
-        .obi_req_t  ( dbg_obi_req_t ),
-        .obi_rsp_t  ( dbg_obi_rsp_t ),
-        .NumMgrPorts( 2             ),
-        .NumMaxTrans( 1             )
-    ) i_obi_demux (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
-
-        .sbr_port_select_i( dbg_req_obi_req.a.addr[AddressWidth] ),
-        .sbr_port_req_i   ( dbg_req_obi_req ),
-        .sbr_port_rsp_o   ( dbg_req_obi_rsp ),
-
-        .mgr_ports_req_o( {thread_engine_obi_req, mctrl_obi_req} ),
-        .mgr_ports_rsp_i( {thread_engine_obi_rsp, mctrl_obi_rsp} )
-    );
-
-    // Convert OBI request to Register Interface
-    periph_to_reg #(
-        .AW   ( AddressWidth      ),
-        .DW   ( DbgWidth          ),
-        .BW   ( 8                 ),
-        .IW   ( MemAxiIdWidth     ),
-        .req_t( dbg_req_reg_req_t ),
-        .rsp_t( dbg_req_reg_rsp_t )
-    ) i_dmi_obi_to_reg (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
-
-        .req_i  ( mctrl_obi_req.req     ),
-        .add_i  ( mctrl_obi_req.a.addr[AddressWidth-1:0] ),
-        .wen_i  ( ~mctrl_obi_req.a.we   ),
-        .wdata_i( mctrl_obi_req.a.wdata ),
-        .be_i   ( mctrl_obi_req.a.be    ),
-        .id_i   ( mctrl_obi_req.a.aid   ),
-
-        .gnt_o    ( mctrl_obi_rsp.gnt     ),
-        .r_rdata_o( mctrl_obi_rsp.r.rdata ),
-        .r_opc_o  ( mctrl_obi_rsp.r.err   ),
-        .r_id_o   ( mctrl_obi_rsp.r.rid   ),
-        .r_valid_o( mctrl_obi_rsp.rvalid  ),
-
-        .reg_req_o( dbg_req_reg_req ),
-        .reg_rsp_i( dbg_req_reg_rsp )
-    );
-    assign mctrl_obi_rsp.r.r_optional = '0;
-
-    // Convert Register Interface to AXI
-    reg_to_axi #(
-        .DataWidth( DbgWidth          ),
-        .reg_req_t( dbg_req_reg_req_t ),
-        .reg_rsp_t( dbg_req_reg_rsp_t ),
-        .axi_req_t( dbg_axi_req_t     ),
-        .axi_rsp_t( dbg_axi_resp_t    )
-    ) i_dmi_reg_to_axi (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
-
-        .reg_req_i( dbg_req_reg_req ),
-        .reg_rsp_o( dbg_req_reg_rsp ),
-
-        .axi_req_o( dbg_axi_req ),
-        .axi_rsp_i( dbg_axi_rsp )
-    );
-
-    // Adjust Data width to match the memory controller
-    axi_dw_converter #(
-        .AxiMaxReads        ( 1                       ),
-        .AxiSlvPortDataWidth( DbgWidth                ),
-        .AxiMstPortDataWidth( MctrlWidth              ),
-        .AxiAddrWidth       ( AddressWidth            ),
-        .AxiIdWidth         ( MemAxiIdWidth           ),
-        .aw_chan_t          ( mctrl_mem_axi_aw_chan_t ),
-        .mst_w_chan_t       ( mctrl_mem_axi_w_chan_t  ),
-        .slv_w_chan_t       ( dbg_axi_w_chan_t        ),
-        .b_chan_t           ( mctrl_mem_axi_b_chan_t  ),
-        .ar_chan_t          ( mctrl_mem_axi_ar_chan_t ),
-        .mst_r_chan_t       ( mctrl_mem_axi_r_chan_t  ),
-        .slv_r_chan_t       ( dbg_axi_r_chan_t        ),
-        .axi_mst_req_t      ( mctrl_mem_axi_req_t     ),
-        .axi_mst_resp_t     ( mctrl_mem_axi_resp_t    ),
-        .axi_slv_req_t      ( dbg_axi_req_t           ),
-        .axi_slv_resp_t     ( dbg_axi_resp_t          )
-    ) i_dbg_dw_conv (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
-
-        .slv_req_i ( dbg_axi_req ),
-        .slv_resp_o( dbg_axi_rsp ),
-
-        .mst_req_o ( dbg_mctrl_axi_req ),
-        .mst_resp_i( dbg_mctrl_axi_rsp )
-    );
-
-    // #######################################################################################
-    // # Thread Engine                                                                       #
-    // #######################################################################################
-
-    obi_thread_engine #(
+    control_domain #(
+        .CtrlWidth    ( CtrlWidth     ),
+        .AxiIdWidth   ( MemAxiIdWidth ),
         .PcWidth      ( PcWidth       ),
         .AddressWidth ( AddressWidth  ),
         .TblockIdxBits( TblockIdxBits ),
         .TgroupIdBits ( TgroupIdBits  ),
-        .ObiCfg       ( DbgObiCfg     ),
-        .obi_req_t    ( dbg_obi_req_t ),
-        .obi_rsp_t    ( dbg_obi_rsp_t )
-    ) i_thread_engine (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
 
-        .obi_req_i( thread_engine_obi_req ),
-        .obi_rsp_o( thread_engine_obi_rsp ),
+        .axi_req_t ( ctrl_axi_req_t  ),
+        .axi_resp_t( ctrl_axi_resp_t )
+    ) i_ctrl_domain (
+        .clk_i ( clk_i  ),
+        .clk_o ( clk    ),
+        .rst_ni( rst_ni ),
+        .rst_no( rst_n  ),
+
+        .testmode_i( testmode_i ),
+
+        .jtag_tck_i  ( jtag_tck_i   ),
+        .jtag_tdi_i  ( jtag_tdi_i   ),
+        .jtag_tdo_o  ( jtag_tdo_o   ),
+        .jtag_tms_i  ( jtag_tms_i   ),
+        .jtag_trst_ni( jtag_trst_ni ),
 
         .warp_free_i          ( warp_free              ),
         .allocate_warp_o      ( allocate_warp          ),
@@ -461,7 +265,42 @@ module bgpu_soc #(
 
         .tblock_done_ready_o( tblock_done_ready ),
         .tblock_done_i      ( tblock_done       ),
-        .tblock_done_id_i   ( tblock_done_id    )
+        .tblock_done_id_i   ( tblock_done_id    ),
+
+        .axi_req_o( ctrl_axi_req ),
+        .axi_rsp_i( ctrl_axi_rsp )
+    );
+
+    // #######################################################################################
+    // # Adjust AXI width of Control Domain                                                  #
+    // #######################################################################################
+
+    axi_dw_converter #(
+        .AxiMaxReads        ( 1                       ),
+        .AxiSlvPortDataWidth( CtrlWidth               ),
+        .AxiMstPortDataWidth( MctrlWidth              ),
+        .AxiAddrWidth       ( AddressWidth            ),
+        .AxiIdWidth         ( MemAxiIdWidth           ),
+        .aw_chan_t          ( mctrl_mem_axi_aw_chan_t ),
+        .mst_w_chan_t       ( mctrl_mem_axi_w_chan_t  ),
+        .slv_w_chan_t       ( ctrl_axi_w_chan_t       ),
+        .b_chan_t           ( mctrl_mem_axi_b_chan_t  ),
+        .ar_chan_t          ( mctrl_mem_axi_ar_chan_t ),
+        .mst_r_chan_t       ( mctrl_mem_axi_r_chan_t  ),
+        .slv_r_chan_t       ( ctrl_axi_r_chan_t       ),
+        .axi_mst_req_t      ( mctrl_mem_axi_req_t     ),
+        .axi_mst_resp_t     ( mctrl_mem_axi_resp_t    ),
+        .axi_slv_req_t      ( ctrl_axi_req_t          ),
+        .axi_slv_resp_t     ( ctrl_axi_resp_t         )
+    ) i_ctrl_dw_conv (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
+
+        .slv_req_i ( ctrl_axi_req ),
+        .slv_resp_o( ctrl_axi_rsp ),
+
+        .mst_req_o ( ctrl_mctrl_axi_req ),
+        .mst_resp_i( ctrl_mctrl_axi_rsp )
     );
 
     // #######################################################################################
@@ -790,8 +629,8 @@ module bgpu_soc #(
         .rst_ni( rst_n      ),
         .test_i( testmode_i ),
 
-        .slv_reqs_i ( {imem_mctrl_axi_req, mem_mctrl_axi_req, dbg_mctrl_axi_req} ),
-        .slv_resps_o( {imem_mctrl_axi_rsp, mem_mctrl_axi_rsp, dbg_mctrl_axi_rsp} ),
+        .slv_reqs_i ( {imem_mctrl_axi_req, mem_mctrl_axi_req, ctrl_mctrl_axi_req} ),
+        .slv_resps_o( {imem_mctrl_axi_rsp, mem_mctrl_axi_rsp, ctrl_mctrl_axi_rsp} ),
 
         .mst_req_o ( mctrl_axi_req ),
         .mst_resp_i( mctrl_axi_rsp )

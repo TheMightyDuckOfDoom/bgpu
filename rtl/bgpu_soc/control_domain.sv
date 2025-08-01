@@ -1,0 +1,325 @@
+// Copyright 2025 Tobias Senti
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+
+/// Control domain for the BGPU SoC
+// Contains:
+// - Clock and Reset Management
+// - JTAG Debug Module
+// - CVE2 Management CPU
+// - Thread Engine
+// - OBI Crossbar
+module control_domain #(
+    /// Width of the Control Domain Bus
+    parameter int CtrlWidth = 32,
+    /// Width of the AXI ID
+    parameter int AxiIdWidth = 1,
+    /// Width of the Program Counter
+    parameter int unsigned PcWidth = 16,
+    // Memory Address width in bits
+    parameter int unsigned AddressWidth = 32,
+    // How many bits are used to index thread blocks inside a thread group?
+    parameter int unsigned TblockIdxBits = 8,
+    // How many bits are used to identify a thread group?
+    parameter int unsigned TgroupIdBits = 8,
+
+    /// AXI Interface
+    parameter type axi_req_t  = logic,
+    parameter type axi_resp_t = logic,
+
+    /// Dependent parameter, do **not** overwrite.
+    parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
+    parameter type tgroup_id_t  = logic [ TgroupIdBits-1:0],
+    parameter type addr_t       = logic [ AddressWidth-1:0],
+    parameter type pc_t         = logic [      PcWidth-1:0]
+)(
+    // Clock and reset
+    input  logic clk_i,
+    output logic clk_o,
+    input  logic rst_ni,
+    output logic rst_no,
+
+    // Testmode
+    input logic testmode_i,
+
+    /// JTAG interface
+    input  logic jtag_tck_i,
+    input  logic jtag_tdi_i,
+    output logic jtag_tdo_o,
+    input  logic jtag_tms_i,
+    input  logic jtag_trst_ni,
+
+    // Interface to start a new thread block -> to compute clusters
+    input  logic        warp_free_i, // The is atleas one free warp that can start a new block
+    output logic        allocate_warp_o,
+    output pc_t         allocate_pc_o,
+    output addr_t       allocate_dp_addr_o, // Data / Parameter address
+    output tblock_idx_t allocate_tblock_idx_o, // Block index -> used to calculate the thread id
+    output tgroup_id_t  allocate_tgroup_id_o, // Block id -> unique identifier for the block
+
+    // Thread block completion
+    output logic       tblock_done_ready_o,
+    input  logic       tblock_done_i,
+    input  tgroup_id_t tblock_done_id_i,
+
+    /// AXI Interface to BGPU Domain
+    output axi_req_t  axi_req_o,
+    input  axi_resp_t axi_rsp_i
+);
+    // #######################################################################################
+    // # Local Parameters                                                                    #
+    // #######################################################################################
+
+    // OBI configuration for the debug interface
+    localparam obi_pkg::obi_cfg_t ObiCfg = obi_pkg::obi_default_cfg(AddressWidth + 1, CtrlWidth,
+        AxiIdWidth, obi_pkg::ObiMinimalOptionalConfig);
+
+    // #######################################################################################
+    // # Typedefs                                                                            #
+    // #######################################################################################
+
+    typedef logic [  CtrlWidth-1:0] data_t;
+    typedef logic [CtrlWidth/8-1:0] be_t;
+
+    // OBI
+    `OBI_TYPEDEF_DEFAULT_ALL(obi, ObiCfg)
+
+    // Register Interface -> to BGPU Domain
+    `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, be_t)
+
+    // #######################################################################################
+    // # Signals                                                                             #
+    // #######################################################################################
+
+    // DMI signals
+    logic dmi_rst_n;
+
+    logic [CtrlWidth-1:0] dm_master_addr, dm_slave_addr;
+
+    logic         dmi_req_valid,  dmi_req_ready;
+    dm::dmi_req_t dmi_req;
+
+    logic          dmi_resp_valid, dmi_resp_ready;
+    dm::dmi_resp_t dmi_resp;
+
+    // OBI signals
+    obi_req_t dbg_req_obi_req, dbg_rsp_obi_req, thread_engine_obi_req, bgpu_obi_req;
+    obi_rsp_t dbg_req_obi_rsp, dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp;
+
+    // Register Interface signals
+    reg_req_t bgpu_reg_req;
+    reg_rsp_t bgpu_reg_rsp;
+
+    // #######################################################################################
+    // # Clock and Reset                                                                     #
+    // #######################################################################################
+
+    assign clk_o  = clk_i;
+    assign rst_no = rst_ni;
+
+    // #######################################################################################
+    // # JTAG Debug Interface                                                                #
+    // #######################################################################################
+
+    dmi_jtag #(
+        .IdcodeValue( 32'h00000DB3 )
+    ) i_dmi_jtag (
+        .clk_i     ( clk_o      ),
+        .rst_ni    ( rst_no     ),
+        .testmode_i( testmode_i ),
+
+        .dmi_rst_no     ( dmi_rst_n      ),
+        .dmi_req_o      ( dmi_req        ),
+        .dmi_req_valid_o( dmi_req_valid  ),
+        .dmi_req_ready_i( dmi_req_ready  ),
+
+        .dmi_resp_i      ( dmi_resp       ),
+        .dmi_resp_ready_o( dmi_resp_ready ),
+        .dmi_resp_valid_i( dmi_resp_valid ),
+
+        .tck_i   ( jtag_tck_i   ),
+        .tms_i   ( jtag_tms_i   ),
+        .trst_ni ( jtag_trst_ni ),
+        .td_i    ( jtag_tdi_i   ),
+        .td_o    ( jtag_tdo_o   ),
+        .tdo_oe_o( /* Unused */ )
+    );
+
+    dm_obi_top #(
+        .BusWidth( CtrlWidth  ),
+        .IdWidth ( AxiIdWidth )
+    ) i_dm_top (
+        .clk_i     ( clk_o      ),
+        .rst_ni    ( rst_no     ),
+        .testmode_i( testmode_i ),
+
+        .ndmreset_o   ( /* Unused */ ),
+        .dmactive_o   ( /* Unused */ ),
+        .debug_req_o  ( /* Unused */ ),
+        .unavailable_i( 1'b0         ),
+        .hartinfo_i   ( '0           ),
+
+        // From Crossbar
+        .slave_req_i   ( dbg_rsp_obi_req.req     ),
+        .slave_we_i    ( dbg_rsp_obi_req.a.we    ),
+        .slave_addr_i  ( dm_slave_addr           ),
+        .slave_be_i    ( dbg_rsp_obi_req.a.be    ),
+        .slave_wdata_i ( dbg_rsp_obi_req.a.wdata ),
+        .slave_aid_i   ( dbg_rsp_obi_req.a.aid   ),
+        .slave_gnt_o   ( dbg_rsp_obi_rsp.gnt     ),
+        .slave_rvalid_o( dbg_rsp_obi_rsp.rvalid  ),
+        .slave_rdata_o ( dbg_rsp_obi_rsp.r.rdata ),
+        .slave_rid_o   ( dbg_rsp_obi_rsp.r.rid   ),
+
+        // To Crossbar
+        .master_req_o      ( dbg_req_obi_req.req     ),
+        .master_addr_o     ( dm_master_addr          ),
+        .master_we_o       ( dbg_req_obi_req.a.we    ),
+        .master_wdata_o    ( dbg_req_obi_req.a.wdata ),
+        .master_be_o       ( dbg_req_obi_req.a.be    ),
+        .master_gnt_i      ( dbg_req_obi_rsp.gnt     ),
+        .master_rvalid_i   ( dbg_req_obi_rsp.rvalid  ),
+        .master_rdata_i    ( dbg_req_obi_rsp.r.rdata ),
+        .master_err_i      ( dbg_req_obi_rsp.r.err   ),
+        .master_other_err_i( 1'b0                    ),
+
+        .dmi_rst_ni     ( dmi_rst_n     ),
+        .dmi_req_valid_i( dmi_req_valid ),
+        .dmi_req_ready_o( dmi_req_ready ),
+        .dmi_req_i      ( dmi_req       ),
+
+        .dmi_resp_valid_o( dmi_resp_valid ),
+        .dmi_resp_ready_i( dmi_resp_ready ),
+        .dmi_resp_o      ( dmi_resp       )
+    );
+
+    // Assign additional signals
+    assign dbg_req_obi_req.a.addr       = dm_master_addr[AddressWidth:0];
+    assign dbg_req_obi_req.a.aid        = '0;
+    assign dbg_req_obi_req.a.a_optional = '0;
+
+    always_comb begin : build_dm_slave_addr
+        dm_slave_addr = '0;
+        dm_slave_addr[AddressWidth-1:0] = dbg_rsp_obi_req.a.addr[AddressWidth-1:0];
+    end : build_dm_slave_addr
+
+    // #######################################################################################
+    // # Thread Engine                                                                       #
+    // #######################################################################################
+
+    obi_thread_engine #(
+        .PcWidth      ( PcWidth       ),
+        .AddressWidth ( AddressWidth  ),
+        .TblockIdxBits( TblockIdxBits ),
+        .TgroupIdBits ( TgroupIdBits  ),
+        .ObiCfg       ( ObiCfg        ),
+        .obi_req_t    ( obi_req_t     ),
+        .obi_rsp_t    ( obi_rsp_t     )
+    ) i_thread_engine (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .obi_req_i( thread_engine_obi_req ),
+        .obi_rsp_o( thread_engine_obi_rsp ),
+
+        .warp_free_i          ( warp_free_i           ),
+        .allocate_warp_o      ( allocate_warp_o       ),
+        .allocate_pc_o        ( allocate_pc_o         ),
+        .allocate_dp_addr_o   ( allocate_dp_addr_o    ),
+        .allocate_tblock_idx_o( allocate_tblock_idx_o ),
+        .allocate_tgroup_id_o ( allocate_tgroup_id_o  ),
+
+        .tblock_done_ready_o( tblock_done_ready_o ),
+        .tblock_done_i      ( tblock_done_i       ),
+        .tblock_done_id_i   ( tblock_done_id_i    )
+    );
+
+    // #######################################################################################
+    // # OBI Crossnbar                                                                       #
+    // #######################################################################################
+
+    // OBI Demux
+    obi_demux #(
+        .ObiCfg     ( ObiCfg    ),
+        .obi_req_t  ( obi_req_t ),
+        .obi_rsp_t  ( obi_rsp_t ),
+        .NumMgrPorts( 2         ),
+        .NumMaxTrans( 1         )
+    ) i_obi_demux (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .sbr_port_select_i( dbg_req_obi_req.a.addr[AddressWidth] ),
+        .sbr_port_req_i   ( dbg_req_obi_req ),
+        .sbr_port_rsp_o   ( dbg_req_obi_rsp ),
+
+        .mgr_ports_req_o( {thread_engine_obi_req, bgpu_obi_req} ),
+        .mgr_ports_rsp_i( {thread_engine_obi_rsp, bgpu_obi_rsp} )
+    );
+
+    // #######################################################################################
+    // # OBI2AXI Converter to access BGPU Domain                                             #
+    // #######################################################################################
+
+    // Convert OBI request to Register Interface
+    periph_to_reg #(
+        .AW   ( AddressWidth ),
+        .DW   ( CtrlWidth    ),
+        .BW   ( 8            ),
+        .IW   ( AxiIdWidth   ),
+        .req_t( reg_req_t    ),
+        .rsp_t( reg_rsp_t    )
+    ) i_obi_to_reg (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .req_i  ( bgpu_obi_req.req     ),
+        .add_i  ( bgpu_obi_req.a.addr[AddressWidth-1:0] ),
+        .wen_i  ( ~bgpu_obi_req.a.we   ),
+        .wdata_i( bgpu_obi_req.a.wdata ),
+        .be_i   ( bgpu_obi_req.a.be    ),
+        .id_i   ( bgpu_obi_req.a.aid   ),
+
+        .gnt_o    ( bgpu_obi_rsp.gnt     ),
+        .r_rdata_o( bgpu_obi_rsp.r.rdata ),
+        .r_opc_o  ( bgpu_obi_rsp.r.err   ),
+        .r_id_o   ( bgpu_obi_rsp.r.rid   ),
+        .r_valid_o( bgpu_obi_rsp.rvalid  ),
+
+        .reg_req_o( bgpu_reg_req ),
+        .reg_rsp_i( bgpu_reg_rsp )
+    );
+    assign bgpu_obi_rsp.r.r_optional = '0;
+
+    // Convert Register Interface to AXI
+    reg_to_axi #(
+        .DataWidth( CtrlWidth   ),
+        .reg_req_t( reg_req_t   ),
+        .reg_rsp_t( reg_rsp_t   ),
+        .axi_req_t( axi_req_t   ),
+        .axi_rsp_t( axi_resp_t  )
+    ) i_reg_to_axi (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .reg_req_i( bgpu_reg_req ),
+        .reg_rsp_o( bgpu_reg_rsp ),
+
+        .axi_req_o( axi_req_o ),
+        .axi_rsp_i( axi_rsp_i )
+    );
+
+    // #######################################################################################
+    // # Assertions                                                                          #
+    // #######################################################################################
+
+`ifndef SYNTHESIS
+    // Currently only 32-bit control domain is supported
+    initial assert(CtrlWidth == 32)
+        else $error("CtrlWidth must be 32 bits");
+
+    // We use MSB to identify peripherals
+    initial assert(AddressWidth < CtrlWidth)
+        else $error("AddressWidth must be smaller than CtrlWidth");
+`endif
+endmodule : control_domain

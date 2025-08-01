@@ -60,6 +60,7 @@ sources:
 
           - rtl/bgpu_soc/thread_dispatcher.sv
           - rtl/bgpu_soc/obi_thread_engine.sv
+          - rtl/bgpu_soc/control_domain.sv
           - rtl/bgpu_soc/bgpu_soc.sv
 
     - target: any(sim, gowin_sim, xilinx_sim)
