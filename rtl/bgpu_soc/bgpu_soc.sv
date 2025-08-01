@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: SHL-0.51
 
 `include "axi/typedef.svh"
-`include "obi/typedef.svh"
-`include "register_interface/typedef.svh"
 
 `include "common_cells/registers.svh"
 

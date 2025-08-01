@@ -2,6 +2,9 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "obi/typedef.svh"
+`include "register_interface/typedef.svh"
+
 /// Control domain for the BGPU SoC
 // Contains:
 // - Clock and Reset Management
@@ -70,9 +73,16 @@ module control_domain #(
     // # Local Parameters                                                                    #
     // #######################################################################################
 
-    // OBI configuration for the debug interface
-    localparam obi_pkg::obi_cfg_t ObiCfg = obi_pkg::obi_default_cfg(AddressWidth + 1, CtrlWidth,
-        AxiIdWidth, obi_pkg::ObiMinimalOptionalConfig);
+    // Upstream of the OBI Crossbar -> to Crossbar
+    localparam obi_pkg::obi_cfg_t XUpsObiCfg = obi_pkg::obi_default_cfg(AddressWidth + 1, CtrlWidth,
+        1, obi_pkg::ObiMinimalOptionalConfig);
+
+    // Downstream of the OBI Crossbar -> from Crossbar
+    localparam obi_pkg::obi_cfg_t XDwnObiCfg = obi_pkg::obi_default_cfg(AddressWidth + 1, CtrlWidth,
+        3, obi_pkg::ObiMinimalOptionalConfig);
+
+    // Number of address rules for the OBI Crossbar
+    localparam int unsigned NumAddrRules = 3;
 
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -82,10 +92,18 @@ module control_domain #(
     typedef logic [CtrlWidth/8-1:0] be_t;
 
     // OBI
-    `OBI_TYPEDEF_DEFAULT_ALL(obi, ObiCfg)
+    `OBI_TYPEDEF_DEFAULT_ALL(xups_obi, XUpsObiCfg)
+    `OBI_TYPEDEF_DEFAULT_ALL(xdwn_obi, XDwnObiCfg)
 
     // Register Interface -> to BGPU Domain
     `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, be_t)
+
+    // Address Map
+    typedef struct packed {
+      logic [31:0] idx;
+      logic [AddressWidth:0] start_addr;
+      logic [AddressWidth:0] end_addr;
+    } addr_map_rule_t;
 
     // #######################################################################################
     // # Signals                                                                             #
@@ -103,12 +121,18 @@ module control_domain #(
     dm::dmi_resp_t dmi_resp;
 
     // OBI signals
-    obi_req_t dbg_req_obi_req, dbg_rsp_obi_req, thread_engine_obi_req, bgpu_obi_req;
-    obi_rsp_t dbg_req_obi_rsp, dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp;
+    xups_obi_req_t dbg_req_obi_req, cpu_imem_obi_req, cpu_dmem_obi_req;
+    xups_obi_rsp_t dbg_req_obi_rsp, cpu_imem_obi_rsp, cpu_dmem_obi_rsp;
+
+    xdwn_obi_req_t dbg_rsp_obi_req, thread_engine_obi_req, bgpu_obi_req, err_obi_req;
+    xdwn_obi_rsp_t dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp, err_obi_rsp;
 
     // Register Interface signals
     reg_req_t bgpu_reg_req;
     reg_rsp_t bgpu_reg_rsp;
+
+    // Address Map
+    addr_map_rule_t [NumAddrRules-1:0] ObiAddrMap;
 
     // #######################################################################################
     // # Clock and Reset                                                                     #
@@ -121,6 +145,7 @@ module control_domain #(
     // # JTAG Debug Interface                                                                #
     // #######################################################################################
 
+    // JTAG TAP
     dmi_jtag #(
         .IdcodeValue( 32'h00000DB3 )
     ) i_dmi_jtag (
@@ -145,9 +170,20 @@ module control_domain #(
         .tdo_oe_o( /* Unused */ )
     );
 
+    // Hart Info
+    dm::hartinfo_t hartinfo = '{
+        zero1:      '0,
+        nscratch:   2,
+        zero0:      '0,
+        dataaccess: 1'b1,
+        datasize:   dm::DataCount,
+        dataaddr:   dm::DataAddr
+    };
+
+    // Debug Module
     dm_obi_top #(
-        .BusWidth( CtrlWidth  ),
-        .IdWidth ( AxiIdWidth )
+        .BusWidth( CtrlWidth          ),
+        .IdWidth ( XDwnObiCfg.IdWidth )
     ) i_dm_top (
         .clk_i     ( clk_o      ),
         .rst_ni    ( rst_no     ),
@@ -157,7 +193,7 @@ module control_domain #(
         .dmactive_o   ( /* Unused */ ),
         .debug_req_o  ( /* Unused */ ),
         .unavailable_i( 1'b0         ),
-        .hartinfo_i   ( '0           ),
+        .hartinfo_i   ( hartinfo     ),
 
         // From Crossbar
         .slave_req_i   ( dbg_rsp_obi_req.req     ),
@@ -208,13 +244,13 @@ module control_domain #(
     // #######################################################################################
 
     obi_thread_engine #(
-        .PcWidth      ( PcWidth       ),
-        .AddressWidth ( AddressWidth  ),
-        .TblockIdxBits( TblockIdxBits ),
-        .TgroupIdBits ( TgroupIdBits  ),
-        .ObiCfg       ( ObiCfg        ),
-        .obi_req_t    ( obi_req_t     ),
-        .obi_rsp_t    ( obi_rsp_t     )
+        .PcWidth      ( PcWidth        ),
+        .AddressWidth ( AddressWidth   ),
+        .TblockIdxBits( TblockIdxBits  ),
+        .TgroupIdBits ( TgroupIdBits   ),
+        .ObiCfg       ( XDwnObiCfg     ),
+        .obi_req_t    ( xdwn_obi_req_t ),
+        .obi_rsp_t    ( xdwn_obi_rsp_t )
     ) i_thread_engine (
         .clk_i ( clk_o  ),
         .rst_ni( rst_no ),
@@ -235,26 +271,77 @@ module control_domain #(
     );
 
     // #######################################################################################
-    // # OBI Crossnbar                                                                       #
+    // # Management CPU                                                                       #
     // #######################################################################################
 
-    // OBI Demux
-    obi_demux #(
-        .ObiCfg     ( ObiCfg    ),
-        .obi_req_t  ( obi_req_t ),
-        .obi_rsp_t  ( obi_rsp_t ),
-        .NumMgrPorts( 2         ),
-        .NumMaxTrans( 1         )
-    ) i_obi_demux (
+    // For now, we do not have a management CPU
+    assign cpu_imem_obi_req = '0;
+    assign cpu_dmem_obi_req = '0;
+
+    // #######################################################################################
+    // # OBI Crossbar                                                                        #
+    // #######################################################################################
+
+    /// Build Address Map
+
+    // BGPU Domain
+    assign ObiAddrMap[0] = '{ idx: 1, start_addr: '0, end_addr: {1'b0, {AddressWidth{1'b1}}} };
+
+    // Thread Engine
+    assign ObiAddrMap[1] = '{ idx: 2, start_addr: {1'b1, {AddressWidth{1'b1}}} - 'h100,
+        end_addr: {1'b1, {AddressWidth{1'b1}}}};
+
+    // Debug Interface
+    assign ObiAddrMap[2] = '{ idx: 2, start_addr: {1'b1, {AddressWidth{1'b0}}},
+        end_addr: {1'b1, {AddressWidth{1'b0}}} + 'h4000 };
+
+    // Crossbar
+    obi_xbar #(
+        .SbrPortObiCfg     ( XUpsObiCfg        ),
+        .MgrPortObiCfg     ( XDwnObiCfg        ),
+        .sbr_port_obi_req_t( xups_obi_req_t    ),
+        .sbr_port_a_chan_t ( xups_obi_a_chan_t ),
+        .sbr_port_obi_rsp_t( xups_obi_rsp_t    ),
+        .sbr_port_r_chan_t ( xups_obi_r_chan_t ),
+        .mgr_port_obi_req_t( xdwn_obi_req_t    ),
+        .mgr_port_obi_rsp_t( xdwn_obi_rsp_t    ),
+        .NumSbrPorts       ( 3                 ),
+        .NumMgrPorts       ( NumAddrRules + 1  ),
+        .NumAddrRules      ( NumAddrRules      ),
+        .addr_map_rule_t   ( addr_map_rule_t   ),
+        .UseIdForRouting   ( 1'b1              )
+    ) i_obi_xbar (
         .clk_i ( clk_o  ),
         .rst_ni( rst_no ),
 
-        .sbr_port_select_i( dbg_req_obi_req.a.addr[AddressWidth] ),
-        .sbr_port_req_i   ( dbg_req_obi_req ),
-        .sbr_port_rsp_o   ( dbg_req_obi_rsp ),
+        .testmode_i( testmode_i ),
 
-        .mgr_ports_req_o( {thread_engine_obi_req, bgpu_obi_req} ),
-        .mgr_ports_rsp_i( {thread_engine_obi_rsp, bgpu_obi_rsp} )
+        .sbr_ports_req_i( { dbg_req_obi_req, cpu_imem_obi_req, cpu_dmem_obi_req } ),
+        .sbr_ports_rsp_o( { dbg_req_obi_rsp, cpu_imem_obi_rsp, cpu_dmem_obi_rsp } ),
+
+        .mgr_ports_req_o( { dbg_rsp_obi_req, thread_engine_obi_req, bgpu_obi_req, err_obi_req } ),
+        .mgr_ports_rsp_i( { dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp, err_obi_rsp } ),
+
+        .addr_map_i( ObiAddrMap ),
+
+        .en_default_idx_i( '1 ),
+        .default_idx_i   ( '0 )
+    );
+
+    // Error Subordinate
+    obi_err_sbr #(
+        .ObiCfg     ( XDwnObiCfg     ),
+        .obi_req_t  ( xdwn_obi_req_t ),
+        .obi_rsp_t  ( xdwn_obi_rsp_t ),
+        .NumMaxTrans( 1              ),
+        .RspData    ( 'hBADCAB1E     )
+    ) i_err_sbr (
+        .clk_i     ( clk_o      ),
+        .rst_ni    ( rst_no     ),
+        .testmode_i( testmode_i ),
+
+        .obi_req_i( err_obi_req ),
+        .obi_rsp_o( err_obi_rsp )
     );
 
     // #######################################################################################
