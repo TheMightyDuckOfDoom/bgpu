@@ -9,7 +9,9 @@ jobs:
             - name: Restore .bender from cache
               uses: actions/cache@v4
               with:
-                path: .bender
+                path: |
+                    .bender
+                    vendor
                 key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
             - name: Yosys Synthesis for Xilinx FPGA
               run: make xilinx-yosys TOP=compute_unit
@@ -39,7 +41,9 @@ jobs:
             - name: Restore .bender from cache
               uses: actions/cache@v4
               with:
-                path: .bender
+                path: |
+                    .bender
+                    vendor
                 key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
             - name: Yosys Synthesis for Xilinx FPGA
               run: make xilinx-yosys TOP=compute_cluster_synth_wrapper
@@ -65,7 +69,9 @@ jobs:
             - name: Restore .bender from cache
               uses: actions/cache@v4
               with:
-                path: .bender
+                path: |
+                    .bender
+                    vendor
                 key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
             - name: Yosys Synthesis for Xilinx FPGA
               run: make xilinx-yosys TOP=bgpu_soc

@@ -29,6 +29,12 @@ packages:
     source:
       Git: https://github.com/pulp-platform/common_verification.git
     dependencies: []
+  cve2:
+    revision: null
+    version: null
+    source:
+      Path: vendor/cve2
+    dependencies: []
   obi:
     revision: 0155fc34e900c7c884e081c0a1114a247937ff69
     version: 0.1.7

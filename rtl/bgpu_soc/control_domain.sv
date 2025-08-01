@@ -9,7 +9,7 @@
 // Contains:
 // - Clock and Reset Management
 // - JTAG Debug Module
-// - CVE2 Management CPU
+// - Management CPU
 // - Thread Engine
 // - OBI Crossbar
 module control_domain #(
@@ -110,7 +110,7 @@ module control_domain #(
     // #######################################################################################
 
     // DMI signals
-    logic dmi_rst_n;
+    logic dmi_rst_n, cpu_dbg_req;
 
     logic [CtrlWidth-1:0] dm_master_addr, dm_slave_addr;
 
@@ -133,6 +133,9 @@ module control_domain #(
 
     // Address Map
     addr_map_rule_t [NumAddrRules-1:0] ObiAddrMap;
+
+    // Management CPU signals
+    logic [CtrlWidth-1:0] cpu_imem_addr, cpu_dmem_addr, cpu_boot_addr;
 
     // #######################################################################################
     // # Clock and Reset                                                                     #
@@ -191,7 +194,7 @@ module control_domain #(
 
         .ndmreset_o   ( /* Unused */ ),
         .dmactive_o   ( /* Unused */ ),
-        .debug_req_o  ( /* Unused */ ),
+        .debug_req_o  ( cpu_dbg_req  ),
         .unavailable_i( 1'b0         ),
         .hartinfo_i   ( hartinfo     ),
 
@@ -274,9 +277,68 @@ module control_domain #(
     // # Management CPU                                                                       #
     // #######################################################################################
 
-    // For now, we do not have a management CPU
-    assign cpu_imem_obi_req = '0;
-    assign cpu_dmem_obi_req = '0;
+    always_comb begin : build_cpu_boot_addr
+        // Boot address for the management CPU
+        // We boot into the Error Subordinate
+        cpu_boot_addr = '0;
+        cpu_boot_addr[AddressWidth:0] = {1'b1, {AddressWidth{1'b0}}} + 'h5000;
+    end : build_cpu_boot_addr
+
+    cve2_core #(
+        .PMPEnable       ( 1'b0                ),
+        .PMPGranularity  ( 0                   ),
+        .PMPNumRegions   ( 1                   ),
+        .MHPMCounterNum  ( 0                   ),
+        .MHPMCounterWidth( 40                  ),
+        .RV32E           ( 1'b1                ),
+        .RV32M           ( cve2_pkg::RV32MNone ),
+        .RV32B           ( cve2_pkg::RV32BNone ),
+        .DbgTriggerEn    ( 1'b1                ),
+        .DbgHwBreakNum   ( 1                   ),
+
+        .DmHaltAddr      ( (1 << AddressWidth) + dm::HaltAddress     [31:0] ),
+        .DmExceptionAddr ( (1 << AddressWidth) + dm::ExceptionAddress[31:0] )
+    ) i_mgmt_cpu (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .test_en_i( testmode_i ),
+        .hart_id_i( '0         ),
+
+        .boot_addr_i( cpu_boot_addr ),
+
+        .instr_req_o   ( cpu_imem_obi_req.req     ),
+        .instr_gnt_i   ( cpu_imem_obi_rsp.gnt     ),
+        .instr_rdata_i ( cpu_imem_obi_rsp.r.rdata ),
+        .instr_rvalid_i( cpu_imem_obi_rsp.rvalid  ),
+        .instr_err_i   ( cpu_imem_obi_rsp.r.err   ),
+        .instr_addr_o  ( cpu_imem_addr            ),
+
+        .data_req_o   ( cpu_dmem_obi_req.req     ),
+        .data_gnt_i   ( cpu_dmem_obi_rsp.gnt     ),
+        .data_wdata_o ( cpu_dmem_obi_req.a.wdata ),
+        .data_we_o    ( cpu_dmem_obi_req.a.we    ),
+        .data_be_o    ( cpu_dmem_obi_req.a.be    ),
+        .data_rvalid_i( cpu_dmem_obi_rsp.rvalid  ),
+        .data_rdata_i ( cpu_dmem_obi_rsp.r.rdata ),
+        .data_err_i   ( cpu_dmem_obi_rsp.r.err   ),
+        .data_addr_o  ( cpu_dmem_addr            ),
+
+        .irq_software_i( 1'b0         ),
+        .irq_timer_i   ( 1'b0         ),
+        .irq_external_i( 1'b0         ),
+        .irq_fast_i    ( '0           ),
+        .irq_nm_i      ( 1'b0         ),
+        .irq_pending_o ( /* Unused */ ),
+
+        .debug_req_i   ( cpu_dbg_req  ),
+        .fetch_enable_i( 1'b1         ),
+        .core_busy_o   ( /* Unused */ ),
+        .crash_dump_o  ( /* Unused */ )
+    );
+
+    assign cpu_imem_obi_req.a.addr = cpu_imem_addr[AddressWidth:0];
+    assign cpu_dmem_obi_req.a.addr = cpu_dmem_addr[AddressWidth:0];
 
     // #######################################################################################
     // # OBI Crossbar                                                                        #

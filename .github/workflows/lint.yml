@@ -49,5 +49,6 @@ jobs:
             asic/*
             gowin/*
             test/util/*
+            vendor/*
             verilator/*
             xilinx/*

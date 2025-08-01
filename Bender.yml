@@ -2,9 +2,6 @@
 # Solderpad Hardware License, Version 0.51, see LICENSE for details.
 # SPDX-License-Identifier: SHL-0.51
 
-export_include_dirs:
-  - rtl/include
-
 package:
     name: BGPU
     authors:
@@ -18,6 +15,18 @@ dependencies:
     riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",      rev: "verilator-phsauter" }
     tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic", version: 0.2.13           }
     # hpdcache:     { git: "https://github.com/openhwgroup/cv-hpdcache",    rev: 724dcede54123f69bfac64842d8ee52833d4fd77 }
+
+    cve2:               { path: "vendor/cve2" }
+
+export_include_dirs:
+  - rtl/include
+
+vendor_package:
+  - name: cve2
+    target_dir: vendor/cve2
+    upstream: { git: "https://github.com/pulp-platform/croc.git", rev: "f4ff2e1878de0c923632afd237cbf39e222f0a7e" }
+    mapping:
+      - { from: 'rtl/cve2', to: '' }
 
 sources:
     - rtl/bgpu_pkg.sv
@@ -60,6 +69,7 @@ sources:
 
           - rtl/bgpu_soc/thread_dispatcher.sv
           - rtl/bgpu_soc/obi_thread_engine.sv
+          
           - rtl/bgpu_soc/control_domain.sv
           - rtl/bgpu_soc/bgpu_soc.sv
 

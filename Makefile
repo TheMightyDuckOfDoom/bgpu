@@ -24,10 +24,13 @@ TB_TOP             ?= tb_$(TOP)
 # Source files
 SRCS = $(wildcard rtl/**/*.sv)
 TB_SRCS = $($(BENDER) scripts flist -n )
-BENDER_DEPS:= Bender.lock Bender.yml
+BENDER_DEPS:= Bender.lock Bender.yml Bender.local
 TBS = $(basename $(notdir $(wildcard test/tb_*.sv)))
 
 .PHONY: lint asic xilinx gowin-yosys clean tb_% tb-all
+
+vendor/: $(BENDER_DEPS)
+	$(BENDER) vendor init
 
 ####################################################################################################
 # Linting
@@ -37,15 +40,15 @@ TBS = $(basename $(notdir $(wildcard test/tb_*.sv)))
 lint: lint-verilator lint-verible
 
 # Generate filelist for Verilator linting
-verilator/verilator_lint.f: $(BENDER_DEPS)
+verilator/verilator_lint.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script verilator $(BENDER_TARGET_LINT) > $@
 
 # Lint using Verilator
 lint-verilator: verilator/verilator_lint.f verilator/config.vlt $(SRCS) $(TB_SRCS)
-	$(VERILATOR) -lint-only $(VERILATOR_FLAGS) $(VERILATOR_ARGS) -f $< --timing --top $(TOP)
+	$(VERILATOR) -lint-only $(VERILATOR_FLAGS) $(VERILATOR_ARGS) -DPRIM_ASSERT_SV -f $< --timing --top $(TOP)
 
 # Generate filelist for Verilator linting
-verilator/verible_lint.f: $(BENDER_DEPS)
+verilator/verible_lint.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script flist -n $(BENDER_TARGET_LINT) > $@
 	tr "\n" " " < $@ > $@.tmp
 	mv $@.tmp $@
@@ -59,8 +62,8 @@ lint-verible: verilator/verible_lint.f $(SRCS) $(TB_SRCS)
 ####################################################################################################
 
 # Generate filelist for Verilator simulation
-verilator/verilator_tb.f: $(BENDER_DEPS)
-	$(BENDER) script verilator $(BENDER_TARGET_SIM) -t verilator -t tech_cells_generic_exclude_deprecated -t tech_cells_generic_exclude_xilinx_xpm --no-default-target > $@
+verilator/verilator_tb.f: $(BENDER_DEPS) vendor/
+	$(BENDER) script verilator $(BENDER_TARGET_SIM) -t verilator -t tech_cells_generic_exclude_deprecated -t tech_cells_generic_exclude_xilinx_xpm -D PRIM_ASSERT_SV --no-default-target > $@
 
 # Translate RTL to C++ using Verilator
 verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)
@@ -83,11 +86,11 @@ tb-all: $(TBS)
 ####################################################################################################
 
 # Generate filelist for Vivado synthesis
-xilinx/vivado.f: $(BENDER_DEPS)
+xilinx/vivado.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
 
 # Generate filelist for Yosys synthesis
-xilinx/yosys.f: $(BENDER_DEPS)
+xilinx/yosys.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script flist-plus -t xilinx_yosys -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
 
 # Run Vivado synthesis
@@ -114,7 +117,7 @@ xilinx-postsynth: clean xilinx-yosys
 ####################################################################################################
 
 # Generate filelist for Yosys synthesis
-asic/yosys.f: $(BENDER_DEPS)
+asic/yosys.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script flist-plus -t asic -D SYNTHESIS > $@
 
 # Yosys Makefile
@@ -124,10 +127,10 @@ include asic/asic.mk
 # Gowin Synthesis
 ####################################################################################################
 
-gowin/gowin-yosys.f: $(BENDER_DEPS)
+gowin/gowin-yosys.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script flist-plus -t gowin_yosys -D SYNTHESIS -t tech_cells_generic_exclude_tc_sram > $@
 
-gowin/gowin-eda.f: $(BENDER_DEPS)
+gowin/gowin-eda.f: $(BENDER_DEPS) vendor/
 	$(BENDER) sources -f -t gowin_eda -t tech_cells_generic_exclude_tc_sram > $@
 
 gowin-yosys: gowin/gowin-yosys.f $(SRCS) gowin/scripts/yosys.tcl

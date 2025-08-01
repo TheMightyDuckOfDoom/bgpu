@@ -11,7 +11,9 @@ jobs:
       - name: Restore .bender from cache
         uses: actions/cache@v4
         with:
-            path: .bender
+            path: |
+                .bender
+                vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_bgpu_soc BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
@@ -26,7 +28,9 @@ jobs:
       - name: Restore .bender from cache
         uses: actions/cache@v4
         with:
-            path: .bender
+            path: |
+                .bender
+                vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_compute_unit BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
@@ -40,7 +44,9 @@ jobs:
       - name: Restore .bender from cache
         uses: actions/cache@v4
         with:
-            path: .bender
+            path: |
+                .bender
+                vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_instruction_cache BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
@@ -54,7 +60,9 @@ jobs:
       - name: Restore .bender from cache
         uses: actions/cache@v4
         with:
-            path: .bender
+            path: |
+                .bender
+                vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
@@ -69,7 +77,9 @@ jobs:
       - name: Restore .bender from cache
         uses: actions/cache@v4
         with:
-            path: .bender
+            path: |
+                .bender
+                vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make tb_register_opc_stage BENDER_TARGET_SIM="-t xilinx_sim -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk"
