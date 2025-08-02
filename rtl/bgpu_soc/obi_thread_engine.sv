@@ -148,8 +148,10 @@ module obi_thread_engine #(
                     if (obi_req_i.a.we) begin
                         if (!running_q) begin
                             // Write to status register triggers a start
-                            start_dispatch_d = 1'b1;
-                            running_d        = 1'b1;
+                            start_dispatch_d   = 1'b1;
+                            running_d          = 1'b1;
+                            finished_d         = 1'b0;
+                            finished_tblocks_d = '0;
                         end
                     end else begin
                         obi_rdata_d[0] = start_dispatch_q; // Start dispatch
