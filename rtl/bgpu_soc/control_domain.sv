@@ -398,7 +398,7 @@ module control_domain #(
         end_addr: {1'b1, {AddressWidth{1'b1}}}};
 
     // Debug Interface
-    assign ObiAddrMap[2] = '{ idx: 2, start_addr: {1'b1, {AddressWidth{1'b0}}},
+    assign ObiAddrMap[2] = '{ idx: 3, start_addr: {1'b1, {AddressWidth{1'b0}}},
         end_addr: {1'b1, {AddressWidth{1'b0}}} + 'h4000 };
 
     // Crossbar

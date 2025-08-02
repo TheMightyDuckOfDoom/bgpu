@@ -170,6 +170,17 @@ module tb_bgpu_soc #(
         end
     endtask
 
+    // Halt the core
+    task automatic jtag_halt;
+      dm::dmstatus_t status;
+      // Halt hart 0
+      jtag_write(dm::DMControl, dm::dmcontrol_t'{haltreq: 1, dmactive: 1, default: '0});
+      $display("@%t | [JTAG] Halting hart 0... ", $time);
+      do jtag_dbg.read_dmi_exp_backoff(dm::DMStatus, status);
+      while (~status.allhalted);
+      $display("@%t | [JTAG] Halted", $time);
+    endtask
+
     // #######################################################################################
     // # Testbench                                                                           #
     // #######################################################################################
@@ -320,6 +331,9 @@ module tb_bgpu_soc #(
 
         // Init JTAG
         jtag_init();
+
+        // Halt the CPU
+        jtag_halt();
 
         // Write program to memory
         offset = 0;
