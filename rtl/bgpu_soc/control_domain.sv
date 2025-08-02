@@ -121,8 +121,11 @@ module control_domain #(
     dm::dmi_resp_t dmi_resp;
 
     // OBI signals
-    xups_obi_req_t dbg_req_obi_req, cpu_imem_obi_req, cpu_dmem_obi_req;
-    xups_obi_rsp_t dbg_req_obi_rsp, cpu_imem_obi_rsp, cpu_dmem_obi_rsp;
+    xups_obi_req_t dbg_req_obi_req;
+    xups_obi_rsp_t dbg_req_obi_rsp;
+
+    xups_obi_req_t cpu_imem_obi_req, cpu_imem_obi_req_cut, cpu_dmem_obi_req, cpu_dmem_obi_req_cut;
+    xups_obi_rsp_t cpu_imem_obi_rsp, cpu_imem_obi_rsp_cut, cpu_dmem_obi_rsp, cpu_dmem_obi_rsp_cut;
 
     xdwn_obi_req_t dbg_rsp_obi_req, thread_engine_obi_req, bgpu_obi_req, err_obi_req;
     xdwn_obi_rsp_t dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp, err_obi_rsp;
@@ -340,6 +343,47 @@ module control_domain #(
     assign cpu_imem_obi_req.a.addr = cpu_imem_addr[AddressWidth:0];
     assign cpu_dmem_obi_req.a.addr = cpu_dmem_addr[AddressWidth:0];
 
+    // OBI Cut for CPU IMEM and DMEM
+    obi_cut #(
+        .ObiCfg      ( XUpsObiCfg        ),
+        .obi_a_chan_t( xups_obi_a_chan_t ),
+        .obi_r_chan_t( xups_obi_r_chan_t ),
+        .obi_req_t   ( xups_obi_req_t    ),
+        .obi_rsp_t   ( xups_obi_rsp_t    ),
+        .Bypass      ( 1'b0              ),
+        .BypassReq   ( 1'b0              ),
+        .BypassRsp   ( 1'b0              )
+    ) i_mgmt_cpu_imem_cut (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .sbr_port_req_i( cpu_imem_obi_req ),
+        .sbr_port_rsp_o( cpu_imem_obi_rsp ),
+
+        .mgr_port_req_o( cpu_imem_obi_req_cut ),
+        .mgr_port_rsp_i( cpu_imem_obi_rsp_cut )
+    );
+
+    obi_cut #(
+        .ObiCfg      ( XUpsObiCfg        ),
+        .obi_a_chan_t( xups_obi_a_chan_t ),
+        .obi_r_chan_t( xups_obi_r_chan_t ),
+        .obi_req_t   ( xups_obi_req_t    ),
+        .obi_rsp_t   ( xups_obi_rsp_t    ),
+        .Bypass      ( 1'b0              ),
+        .BypassReq   ( 1'b0              ),
+        .BypassRsp   ( 1'b0              )
+    ) i_mgmt_cpu_dmem_cut (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .sbr_port_req_i( cpu_dmem_obi_req ),
+        .sbr_port_rsp_o( cpu_dmem_obi_rsp ),
+
+        .mgr_port_req_o( cpu_dmem_obi_req_cut ),
+        .mgr_port_rsp_i( cpu_dmem_obi_rsp_cut )
+    );
+
     // #######################################################################################
     // # OBI Crossbar                                                                        #
     // #######################################################################################
@@ -378,8 +422,8 @@ module control_domain #(
 
         .testmode_i( testmode_i ),
 
-        .sbr_ports_req_i( { dbg_req_obi_req, cpu_imem_obi_req, cpu_dmem_obi_req } ),
-        .sbr_ports_rsp_o( { dbg_req_obi_rsp, cpu_imem_obi_rsp, cpu_dmem_obi_rsp } ),
+        .sbr_ports_req_i( { dbg_req_obi_req, cpu_imem_obi_req_cut, cpu_dmem_obi_req_cut } ),
+        .sbr_ports_rsp_o( { dbg_req_obi_rsp, cpu_imem_obi_rsp_cut, cpu_dmem_obi_rsp_cut } ),
 
         .mgr_ports_req_o( { dbg_rsp_obi_req, thread_engine_obi_req, bgpu_obi_req, err_obi_req } ),
         .mgr_ports_rsp_i( { dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp, err_obi_rsp } ),
