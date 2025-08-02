@@ -171,6 +171,15 @@ gowin-postsynth: clean gowin-yosys
 	cp gowin/out/bgpu_soc_yosys.v gowin/out/post_synth.v
 	make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
 
+gowin-eda-postsynth: TOP := bgpu_soc
+gowin-eda-postsynth:
+	rm gowin/out/post_synth.v
+	rm gowin/out/$(TOP).json
+	echo "set TOP $(TOP)"  >  gowin/run_process.tcl
+	echo "source gowin/scripts/process_netlist.tcl" >> gowin/run_process.tcl
+	yosys -c gowin/run_process.tcl -l gowin/process.log -t
+	make tb_bgpu_soc BENDER_TARGET_SIM="-t gowin_sim -t gowin_postsynth -t post_synth"
+
 ####################################################################################################
 # Clean
 ####################################################################################################

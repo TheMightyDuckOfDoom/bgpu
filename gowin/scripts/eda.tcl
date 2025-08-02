@@ -22,6 +22,7 @@ add_file ../pickled.sv
 add_file -type sdc ../../src/constraints.sdc
 add_file -type cst ../../src/tangmega.cst
 run syn
+exit
 
 if { $top_design == "bgpu_soc"} {
     run pnr

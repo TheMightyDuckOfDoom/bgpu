@@ -54,6 +54,7 @@ module tb_bgpu_soc #(
     // # DUT                                                                                 #
     // #######################################################################################
 
+`ifndef TARGET_POST_SYNTH
     bgpu_soc i_bgpu_soc (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
@@ -66,6 +67,18 @@ module tb_bgpu_soc #(
         .jtag_tms_i  ( jtag_tms    ),
         .jtag_trst_ni( jtag_trst_n )
     );
+`else
+    bgpu_wrapper i_bgpu_soc (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
+
+        .jtag_tck_i  ( jtag_tck    ),
+        .jtag_tdi_i  ( jtag_tdi    ),
+        .jtag_tdo_o  ( jtag_tdo    ),
+        .jtag_tms_i  ( jtag_tms    ),
+        .jtag_trst_ni( jtag_trst_n )
+    );
+`endif
 
     // #######################################################################################
     // # JTAG Debug Interface                                                                #
