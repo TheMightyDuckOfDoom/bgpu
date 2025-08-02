@@ -36,6 +36,9 @@ module instruction_cache #(
     input logic clk_i,
     input logic rst_ni,
 
+    // Flush the cache
+    input  logic flush_i,
+
     // Memory request interface
     input  logic        mem_ready_i,
     output logic        mem_req_o,
@@ -105,6 +108,9 @@ module instruction_cache #(
     // # Signals                                                                             #
     // #######################################################################################
 
+    // Flush request
+    logic flush_q, flush_d;
+
     // State machine
     state_e state_q, state_d;
 
@@ -136,6 +142,7 @@ module instruction_cache #(
         mem_data_d     = mem_data_q;
         cache_valids_d = cache_valids_q;
         cache_valid_d  = cache_valid_q;
+        flush_d        = flush_q;
 
         // Memory request interface
         mem_req_o  = 1'b0;
@@ -157,6 +164,11 @@ module instruction_cache #(
         cache_we     = 1'b0; // No write
         cache_select = '0;   // No cacheline selected
 
+        // New flush request
+        if (flush_i) begin
+            flush_d = 1'b1;
+        end
+
         // State machine
 
         // Idle State
@@ -164,8 +176,15 @@ module instruction_cache #(
             // Wait for a valid instruction from the fetcher
             ic_ready_o = 1'b1;
 
+            // Flush the cache if requested
+            if (flush_q) begin : idle_flush
+                ic_ready_o     = 1'b0; // Not ready for new requests
+                cache_valids_d = '0;   // Invalidate all cachelines
+                flush_d        = 1'b0; // Reset flush request
+            end : idle_flush
+
             // Handshake -> new request
-            if (fe_valid_i) begin
+            else if (fe_valid_i) begin
                 // Go to handle instruction state
                 state_d = HANDLE_INSTR;
 
@@ -204,12 +223,20 @@ module instruction_cache #(
                     active_req_q.pc[CachelineIdxBits-1:0]
                 ];
 
-                // Handle next instruction request if decoder is ready
                 // Handshake with decoder
                 if (dec_ready_i) begin
                     ic_ready_o = 1'b1;
+
+                    if (flush_q) begin : flush_cache
+                        ic_ready_o     = 1'b0; // Not ready for new requests
+                        cache_valids_d = '0;   // Invalidate all cachelines
+                        flush_d        = 1'b0; // Reset flush request
+
+                        // Go back to idle state
+                        state_d = IDLE;
+                    end : flush_cache
                     // Handshake with fetcher -> new request
-                    if (fe_valid_i) begin
+                    else if (fe_valid_i) begin
                         // Go to handle instruction state
                         state_d = HANDLE_INSTR;
 
@@ -281,8 +308,18 @@ module instruction_cache #(
             // Wait for decoder to be ready
             if (dec_ready_i) begin
                 ic_ready_o = 1'b1;
+
+                // Flush
+                if (flush_q) begin : wait_for_decoder_flush
+                    ic_ready_o     = 1'b0; // Not ready for new requests
+                    cache_valids_d = '0; // Invalidate all cachelines
+                    flush_d        = 1'b0; // Reset flush request
+
+                    // Go back to idle state
+                    state_d = IDLE;
+                end : wait_for_decoder_flush
                 // Handshake with fetcher -> new request
-                if (fe_valid_i) begin
+                else if (fe_valid_i) begin
                     // Go to handle instruction state
                     state_d = HANDLE_INSTR;
 
@@ -377,6 +414,9 @@ module instruction_cache #(
     // #######################################################################################
     // # Sequential Logic                                                                    #
     // #######################################################################################
+
+    // Flush request
+    `FF(flush_q, flush_d, 1'b0, clk_i, rst_ni);
 
     // State machine
     `FF(state_q, state_d, IDLE, clk_i, rst_ni);

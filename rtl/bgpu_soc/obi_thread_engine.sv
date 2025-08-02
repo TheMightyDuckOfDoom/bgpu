@@ -35,6 +35,9 @@ module obi_thread_engine #(
     input  obi_req_t obi_req_i,
     output obi_rsp_t obi_rsp_o,
 
+    // Flush instruction cache
+    output logic flush_ic_o,
+
     // Interface to start a new thread block -> to compute clusters
     input  logic        warp_free_i, // The is atleas one free warp that can start a new block
     output logic        allocate_warp_o,
@@ -202,6 +205,9 @@ module obi_thread_engine #(
         obi_rsp_o.r.rdata = obi_rdata_q;
         obi_rsp_o.r.err   = obi_error_q;
     end : obi_rsp
+
+    // Flush Instruction Cache when dispatching starts
+    assign flush_ic_o = start_dispatch_q && dispatcher_ready;
 
     // #######################################################################################
     // # Thread Dispatcher                                                                   #

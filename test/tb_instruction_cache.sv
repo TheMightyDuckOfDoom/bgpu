@@ -75,6 +75,9 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     // Clock and Reset
     logic clk, rst_n;
 
+    // Flush
+    logic flush;
+
     // New request from fetcher
     logic       fetch_req_valid, ic_ready;
     fetch_req_t fetch_req;
@@ -114,6 +117,15 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     // #######################################################################################
     // # Stream Masters and Subordinates                                                     #
     // #######################################################################################
+
+    // Flush logic
+    initial begin : flush_logic
+        while(1) begin
+            @(posedge clk);
+            #ApplDelay;
+            flush = $urandom_range(0, 64) == 0; // Randomly flush the cache
+        end
+    end : flush_logic
 
     // Fetch request
     rand_stream_mst #(
@@ -263,6 +275,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     ) i_instruction_cache (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
+
+        .flush_i( flush ),
 
         .mem_ready_i( mem_ready     ),
         .mem_req_o  ( mem_req_valid ),

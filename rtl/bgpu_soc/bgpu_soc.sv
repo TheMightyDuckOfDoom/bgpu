@@ -180,6 +180,9 @@ module bgpu_soc #(
     // Clock and Reset from Control Domain
     logic clk, rst_n;
 
+    // Flush instruction cache
+    logic flush_ic;
+
     /// Compute Cluster signals
 
     // Instruction Memory AXI
@@ -247,6 +250,8 @@ module bgpu_soc #(
         .rst_no( rst_n  ),
 
         .testmode_i( testmode_i ),
+
+        .flush_ic_o( flush_ic ),
 
         .jtag_tck_i  ( jtag_tck_i   ),
         .jtag_tdi_i  ( jtag_tdi_i   ),
@@ -371,6 +376,8 @@ module bgpu_soc #(
             .rst_ni( rst_n ),
 
             .testmode_i( testmode_i ),
+
+            .flush_ic_i( flush_ic ),
 
             .warp_free_o          ( cc_warp_free    [i]    ),
             .allocate_warp_i      ( cc_allocate_warp[i]    ),

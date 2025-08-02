@@ -52,6 +52,9 @@ module control_domain #(
     input  logic jtag_tms_i,
     input  logic jtag_trst_ni,
 
+    // Flush Compute Cluster Instruction Cache
+    output logic flush_ic_o,
+
     // Interface to start a new thread block -> to compute clusters
     input  logic        warp_free_i, // The is atleas one free warp that can start a new block
     output logic        allocate_warp_o,
@@ -263,6 +266,8 @@ module control_domain #(
 
         .obi_req_i( thread_engine_obi_req ),
         .obi_rsp_o( thread_engine_obi_rsp ),
+
+        .flush_ic_o( flush_ic_o ),
 
         .warp_free_i          ( warp_free_i           ),
         .allocate_warp_o      ( allocate_warp_o       ),

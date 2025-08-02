@@ -74,6 +74,9 @@ module compute_unit import bgpu_pkg::*; #(
     // Testmode
     input logic testmode_i,
 
+    // Flush instruction cache
+    input logic flush_ic_i,
+
     // Interface to start a new thread block on this compute unit
     output logic        warp_free_o, // The is atleas one free warp that can start a new block
     input  logic        allocate_warp_i,
@@ -352,6 +355,8 @@ module compute_unit import bgpu_pkg::*; #(
 
         .mem_valid_i( imem_rsp_valid_i ),
         .mem_data_i ( imem_rsp_data_i  ),
+
+        .flush_i ( flush_ic_i ),
 
         .ic_ready_o     ( ic_to_fe_ready_d           ),
         .fe_valid_i     ( fe_to_ic_valid_q           ),

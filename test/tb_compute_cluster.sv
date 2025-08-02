@@ -116,6 +116,9 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // # Signals                                                                             #
     // #######################################################################################
 
+    // Flush instruction cache
+    logic flush_ic;
+
     // Warp insertion
     logic         warp_free, allocate_warp;
     warp_insert_t warp_insert;
@@ -206,6 +209,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
 
         .testmode_i( 1'b0 ),
 
+        .flush_ic_i( flush_ic ),
+
         .warp_free_o          ( warp_free              ),
         .allocate_warp_i      ( allocate_warp          ),
         .allocate_pc_i        ( warp_insert.pc         ),
@@ -238,6 +243,9 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         while(tblocks_launched < TblocksToLaunch) begin
             @(posedge clk);
             #ApplDelay;
+            // Flush IC if it is the first threadblock
+            flush_ic = (tblocks_launched == 0);
+
             allocate_warp          = 1'b1;
             warp_insert.pc         = '0;
             warp_insert.dp_addr    =       addr_t'(tblocks_launched);
