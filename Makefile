@@ -87,7 +87,7 @@ tb-all: $(TBS)
 
 # Generate filelist for Vivado synthesis
 xilinx/vivado.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
+	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS -D PRIM_ASSERT_SV > $@
 
 # Generate filelist for Yosys synthesis
 xilinx/yosys.f: $(BENDER_DEPS) vendor/
