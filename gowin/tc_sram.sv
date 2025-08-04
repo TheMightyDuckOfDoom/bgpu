@@ -58,10 +58,12 @@ module tc_sram #(
             localparam int unsigned ColumnWidth  = ((x == BramsForWidth - 1)
                                                     && ((DataWidth % SPWidth) != 0))
                                                     ? DataWidth % SPWidth : SPWidth;
-            localparam int unsigned ByteInColumn = (ColumnWidth + 7) / 8;
+            
+            // Byte enable only works for 16/32 bit wide columns
+            localparam int unsigned ByteInColumn = (ColumnWidth + 15) / 16 * 2;
 
             // How many words does a bram with ColumWidth have?
-            localparam int unsigned WordsPerBram      = BitsPerSP / ColumnWidth;
+            localparam int unsigned WordsPerBram      = BitsPerSP / 8 / ByteInColumn;
             localparam int unsigned AddrWidthInColumn = $clog2(WordsPerBram);
 
             // How many BRAMs are needed in this column?
@@ -110,23 +112,16 @@ module tc_sram #(
                 end
             end : bram_addr_logic
 
-            if (ByteInColumn == 1) // No byte enable
-                always_comb begin
-                    bram_addr_be = '0;
-                    bram_addr_be[SPMaxAddrWidth-1-:AddrWidthInColumn] = bram_addr;
-                end
-            else begin : gen_multirow_bram_addr_be
-                // Build Byte Enable
-                // TODO: If ByteWidth != 8, this needs to be adapted!
-                logic [     ByteInColumn-1:0] bram_be;
-                assign bram_be = be_i[0][x * SPWidth / 8 +: ByteInColumn];
+            // Build Byte Enable
+            // TODO: If ByteWidth != 8, this needs to be adapted!
+            logic [     ByteInColumn-1:0] bram_be;
+            assign bram_be = be_i[0][x * SPWidth / 8 +: ByteInColumn];
 
-                always_comb begin
-                    bram_addr_be = '0;
-                    bram_addr_be[ByteInColumn-1:0] = bram_be;
-                    bram_addr_be[SPMaxAddrWidth-1-:AddrWidthInColumn] = bram_addr;
-                end
-            end : gen_multirow_bram_addr_be
+            always_comb begin
+                bram_addr_be = '0;
+                bram_addr_be[ByteInColumn-1:0] = bram_be;
+                bram_addr_be[SPMaxAddrWidth-1-:AddrWidthInColumn] = bram_addr;
+            end
 
             // Write data -> Same for all BRAMs in this column
             if (ColumnWidth < SPWidth)
@@ -161,75 +156,75 @@ module tc_sram #(
             for (genvar y = 0; y < BramsInColumn; y++) begin : gen_bram
                 // See Gowin UG285E for details
                 SP #(
-                    .READ_MODE  ( 2'b00       ),
-                    .WRITE_MODE ( 2'b00       ),
-                    .BIT_WIDTH  ( ColumnWidth ),
-                    .BLK_SEL    ( y           ), // Select the current BRAM if BSEL == y
-                    .RESET_MODE ( "ASYNC"     ),
-                    .INIT_RAM_00( InitValue   ),
-                    .INIT_RAM_01( InitValue   ),
-                    .INIT_RAM_02( InitValue   ),
-                    .INIT_RAM_03( InitValue   ),
-                    .INIT_RAM_04( InitValue   ),
-                    .INIT_RAM_05( InitValue   ),
-                    .INIT_RAM_06( InitValue   ),
-                    .INIT_RAM_07( InitValue   ),
-                    .INIT_RAM_08( InitValue   ),
-                    .INIT_RAM_09( InitValue   ),
-                    .INIT_RAM_0A( InitValue   ),
-                    .INIT_RAM_0B( InitValue   ),
-                    .INIT_RAM_0C( InitValue   ),
-                    .INIT_RAM_0D( InitValue   ),
-                    .INIT_RAM_0E( InitValue   ),
-                    .INIT_RAM_0F( InitValue   ),
-                    .INIT_RAM_10( InitValue   ),
-                    .INIT_RAM_11( InitValue   ),
-                    .INIT_RAM_12( InitValue   ),
-                    .INIT_RAM_13( InitValue   ),
-                    .INIT_RAM_14( InitValue   ),
-                    .INIT_RAM_15( InitValue   ),
-                    .INIT_RAM_16( InitValue   ),
-                    .INIT_RAM_17( InitValue   ),
-                    .INIT_RAM_18( InitValue   ),
-                    .INIT_RAM_19( InitValue   ),
-                    .INIT_RAM_1A( InitValue   ),
-                    .INIT_RAM_1B( InitValue   ),
-                    .INIT_RAM_1C( InitValue   ),
-                    .INIT_RAM_1D( InitValue   ),
-                    .INIT_RAM_1E( InitValue   ),
-                    .INIT_RAM_1F( InitValue   ),
-                    .INIT_RAM_20( InitValue   ),
-                    .INIT_RAM_21( InitValue   ),
-                    .INIT_RAM_22( InitValue   ),
-                    .INIT_RAM_23( InitValue   ),
-                    .INIT_RAM_24( InitValue   ),
-                    .INIT_RAM_25( InitValue   ),
-                    .INIT_RAM_26( InitValue   ),
-                    .INIT_RAM_27( InitValue   ),
-                    .INIT_RAM_28( InitValue   ),
-                    .INIT_RAM_29( InitValue   ),
-                    .INIT_RAM_2A( InitValue   ),
-                    .INIT_RAM_2B( InitValue   ),
-                    .INIT_RAM_2C( InitValue   ),
-                    .INIT_RAM_2D( InitValue   ),
-                    .INIT_RAM_2E( InitValue   ),
-                    .INIT_RAM_2F( InitValue   ),
-                    .INIT_RAM_30( InitValue   ),
-                    .INIT_RAM_31( InitValue   ),
-                    .INIT_RAM_32( InitValue   ),
-                    .INIT_RAM_33( InitValue   ),
-                    .INIT_RAM_34( InitValue   ),
-                    .INIT_RAM_35( InitValue   ),
-                    .INIT_RAM_36( InitValue   ),
-                    .INIT_RAM_37( InitValue   ),
-                    .INIT_RAM_38( InitValue   ),
-                    .INIT_RAM_39( InitValue   ),
-                    .INIT_RAM_3A( InitValue   ),
-                    .INIT_RAM_3B( InitValue   ),
-                    .INIT_RAM_3C( InitValue   ),
-                    .INIT_RAM_3D( InitValue   ),
-                    .INIT_RAM_3E( InitValue   ),
-                    .INIT_RAM_3F( InitValue   )
+                    .READ_MODE  ( 2'b00            ),
+                    .WRITE_MODE ( 2'b00            ),
+                    .BIT_WIDTH  ( ByteInColumn * 8 ),
+                    .BLK_SEL    ( y                ), // Select the current BRAM if BSEL == y
+                    .RESET_MODE ( "ASYNC"          ),
+                    .INIT_RAM_00( InitValue        ),
+                    .INIT_RAM_01( InitValue        ),
+                    .INIT_RAM_02( InitValue        ),
+                    .INIT_RAM_03( InitValue        ),
+                    .INIT_RAM_04( InitValue        ),
+                    .INIT_RAM_05( InitValue        ),
+                    .INIT_RAM_06( InitValue        ),
+                    .INIT_RAM_07( InitValue        ),
+                    .INIT_RAM_08( InitValue        ),
+                    .INIT_RAM_09( InitValue        ),
+                    .INIT_RAM_0A( InitValue        ),
+                    .INIT_RAM_0B( InitValue        ),
+                    .INIT_RAM_0C( InitValue        ),
+                    .INIT_RAM_0D( InitValue        ),
+                    .INIT_RAM_0E( InitValue        ),
+                    .INIT_RAM_0F( InitValue        ),
+                    .INIT_RAM_10( InitValue        ),
+                    .INIT_RAM_11( InitValue        ),
+                    .INIT_RAM_12( InitValue        ),
+                    .INIT_RAM_13( InitValue        ),
+                    .INIT_RAM_14( InitValue        ),
+                    .INIT_RAM_15( InitValue        ),
+                    .INIT_RAM_16( InitValue        ),
+                    .INIT_RAM_17( InitValue        ),
+                    .INIT_RAM_18( InitValue        ),
+                    .INIT_RAM_19( InitValue        ),
+                    .INIT_RAM_1A( InitValue        ),
+                    .INIT_RAM_1B( InitValue        ),
+                    .INIT_RAM_1C( InitValue        ),
+                    .INIT_RAM_1D( InitValue        ),
+                    .INIT_RAM_1E( InitValue        ),
+                    .INIT_RAM_1F( InitValue        ),
+                    .INIT_RAM_20( InitValue        ),
+                    .INIT_RAM_21( InitValue        ),
+                    .INIT_RAM_22( InitValue        ),
+                    .INIT_RAM_23( InitValue        ),
+                    .INIT_RAM_24( InitValue        ),
+                    .INIT_RAM_25( InitValue        ),
+                    .INIT_RAM_26( InitValue        ),
+                    .INIT_RAM_27( InitValue        ),
+                    .INIT_RAM_28( InitValue        ),
+                    .INIT_RAM_29( InitValue        ),
+                    .INIT_RAM_2A( InitValue        ),
+                    .INIT_RAM_2B( InitValue        ),
+                    .INIT_RAM_2C( InitValue        ),
+                    .INIT_RAM_2D( InitValue        ),
+                    .INIT_RAM_2E( InitValue        ),
+                    .INIT_RAM_2F( InitValue        ),
+                    .INIT_RAM_30( InitValue        ),
+                    .INIT_RAM_31( InitValue        ),
+                    .INIT_RAM_32( InitValue        ),
+                    .INIT_RAM_33( InitValue        ),
+                    .INIT_RAM_34( InitValue        ),
+                    .INIT_RAM_35( InitValue        ),
+                    .INIT_RAM_36( InitValue        ),
+                    .INIT_RAM_37( InitValue        ),
+                    .INIT_RAM_38( InitValue        ),
+                    .INIT_RAM_39( InitValue        ),
+                    .INIT_RAM_3A( InitValue        ),
+                    .INIT_RAM_3B( InitValue        ),
+                    .INIT_RAM_3C( InitValue        ),
+                    .INIT_RAM_3D( InitValue        ),
+                    .INIT_RAM_3E( InitValue        ),
+                    .INIT_RAM_3F( InitValue        )
                 ) i_bram (
                     .CLK    ( clk_i            ),
                     .RESET  ( rst              ),

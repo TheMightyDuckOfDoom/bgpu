@@ -5,7 +5,7 @@
 /// Testbench for Instruction Cache
 module tb_instruction_cache import bgpu_pkg::*; #(
     /// Width of the Program Counter
-    parameter int unsigned PcWidth = 8,
+    parameter int unsigned PcWidth = 9,
     /// Number of warps
     parameter int unsigned NumWarps = 16,
     /// Number of threads per warp

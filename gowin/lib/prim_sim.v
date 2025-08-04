@@ -95,6 +95,36 @@ input [31:0] DI;
 input [2:0] BLKSEL;
 output [31:0] DO;
 
+`ifdef BRAM_DEBUG
+    initial begin : bram_debug
+        integer f;
+        string data, filename;
+
+        filename = $sformatf("bram_%m.log");
+        f = $fopen(filename, "w");
+
+        data = $sformatf("READ_MODE=%b, WRITE_MODE=%b, BIT_WIDTH=%d, BLK_SEL=%b, RESET_MODE=%s",
+                         READ_MODE, WRITE_MODE, BIT_WIDTH, BLK_SEL, RESET_MODE);
+        $fwrite(f, "%s\n", data);
+        $fflush(f);
+
+        $display("SP %m: %s", data);
+
+        while(1) begin
+            @(posedge CLK);
+
+            if(CE && BLK_SEL == BLKSEL) begin
+                data = $sformatf("time: %t, AD=%h, WRE=%b, DI=%h, DO=%h", $time(), AD, WRE, DI, DO);
+                $fwrite(f, "%s\n", data);
+                $fflush(f);
+            end
+        end
+    end : bram_debug
+`endif
+
+initial assert(BIT_WIDTH inside {1, 2, 4, 8, 16, 32})
+    else $error("SP %m: BIT_WIDTH(%d) must be one of 1, 2, 4, 8, 16, or 32", BIT_WIDTH);
+
 reg [31:0] pl_reg,pl_reg_async,pl_reg_sync;
 reg [31:0] bp_reg,bp_reg_async,bp_reg_sync;
 reg bs_en;
@@ -125,8 +155,7 @@ initial begin
 		16: awidth = 10;
 		32: awidth = 9;
 		default: begin
-		//	$display ("%d: Unsupported data width\n", dwidth);
-		//	$finish;
+			$error ("%m: Unsupported data width (%d)\n", dwidth);
 		end
 	endcase
 end

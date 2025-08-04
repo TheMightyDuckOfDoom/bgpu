@@ -13,3 +13,25 @@ set_option -verilog_std sysv2017
 add_file ../pickled.sv
 add_file -type sdc ../../xilinx/dummy_constraints.xdc
 run syn
+
+# Check for synthesis errors
+proc check_for_warning {warning_as_error} {
+    global top_design
+
+    set fp [open impl/gwsynthesis/${top_design}.log]
+    set filecontent [read $fp]
+    set input_list [split $filecontent "\n"]
+    set textlist [lsearch -all -inline $input_list "*${warning_as_error}*"]
+    set error 0
+    foreach elem $textlist {
+        puts $elem
+        set error 1
+    }
+    close $fp
+    if {$error} {
+        puts "Error: Warning $warning_as_error found in synthesis log, aborting."
+        exit 2
+    }
+}
+
+check_for_warning "EX0205"
