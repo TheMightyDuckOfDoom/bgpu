@@ -17,6 +17,13 @@
  *
  */
 
+module GSR(input GSRI);
+endmodule
+
+module INV(output O, input I);
+    assign O = ~I;
+endmodule
+
 (* abc9_lut=1 *)
 module LUT1(output F, input I0);
 	parameter [1:0] INIT = 0;

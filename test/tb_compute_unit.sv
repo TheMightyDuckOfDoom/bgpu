@@ -214,7 +214,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
     // Instantiate Compute Unit
     compute_unit #(
-    `ifndef POST
+    `ifndef POST_SYNTH
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),
         .WarpWidth             ( WarpWidth              ),
@@ -257,18 +257,63 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .imem_req_addr_o ( imem_req_addr  ),
 
         .imem_rsp_valid_i( imem_rsp_valid_q ),
-        .imem_rsp_data_i ( imem_rsp_data_q  ),
+`ifdef TARGET_GOWIN_EDA_POSTSYNTH
+        .imem_rsp_data_i_0( imem_rsp_data_q[0] ),
+        .imem_rsp_data_i_1( imem_rsp_data_q[1] ),
+        .imem_rsp_data_i_2( imem_rsp_data_q[2] ),
+        .imem_rsp_data_i_3( imem_rsp_data_q[3] ),
+`else
+        .imem_rsp_data_i( imem_rsp_data_q ),
+`endif
 
-        .mem_ready_i       ( mem_ready       ),
-        .mem_req_valid_o   ( mem_req_valid   ),
-        .mem_req_id_o      ( mem_req.id      ),
-        .mem_req_addr_o    ( mem_req.addr    ),
-        .mem_req_we_mask_o ( mem_req.we_mask ),
-        .mem_req_wdata_o   ( mem_req.data    ),
+        .mem_ready_i      ( mem_ready       ),
+        .mem_req_valid_o  ( mem_req_valid   ),
+        .mem_req_id_o     ( mem_req.id      ),
+        .mem_req_addr_o   ( mem_req.addr    ),
+        .mem_req_we_mask_o( mem_req.we_mask ),
+`ifdef TARGET_GOWIN_EDA_POSTSYNTH
+        .mem_req_wdata_o_0 ( mem_req.data[ 0] ),
+        .mem_req_wdata_o_1 ( mem_req.data[ 1] ),
+        .mem_req_wdata_o_2 ( mem_req.data[ 2] ),
+        .mem_req_wdata_o_3 ( mem_req.data[ 3] ),
+        .mem_req_wdata_o_4 ( mem_req.data[ 4] ),
+        .mem_req_wdata_o_5 ( mem_req.data[ 5] ),
+        .mem_req_wdata_o_6 ( mem_req.data[ 6] ),
+        .mem_req_wdata_o_7 ( mem_req.data[ 7] ),
+        .mem_req_wdata_o_8 ( mem_req.data[ 8] ),
+        .mem_req_wdata_o_9 ( mem_req.data[ 9] ),
+        .mem_req_wdata_o_10( mem_req.data[10] ),
+        .mem_req_wdata_o_11( mem_req.data[11] ),
+        .mem_req_wdata_o_12( mem_req.data[12] ),
+        .mem_req_wdata_o_13( mem_req.data[13] ),
+        .mem_req_wdata_o_14( mem_req.data[14] ),
+        .mem_req_wdata_o_15( mem_req.data[15] ),
+`else
+        .mem_req_wdata_o( mem_req.data ),
+`endif
 
         .mem_rsp_valid_i( mem_rsp_valid_q ),
         .mem_rsp_id_i   ( mem_rsp_q.id    ),
-        .mem_rsp_data_i ( mem_rsp_q.data  )
+`ifdef TARGET_GOWIN_EDA_POSTSYNTH
+        .mem_rsp_data_i_0 ( mem_rsp_q.data[ 0] ),
+        .mem_rsp_data_i_1 ( mem_rsp_q.data[ 1] ),
+        .mem_rsp_data_i_2 ( mem_rsp_q.data[ 2] ),
+        .mem_rsp_data_i_3 ( mem_rsp_q.data[ 3] ),
+        .mem_rsp_data_i_4 ( mem_rsp_q.data[ 4] ),
+        .mem_rsp_data_i_5 ( mem_rsp_q.data[ 5] ),
+        .mem_rsp_data_i_6 ( mem_rsp_q.data[ 6] ),
+        .mem_rsp_data_i_7 ( mem_rsp_q.data[ 7] ),
+        .mem_rsp_data_i_8 ( mem_rsp_q.data[ 8] ),
+        .mem_rsp_data_i_9 ( mem_rsp_q.data[ 9] ),
+        .mem_rsp_data_i_10( mem_rsp_q.data[10] ),
+        .mem_rsp_data_i_11( mem_rsp_q.data[11] ),
+        .mem_rsp_data_i_12( mem_rsp_q.data[12] ),
+        .mem_rsp_data_i_13( mem_rsp_q.data[13] ),
+        .mem_rsp_data_i_14( mem_rsp_q.data[14] ),
+        .mem_rsp_data_i_15( mem_rsp_q.data[15] )
+`else
+        .mem_rsp_data_i( mem_rsp_q.data )
+`endif
     );
 
     // #######################################################################################

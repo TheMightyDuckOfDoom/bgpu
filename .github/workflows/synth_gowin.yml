@@ -33,9 +33,9 @@ jobs:
                 path: |
                     *.log
                     cu.vcd
-                    gowin/out/compute_unit_yosys.v
+                    gowin/out/*
                     gowin/gowin-yosys.f
-                    gowin/gowin.log
+                    gowin/*.log
 
     cu-gowin-eda:
         runs-on: self-hosted
@@ -53,6 +53,21 @@ jobs:
               run: DISPLAY=:1.0 make gowin-eda TOP=compute_unit
             - name: Show report
               run: make gowin-eda-report TOP=compute_unit
+            - name: Process Netlist for Verilator
+              run: make gowin-eda-process-netlist TOP=compute_unit
+            - name: Post Synthesis Simulation
+              run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: cu-gowin-eda-synthesis-results-on-failure
+                path: |
+                    *.log
+                    cu.vcd
+                    gowin/out/*
+                    gowin/gowin-eda.f
+                    gowin/*.log
 
     cc-gowin-yosys:
         runs-on: self-hosted
@@ -74,6 +89,10 @@ jobs:
               run: DISPLAY=:1.0 make gowin-yosys-gen-report TOP=compute_cluster_synth_wrapper
             - name: Show report
               run: make gowin-yosys-report TOP=compute_cluster_synth_wrapper
+            - name: Copy netlist...
+              run: cp gowin/out/compute_cluster_synth_wrapper_yosys.v gowin/out/post_synth.v
+            - name: Post Synthesis Simulation
+              run: make tb_compute_cluster BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -82,9 +101,9 @@ jobs:
                 path: |
                     *.log
                     cc.vcd
-                    gowin/out/compute_cluster_yosys.v
+                    gowin/out/*
                     gowin/gowin-yosys.f
-                    gowin/gowin.log
+                    gowin/*.log
 
     cc-gowin-eda:
         runs-on: self-hosted
@@ -102,6 +121,21 @@ jobs:
               run: DISPLAY=:1.0 make gowin-eda TOP=compute_cluster_synth_wrapper
             - name: Show report
               run: make gowin-eda-report TOP=compute_cluster_synth_wrapper
+            - name: Process Netlist for Verilator
+              run: make gowin-eda-process-netlist TOP=compute_cluster_synth_wrapper
+            - name: Post Synthesis Simulation
+              run: make tb_compute_cluster BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: cc-gowin-eda-synthesis-results-on-failure
+                path: |
+                    *.log
+                    cc.vcd
+                    gowin/out/*
+                    gowin/gowin-eda.f
+                    gowin/*.log
 
     bgpu-gowin-yosys:
         runs-on: self-hosted
@@ -135,9 +169,9 @@ jobs:
                 path: |
                     *.log
                     bgpu_soc.vcd
-                    gowin/out/bgpu_soc_yosys.v
+                    gowin/out/*
                     gowin/gowin-yosys.f
-                    gowin/gowin.log
+                    gowin/*.log
 
     bgpu-gowin-eda:
         runs-on: self-hosted

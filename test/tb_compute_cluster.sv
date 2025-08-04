@@ -176,8 +176,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Instantiate Compute Cluster
+`ifndef TARGET_POST_SYNTH
     compute_cluster #(
-    `ifndef POST
         .ComputeUnits          ( ComputeUnits           ),
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),
@@ -202,7 +202,6 @@ module tb_compute_cluster import bgpu_pkg::*; #(
 
         .mem_axi_req_t ( mem_axi_req_t  ),
         .mem_axi_resp_t( mem_axi_resp_t )
-    `endif
     ) i_cc (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
@@ -228,6 +227,129 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         .mem_req_o ( mem_axi_req ),
         .mem_rsp_i ( mem_axi_rsp )
     );
+`else
+    compute_cluster_synth_wrapper i_cc (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
+
+        .testmode_i( 1'b0 ),
+
+        .flush_ic_i( flush_ic ),
+
+        .warp_free_o          ( warp_free              ),
+        .allocate_warp_i      ( allocate_warp          ),
+        .allocate_pc_i        ( warp_insert.pc         ),
+        .allocate_dp_addr_i   ( warp_insert.dp_addr    ),
+        .allocate_tblock_idx_i( warp_insert.tblock_idx ),
+        .allocate_tgroup_id_i ( warp_insert.tgroup_id  ),
+
+        .tblock_done_ready_i( 1'b1           ),
+        .tblock_done_o      ( tblock_done    ),
+        .tblock_done_id_o   ( tblock_done_id ),
+
+        /// Instruction Memory AXI Request and Response
+        .imem_axi_ar_id_o    ( imem_axi_req.ar.id     ),
+        .imem_axi_ar_addr_o  ( imem_axi_req.ar.addr   ),
+        .imem_axi_ar_len_o   ( imem_axi_req.ar.len    ),
+        .imem_axi_ar_size_o  ( imem_axi_req.ar.size   ),
+        .imem_axi_ar_burst_o ( imem_axi_req.ar.burst  ),
+        .imem_axi_ar_lock_o  ( imem_axi_req.ar.lock   ),
+        .imem_axi_ar_cache_o ( imem_axi_req.ar.cache  ),
+        .imem_axi_ar_prot_o  ( imem_axi_req.ar.prot   ),
+        .imem_axi_ar_qos_o   ( imem_axi_req.ar.qos    ),
+        .imem_axi_ar_region_o( imem_axi_req.ar.region ),
+        .imem_axi_ar_user_o  ( imem_axi_req.ar.user   ),
+        .imem_axi_ar_valid_o ( imem_axi_req.ar_valid  ),
+        .imem_axi_ar_ready_i ( imem_axi_rsp.ar_ready  ),
+
+        .imem_axi_r_id_i   ( imem_axi_rsp.r.id    ),
+        .imem_axi_r_data_i ( imem_axi_rsp.r.data  ),
+        .imem_axi_r_resp_i ( imem_axi_rsp.r.resp  ),
+        .imem_axi_r_last_i ( imem_axi_rsp.r.last  ),
+        .imem_axi_r_user_i ( imem_axi_rsp.r.user  ),
+        .imem_axi_r_valid_i( imem_axi_rsp.r_valid ),
+        .imem_axi_r_ready_o( imem_axi_req.r_ready ),
+
+        .imem_axi_aw_id_o    ( imem_axi_req.aw.id     ),
+        .imem_axi_aw_addr_o  ( imem_axi_req.aw.addr   ),
+        .imem_axi_aw_len_o   ( imem_axi_req.aw.len    ),
+        .imem_axi_aw_size_o  ( imem_axi_req.aw.size   ),
+        .imem_axi_aw_burst_o ( imem_axi_req.aw.burst  ),
+        .imem_axi_aw_lock_o  ( imem_axi_req.aw.lock   ),
+        .imem_axi_aw_cache_o ( imem_axi_req.aw.cache  ),
+        .imem_axi_aw_prot_o  ( imem_axi_req.aw.prot   ),
+        .imem_axi_aw_qos_o   ( imem_axi_req.aw.qos    ),
+        .imem_axi_aw_region_o( imem_axi_req.aw.region ),
+        .imem_axi_aw_atop_o  ( imem_axi_req.aw.atop   ),
+        .imem_axi_aw_user_o  ( imem_axi_req.aw.user   ),
+        .imem_axi_aw_valid_o ( imem_axi_req.aw_valid  ),
+        .imem_axi_aw_ready_i ( imem_axi_rsp.aw_ready  ),
+
+        .imem_axi_w_data_o ( imem_axi_req.w.data  ),
+        .imem_axi_w_strb_o ( imem_axi_req.w.strb  ),
+        .imem_axi_w_last_o ( imem_axi_req.w.last  ),
+        .imem_axi_w_user_o ( imem_axi_req.w.user  ),
+        .imem_axi_w_valid_o( imem_axi_req.w_valid ),
+        .imem_axi_w_ready_i( imem_axi_rsp.w_ready ),
+
+        .imem_axi_b_id_i   ( imem_axi_rsp.b.id    ),
+        .imem_axi_b_resp_i ( imem_axi_rsp.b.resp  ),
+        .imem_axi_b_user_i ( imem_axi_rsp.b.user  ),
+        .imem_axi_b_valid_i( imem_axi_rsp.b_valid ),
+        .imem_axi_b_ready_o( imem_axi_req.b_ready ),
+
+        /// Memory AXI Request and Response
+        .mem_axi_ar_id_o    ( mem_axi_req.ar.id     ),
+        .mem_axi_ar_addr_o  ( mem_axi_req.ar.addr   ),
+        .mem_axi_ar_len_o   ( mem_axi_req.ar.len    ),
+        .mem_axi_ar_size_o  ( mem_axi_req.ar.size   ),
+        .mem_axi_ar_burst_o ( mem_axi_req.ar.burst  ),
+        .mem_axi_ar_lock_o  ( mem_axi_req.ar.lock   ),
+        .mem_axi_ar_cache_o ( mem_axi_req.ar.cache  ),
+        .mem_axi_ar_prot_o  ( mem_axi_req.ar.prot   ),
+        .mem_axi_ar_qos_o   ( mem_axi_req.ar.qos    ),
+        .mem_axi_ar_region_o( mem_axi_req.ar.region ),
+        .mem_axi_ar_user_o  ( mem_axi_req.ar.user   ),
+        .mem_axi_ar_valid_o ( mem_axi_req.ar_valid  ),
+        .mem_axi_ar_ready_i ( mem_axi_rsp.ar_ready  ),
+
+        .mem_axi_r_id_i   ( mem_axi_rsp.r.id    ),
+        .mem_axi_r_data_i ( mem_axi_rsp.r.data  ),
+        .mem_axi_r_resp_i ( mem_axi_rsp.r.resp  ),
+        .mem_axi_r_last_i ( mem_axi_rsp.r.last  ),
+        .mem_axi_r_user_i ( mem_axi_rsp.r.user  ),
+        .mem_axi_r_valid_i( mem_axi_rsp.r_valid ),
+        .mem_axi_r_ready_o( mem_axi_req.r_ready ),
+
+        .mem_axi_aw_id_o    ( mem_axi_req.aw.id     ),
+        .mem_axi_aw_addr_o  ( mem_axi_req.aw.addr   ),
+        .mem_axi_aw_len_o   ( mem_axi_req.aw.len    ),
+        .mem_axi_aw_size_o  ( mem_axi_req.aw.size   ),
+        .mem_axi_aw_burst_o ( mem_axi_req.aw.burst  ),
+        .mem_axi_aw_lock_o  ( mem_axi_req.aw.lock   ),
+        .mem_axi_aw_cache_o ( mem_axi_req.aw.cache  ),
+        .mem_axi_aw_prot_o  ( mem_axi_req.aw.prot   ),
+        .mem_axi_aw_qos_o   ( mem_axi_req.aw.qos    ),
+        .mem_axi_aw_region_o( mem_axi_req.aw.region ),
+        .mem_axi_aw_atop_o  ( mem_axi_req.aw.atop   ),
+        .mem_axi_aw_user_o  ( mem_axi_req.aw.user   ),
+        .mem_axi_aw_valid_o ( mem_axi_req.aw_valid  ),
+        .mem_axi_aw_ready_i ( mem_axi_rsp.aw_ready  ),
+
+        .mem_axi_w_data_o ( mem_axi_req.w.data  ),
+        .mem_axi_w_strb_o ( mem_axi_req.w.strb  ),
+        .mem_axi_w_last_o ( mem_axi_req.w.last  ),
+        .mem_axi_w_user_o ( mem_axi_req.w.user  ),
+        .mem_axi_w_valid_o( mem_axi_req.w_valid ),
+        .mem_axi_w_ready_i( mem_axi_rsp.w_ready ),
+
+        .mem_axi_b_id_i   ( mem_axi_rsp.b.id    ),
+        .mem_axi_b_resp_i ( mem_axi_rsp.b.resp  ),
+        .mem_axi_b_user_i ( mem_axi_rsp.b.user  ),
+        .mem_axi_b_valid_i( mem_axi_rsp.b_valid ),
+        .mem_axi_b_ready_o( mem_axi_req.b_ready )
+    );
+`endif
 
     // #######################################################################################
     // # Launching Threadblocks                                                              #

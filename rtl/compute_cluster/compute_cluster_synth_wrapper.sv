@@ -8,7 +8,7 @@
 // Unpacks all interfaces into simple ports
 module compute_cluster_synth_wrapper #(
     /// Number of Compute Units in the cluster
-    parameter int unsigned ComputeUnits = 2,
+    parameter int unsigned ComputeUnits = 4,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -32,7 +32,7 @@ module compute_cluster_synth_wrapper #(
     /// Width of the registers
     parameter int unsigned RegWidth = 32,
     // Memory Address width in bits
-    parameter int unsigned AddressWidth = 32,
+    parameter int unsigned AddressWidth = 24,
     // Memory Block index width -> Memory request width is 2^BlockIdxBits bytes
     parameter int unsigned BlockIdxBits = 4,
     // Width of the id for requests queue

@@ -29,7 +29,7 @@ jobs:
                 path: |
                     *.log
                     cu.vcd
-                    xilinx/out/compute_unit_yosys.v
+                    xilinx/out/*
                     xilinx/yosys.f
                     xilinx/yosys.log
 
@@ -49,6 +49,10 @@ jobs:
               run: make xilinx-yosys TOP=compute_cluster_synth_wrapper
             - name: Report Area
               run: tail -n 32 xilinx/yosys.log
+            - name: Copy netlist...
+              run: cp xilinx/out/compute_cluster_synth_wrapper_yosys.v xilinx/out/post_synth.v
+            - name: Post Synthesis Simulation
+              run: make tb_compute_cluster BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -57,7 +61,7 @@ jobs:
                 path: |
                     *.log
                     cc.vcd
-                    xilinx/out/compute_cluster_yosys.v
+                    xilinx/out/*
                     xilinx/yosys.f
                     xilinx/yosys.log
 
@@ -89,6 +93,6 @@ jobs:
                 path: |
                     *.log
                     bgpu_soc.vcd
-                    xilinx/out/bgpu_soc_yosys.v
+                    xilinx/out/*
                     xilinx/yosys.f
                     xilinx/yosys.log

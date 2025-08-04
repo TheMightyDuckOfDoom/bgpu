@@ -151,6 +151,11 @@ gowin-eda-report:
 	sed -i '1,10d' gowin/gowin_eda_report.rpt
 	grep -A 64 "Resource Usage Summary" gowin/gowin_eda_report.rpt 
 
+gowin-eda-process-netlist: gowin/scripts/rename_ports.py gowin/scripts/process_eda_netlist.tcl
+	echo "set top_design $(TOP)"  >  gowin/run_process.tcl
+	echo "source gowin/scripts/process_eda_netlist.tcl" >> gowin/run_process.tcl
+	yosys -c gowin/run_process.tcl -l gowin/gowin_process.log -t
+
 gowin-yosys-gen-report: gowin/scripts/yosys_timing_eda.tcl
 	echo "set top_design $(TOP)"  >  gowin/run_timing.tcl
 	echo "source gowin/scripts/yosys_timing_eda.tcl" >> gowin/run_timing.tcl
