@@ -189,3 +189,18 @@ jobs:
               run: DISPLAY=:1.0 make gowin-eda TOP=bgpu_soc
             - name: Show report
               run: make gowin-eda-report TOP=bgpu_soc
+            - name: Process Netlist for Verilator
+              run: make gowin-eda-process-netlist TOP=bgpu_soc
+            - name: Post Synthesis Simulation
+              run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
+            - name: Archive Results on Failure
+              uses: actions/upload-artifact@v4
+              if: failure()
+              with:
+                name: bgpu-gowin-eda-synthesis-results-on-failure
+                path: |
+                    *.log
+                    bgpu_soc.vcd
+                    gowin/out/*
+                    gowin/gowin-eda.f
+                    gowin/*.log
