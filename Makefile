@@ -107,11 +107,6 @@ xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
 xilinx-yosys-report: xilinx/scripts/vivado_report.tcl xilinx/dummy_constraints.xdc xilinx/run_vivado_report.sh
 	time ./xilinx/run_vivado_report.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
-xilinx-postsynth: TOP := bgpu_soc
-xilinx-postsynth: clean xilinx-yosys
-	cp xilinx/out/bgpu_soc_yosys.v xilinx/out/post_synth.v
-	make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING -Wno-CASEOVERLAP -Wno-CMPCONST -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC -Wno-SELRANGE" 
-
 ####################################################################################################
 # ASIC Synthesis
 ####################################################################################################
@@ -171,10 +166,16 @@ gowin-yosys-report:
 gowin-report:
 	tail -n 64 gowin/gowin.log
 
-gowin-postsynth: TOP := bgpu_soc
-gowin-postsynth: clean gowin-yosys
-	cp gowin/out/bgpu_soc_yosys.v gowin/out/post_synth.v
-	make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
+gowin-eda-pnr:
+	echo "set top_design $(TOP)"  >  gowin/run_pnr.tcl
+	echo "source gowin/scripts/eda_pnr.tcl" >> gowin/run_pnr.tcl
+	gowin/run_eda.sh ${GOWIN_EDA} gowin/run_pnr.tcl
+
+gowin-eda-pnr-report:
+	lynx gowin/out/$(TOP)/impl/pnr/$(TOP)_tr_content.html -dump -width 256 > gowin/gowin_eda_pnr_report.rpt
+	sed -i 's/\&nbsp/     /g' gowin/gowin_eda_pnr_report.rpt
+	sed -i '1,10d' gowin/gowin_eda_pnr_report.rpt
+	head -n 128 gowin/gowin_eda_pnr_report.rpt
 
 ####################################################################################################
 # Clean

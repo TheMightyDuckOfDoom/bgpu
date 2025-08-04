@@ -193,6 +193,10 @@ jobs:
               run: make gowin-eda-process-netlist TOP=bgpu_soc
             - name: Post Synthesis Simulation
               run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
+            - name: Place and Route
+              run: make gowin-eda-pnr TOP=bgpu_soc
+            - name: Show PnR Report
+              run: make gowin-eda-pnr-report TOP=bgpu_soc 
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -204,3 +208,11 @@ jobs:
                     gowin/out/*
                     gowin/gowin-eda.f
                     gowin/*.log
+            - name: Archive Bitstream and PnR Report
+              uses: actions/upload-artifact@v4
+              if: success()
+              with:
+                name: bgpu-gowin-eda-synthesis-results-on-success
+                path: |
+                    gowin/out/bgpu_soc/impl/pnr/bgpu_soc.fs
+                    gowin/gowin_eda_pnr_report.rpt

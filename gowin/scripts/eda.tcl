@@ -11,12 +11,14 @@ set_option -disable_io_insertion 1
 set_option -verilog_std sysv2017
 
 add_file ../pickled.sv
-add_file -type sdc ../../xilinx/dummy_constraints.xdc
+add_file -type sdc ../../../xilinx/dummy_constraints.xdc
 run syn
 
 # Check for synthesis errors
+set error 0
 proc check_for_warning {warning_as_error} {
     global top_design
+    global error
 
     set fp [open impl/gwsynthesis/${top_design}.log]
     set filecontent [read $fp]
@@ -28,10 +30,16 @@ proc check_for_warning {warning_as_error} {
         set error 1
     }
     close $fp
-    if {$error} {
-        puts "Error: Warning $warning_as_error found in synthesis log, aborting."
-        exit 2
-    }
 }
 
+check_for_warning "DI0002"
+check_for_warning "EX0200"
+check_for_warning "EX0201"
 check_for_warning "EX0205"
+check_for_warning "EX0206"
+check_for_warning "EX0210"
+
+if {$error} {
+    puts "Error: Warnings that should be errors found in synthesis log, aborting."
+    exit 2
+}
