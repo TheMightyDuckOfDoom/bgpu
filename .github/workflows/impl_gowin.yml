@@ -1,0 +1,31 @@
+name: Gowin Implementation
+on: [push, pull_request, workflow_dispatch]
+jobs:
+    bgpu-gowin-eda:
+        runs-on: self-hosted
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+            - name: Restore .bender from cache
+              uses: actions/cache@v4
+              with:
+                path: |
+                    .bender
+                    vendor
+                key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
+            - name: Gowin EDA Synthesis for Gowin FPGA
+              run: DISPLAY=:1.0 make gowin-eda-bgpu-wrapper
+            - name: Show report
+              run: make gowin-eda-report TOP=bgpu_soc
+            - name: Place and Route
+              run: DISPLAY=:1.0 make gowin-eda-pnr TOP=bgpu_soc
+            - name: Show PnR Report
+              run: make gowin-eda-pnr-report TOP=bgpu_soc 
+            - name: Archive Bitstream and PnR Report
+              uses: actions/upload-artifact@v4
+              if: success()
+              with:
+                name: bgpu-gowin-eda-impl-results-on-success
+                path: |
+                    gowin/out/bgpu_soc/impl/pnr/bgpu_soc.fs
+                    gowin/gowin_eda_pnr_report.rpt

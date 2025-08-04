@@ -9,6 +9,7 @@
 [![ASIC Synthesis](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_asic.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_asic.yml)
 [![Xilinx Synthesis](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_xilinx.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_xilinx.yml)
 [![Gowin Synthesis](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_gowin.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_gowin.yml)
+[![Gowin Implementation](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/impl_gowin.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/impl_gowin.yml)
 [![License](https://img.shields.io/badge/license-SHL--0.51-green)](LICENSE-SHL)
 </div>
 

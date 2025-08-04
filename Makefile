@@ -33,7 +33,7 @@ vendor/: $(BENDER_DEPS)
 	$(BENDER) vendor init
 
 bgpu-gowin: TOP := bgpu_soc
-bgpu-gowin: gowin-eda gowin-eda-report gowin-eda-pnr gowin-eda-pnr-report
+bgpu-gowin: gowin-eda-bgpu-wrapper gowin-eda-report gowin-eda-pnr gowin-eda-pnr-report
 
 ####################################################################################################
 # Linting
@@ -142,6 +142,12 @@ gowin-eda: gowin/gowin-eda.f $(SRCS) gowin/scripts/eda.tcl
 	mkdir -p gowin/out
 	morty -f gowin/gowin-eda.f -D SYNTHESIS --top $(TOP) > gowin/out/pickled.sv
 	gowin/run_eda.sh ${GOWIN_EDA} gowin/run_eda.tcl
+
+gowin-eda-bgpu-wrapper: TOP := bgpu_soc
+gowin-eda-bgpu-wrapper: gowin/gowin-eda.f $(SRCS) gowin/scripts/eda_bgpu_wrapper.tcl
+	mkdir -p gowin/out
+	morty -f gowin/gowin-eda.f -D SYNTHESIS > gowin/out/pickled.sv
+	gowin/run_eda.sh ${GOWIN_EDA} gowin/scripts/eda_bgpu_wrapper.tcl
 
 gowin-eda-report:
 	lynx gowin/out/$(TOP)/impl/gwsynthesis/$(TOP)_syn.rpt.html -dump -width 256 > gowin/gowin_eda_report.rpt

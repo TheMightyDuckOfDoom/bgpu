@@ -3,10 +3,6 @@ IO_PORT "clk_i" IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
 IO_LOC  "rst_ni" AA13;
 IO_PORT "rst_ni" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
 
-// Route testmode to a button, but disable it
-IO_LOC  "testmode_i" Y12;
-IO_PORT "testmode_i" IO_TYPE=LVCMOS33 PULL_MODE=DOWN BANK_VCCIO=3.3;
-
 IO_LOC  "jtag_tck_i" V12;
 IO_PORT "jtag_tck_i" IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
 IO_LOC  "jtag_tdi_i" R13;
