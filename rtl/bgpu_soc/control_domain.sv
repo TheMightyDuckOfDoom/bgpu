@@ -108,6 +108,9 @@ module control_domain #(
       logic [AddressWidth:0] end_addr;
     } addr_map_rule_t;
 
+    // BGPU ID
+    typedef logic [AxiIdWidth-1:0] bgpu_id_t;
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
@@ -134,6 +137,8 @@ module control_domain #(
     xdwn_obi_rsp_t dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp, err_obi_rsp;
 
     // Register Interface signals
+    bgpu_id_t bgpu_req_id, bgpu_rsp_id;
+
     reg_req_t bgpu_reg_req;
     reg_rsp_t bgpu_reg_rsp;
 
@@ -472,6 +477,12 @@ module control_domain #(
     // # OBI2AXI Converter to access BGPU Domain                                             #
     // #######################################################################################
 
+    // Build Wider BGPU Request ID from OBI Request AID
+    always_comb begin : build_bgpu_req_id
+        bgpu_req_id = '0;
+        bgpu_req_id[2:0] = bgpu_obi_req.a.aid;
+    end : build_bgpu_req_id
+
     // Convert OBI request to Register Interface
     periph_to_reg #(
         .AW   ( AddressWidth ),
@@ -484,22 +495,24 @@ module control_domain #(
         .clk_i ( clk_o  ),
         .rst_ni( rst_no ),
 
-        .req_i  ( bgpu_obi_req.req     ),
+        .req_i  ( bgpu_obi_req.req                      ),
         .add_i  ( bgpu_obi_req.a.addr[AddressWidth-1:0] ),
-        .wen_i  ( ~bgpu_obi_req.a.we   ),
-        .wdata_i( bgpu_obi_req.a.wdata ),
-        .be_i   ( bgpu_obi_req.a.be    ),
-        .id_i   ( bgpu_obi_req.a.aid   ),
+        .wen_i  ( ~bgpu_obi_req.a.we                    ),
+        .wdata_i( bgpu_obi_req.a.wdata                  ),
+        .be_i   ( bgpu_obi_req.a.be                     ),
+        .id_i   ( bgpu_req_id                           ),
 
         .gnt_o    ( bgpu_obi_rsp.gnt     ),
         .r_rdata_o( bgpu_obi_rsp.r.rdata ),
         .r_opc_o  ( bgpu_obi_rsp.r.err   ),
-        .r_id_o   ( bgpu_obi_rsp.r.rid   ),
+        .r_id_o   ( bgpu_rsp_id          ),
         .r_valid_o( bgpu_obi_rsp.rvalid  ),
 
         .reg_req_o( bgpu_reg_req ),
         .reg_rsp_i( bgpu_reg_rsp )
     );
+
+    assign bgpu_obi_rsp.r.rid        = bgpu_rsp_id[2:0];
     assign bgpu_obi_rsp.r.r_optional = '0;
 
     // Convert Register Interface to AXI
