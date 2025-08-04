@@ -214,7 +214,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
     // Instantiate Compute Unit
     compute_unit #(
-    `ifndef POST_SYNTH
+    `ifndef TARGET_POST_SYNTH
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),
         .WarpWidth             ( WarpWidth              ),
