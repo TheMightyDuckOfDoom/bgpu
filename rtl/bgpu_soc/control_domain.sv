@@ -243,6 +243,9 @@ module control_domain #(
     assign dbg_req_obi_req.a.aid        = '0;
     assign dbg_req_obi_req.a.a_optional = '0;
 
+    assign dbg_rsp_obi_rsp.r.err        = 1'b0;
+    assign dbg_rsp_obi_rsp.r.r_optional = '0;
+
     always_comb begin : build_dm_slave_addr
         dm_slave_addr = '0;
         dm_slave_addr[AddressWidth-1:0] = dbg_rsp_obi_req.a.addr[AddressWidth-1:0];
@@ -345,8 +348,18 @@ module control_domain #(
         .crash_dump_o  ( /* Unused */ )
     );
 
-    assign cpu_imem_obi_req.a.addr = cpu_imem_addr[AddressWidth:0];
-    assign cpu_dmem_obi_req.a.addr = cpu_dmem_addr[AddressWidth:0];
+    // Assign additional signals for CPU IMEM OBI
+    assign cpu_imem_obi_req.a.we         = 1'b0;
+    assign cpu_imem_obi_req.a.be         = '0;
+    assign cpu_imem_obi_req.a.wdata      = '0;
+    assign cpu_imem_obi_req.a.a_optional = '0;
+    assign cpu_imem_obi_req.a.aid        = '0;
+    assign cpu_imem_obi_req.a.addr       = cpu_imem_addr[AddressWidth:0];
+
+    // Assign additional signals for CPU DMEM OBI
+    assign cpu_dmem_obi_req.a.a_optional = '0;
+    assign cpu_dmem_obi_req.a.aid        = '0;
+    assign cpu_dmem_obi_req.a.addr       = cpu_dmem_addr[AddressWidth:0];
 
     // OBI Cut for CPU IMEM and DMEM
     obi_cut #(

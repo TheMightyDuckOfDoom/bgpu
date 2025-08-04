@@ -161,6 +161,11 @@ module load_store_unit import bgpu_pkg::*; #(
     com_req_id_t mem_rsp_com_id;
     sub_req_id_t mem_rsp_sub_id;
 
+    // Memory response data, with RegWidthInBytes-1 zero bits at the top
+    // This is needed as we always load a full register width
+    // as the offset could be at the last byte of the memory block
+    logic [BlockWidth*8 + RegWidth-8 -1:0] mem_rsp_extended_data;
+
     // Request buffer
     logic          [OutstandingReqs-1:0] buffer_valid_q, buffer_valid_d;
     buffer_entry_t [OutstandingReqs-1:0] buffer_q,       buffer_d;
@@ -227,6 +232,9 @@ module load_store_unit import bgpu_pkg::*; #(
     assign mem_rsp_sub_id = mem_rsp_id_i[SubReqIdWidth-1:0];
     assign mem_rsp_com_id = mem_rsp_id_i[OutstandingReqIdxWidth + SubReqIdWidth-1:SubReqIdWidth];
 
+    assign mem_rsp_extended_data[BlockWidth*8              -1:0           ] = mem_rsp_data_i;
+    assign mem_rsp_extended_data[BlockWidth*8 + RegWidth-8 -1:BlockWidth*8] = '0;
+
     // #######################################################################################
     // # Request buffer                                                                      #
     // #######################################################################################
@@ -276,10 +284,8 @@ module load_store_unit import bgpu_pkg::*; #(
                         // If the thread is ready and the sub ID matches, update the data
                         // We use the offset to load the correct data
                         // We always load a full register width
-                        /* verilator lint_off WIDTHTRUNC */
-                        buffer_d[mem_rsp_com_id].thread_data[i].data = mem_rsp_data_i >>
-                            (buffer_q[mem_rsp_com_id].thread_data[i].offset * 8);
-                        /* verilator lint_on WIDTHTRUNC */
+                        buffer_d[mem_rsp_com_id].thread_data[i].data =  mem_rsp_extended_data[
+                            buffer_q[mem_rsp_com_id].thread_data[i].offset * 8 +: RegWidth];
 
                         buffer_d[mem_rsp_com_id].thread_ready[i] = 1'b1; // Mark thread as ready
                     end
