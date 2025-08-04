@@ -54,7 +54,7 @@ module tb_bgpu_soc #(
     // # DUT                                                                                 #
     // #######################################################################################
 
-`ifndef TARGET_POST_SYNTH
+`ifndef TARGET_GOWIN_EDA_POST_SYNTH
     bgpu_soc i_bgpu_soc (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
@@ -68,15 +68,17 @@ module tb_bgpu_soc #(
         .jtag_trst_ni( jtag_trst_n )
     );
 `else
-    bgpu_wrapper i_bgpu_soc (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
+    bgpu_soc i_bgpu_soc (
+        .clk30 ( clk   ),
+        .rst_synced_q( rst_n ),
 
-        .jtag_tck_i  ( jtag_tck    ),
-        .jtag_tdi_i  ( jtag_tdi    ),
-        .jtag_tdo_o  ( jtag_tdo    ),
-        .jtag_tms_i  ( jtag_tms    ),
-        .jtag_trst_ni( jtag_trst_n )
+        .testmode_i_d( 1'b0 ),
+
+        .jtag_tck_i_d  ( jtag_tck    ),
+        .jtag_tdi_i_d  ( jtag_tdi    ),
+        .jtag_tdo_o_d  ( jtag_tdo    ),
+        .jtag_tms_i_d  ( jtag_tms    ),
+        .jtag_trst_ni_d( jtag_trst_n )
     );
 `endif
 

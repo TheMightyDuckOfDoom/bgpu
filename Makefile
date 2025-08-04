@@ -163,22 +163,30 @@ gowin-yosys-report:
 	sed -i '1,10d' gowin/gowin_yosys_report.rpt
 	grep -A 64 "Resource Usage Summary" gowin/gowin_yosys_report.rpt 
 
+gowin-yosys-eda-impl:
+	mkdir -p gowin/out
+	gowin/run_eda.sh ${GOWIN_EDA} gowin/scripts/yosys_eda_impl.tcl
+
 gowin-report:
 	tail -n 64 gowin/gowin.log
 
 gowin-postsynth: TOP := bgpu_soc
-gowin-postsynth: clean gowin-yosys
+gowin-postsynth:
+	rm -f gowin/out/post_synth.v
 	cp gowin/out/bgpu_soc_yosys.v gowin/out/post_synth.v
-	make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
+	rm -f verilator/*.f
+	make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
 
 gowin-eda-postsynth: TOP := bgpu_soc
 gowin-eda-postsynth:
-	rm gowin/out/post_synth.v
-	rm gowin/out/$(TOP).json
+	rm -f gowin/out/post_synth.v
+	rm -f gowin/out/$(TOP).json
 	echo "set TOP $(TOP)"  >  gowin/run_process.tcl
+	echo "set WRAPPER bgpu_soc"  >>  gowin/run_process.tcl
 	echo "source gowin/scripts/process_netlist.tcl" >> gowin/run_process.tcl
 	yosys -c gowin/run_process.tcl -l gowin/process.log -t
-	make tb_bgpu_soc BENDER_TARGET_SIM="-t gowin_sim -t gowin_postsynth -t post_synth"
+	rm -f verilator/*.f
+	make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t tech_cells_generic_exclude_tc_sram -t gowin_eda_post_synth"
 
 ####################################################################################################
 # Clean

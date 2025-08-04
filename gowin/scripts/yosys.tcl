@@ -6,9 +6,16 @@ yosys read_slang --top $top_design -F gowin/gowin-yosys.f \
 
 exec mkdir -p gowin/out
 
-#nowidelut: better results
+yosys setattr -set keep_hierarchy 1 "t:dmi_jtag$*"
+yosys setattr -set keep_hierarchy 1 "t:cdc_*$*"
+yosys setattr -set keep_hierarchy 1 "t:sync$*"
+yosys setattr -set keep_hierarchy 1 "t:tc_clk*$*"
+
+yosys attrmap -rename dont_touch keep
+yosys attrmvcp -copy -attr keep
+
 #nolutram: 138k B does not support SSRAMs/LUTRAMs
-synth_gowin -top $top_design -noiopads -nowidelut -nolutram -run :coarse
+synth_gowin -top $top_design -noiopads -nolutram -run :coarse
 
 # Needed to avoid later crash, see:
 # - https://github.com/YosysHQ/yosys/issues/4349
@@ -20,6 +27,6 @@ select -write gowin/out/${top_design}_registers.rpt t:*dff*
 autoname t:*dff* %n
 clean -purge
 
-synth_gowin -top $top_design -noiopads -nowidelut -nolutram -run coarse:
+synth_gowin -top $top_design -noiopads -nolutram -run coarse:
 
-write_verilog -simple-lhs -decimal -attr2comment -renameprefix gen gowin/out/${top_design}_yosys.v
+write_verilog -simple-lhs -attr2comment -renameprefix gen gowin/out/${top_design}_yosys.v

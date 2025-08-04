@@ -13,7 +13,7 @@
 // - Dummy Memory
 module bgpu_soc #(
     /// Width of the data bus to the memory controller
-    parameter int unsigned MctrlWidth = 64,
+    parameter int unsigned MctrlWidth = 128,
     /// Width of the addressable physical memory by the memory controller
     parameter int unsigned MctrlAddressWidth = 24,
 

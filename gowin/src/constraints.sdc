@@ -1,20 +1,22 @@
-create_clock -name clk_sys -period 20.0 [get_ports {clk_i}]
+create_clock -name clk_ext -period 20.0 [get_ports {clk_i}]
+create_clock -name clk_sys -period 33.3 [get_nets {clk30}]
 create_clock -name clk_jtg -period 50.0 [get_ports {jtag_tck_i}]
+create_clock -name clk_jtg_n -period 50.0 [get_nets {i_bgpu_soc/i_ctrl_domain.i_dmi_jtag/i_dmi_jtag_tap.i_dft_tck_mux/i_dmi_jtag_tap.tck_n}]
 
-set_clock_groups -asynchronous -group [get_clocks {clk_jtg}] -group [get_clocks {clk_sys}]
+set_clock_groups -asynchronous -group [get_clocks {clk_jtg clk_jtg_n}] -group [get_clocks {clk_sys}] -group [get_clocks {clk_ext}]
 
 # Reset should propagate to system domain within a clock cycle.
-set_input_delay -max 2.0 -clock clk_sys [get_ports {rst_ni}]
-set_false_path -hold -from [get_ports {rst_ni}]
-set_max_delay 20.0   -from [get_ports {rst_ni}]
+set_input_delay -max 2.0 -clock clk_ext [get_nets {rst_ni}]
+set_false_path -hold -from [get_nets {rst_ni}]
+set_max_delay 25.0   -from [get_nets {rst_ni}]
 
 # Constrain `cdc_2phase` for DMI request
-set_false_path -hold -through [get_nets {i_bgpu_soc/i_ctrl_domain/i_dmi_jtag/i_dmi_cdc/i_cdc_req/async_*}]
-set_max_delay 7.0    -through [get_nets {i_bgpu_soc/i_ctrl_domain/i_dmi_jtag/i_dmi_cdc/i_cdc_req/async_*}]
+set_false_path -hold -through [get_nets {i_bgpu_soc/i_ctrl_domain.i_dmi_jtag/i_dmi_cdc.i_cdc_req/async_*}]
+set_max_delay 8.0    -through [get_nets {i_bgpu_soc/i_ctrl_domain.i_dmi_jtag/i_dmi_cdc.i_cdc_req/async_*}]
 
 # Constrain `cdc_2phase` for DMI response
-set_false_path -hold -through [get_nets {i_bgpu_soc/i_ctrl_domain/i_dmi_jtag/i_dmi_cdc/i_cdc_resp/async_*}]
-set_max_delay 7.0    -through [get_nets {i_bgpu_soc/i_ctrl_domain/i_dmi_jtag/i_dmi_cdc/i_cdc_resp/async_*}]
+set_false_path -hold -through [get_nets {i_bgpu_soc/i_ctrl_domain.i_dmi_jtag/i_dmi_cdc.i_cdc_resp/async_*}]
+set_max_delay 8.0    -through [get_nets {i_bgpu_soc/i_ctrl_domain.i_dmi_jtag/i_dmi_cdc.i_cdc_resp/async_*}]
 
 set_input_delay  -min -add_delay -clock clk_jtg 5.0  [get_ports {jtag_tdi_i jtag_tms_i}]
 set_input_delay  -max -add_delay -clock clk_jtg 25.0 [get_ports {jtag_tdi_i jtag_tms_i}]
