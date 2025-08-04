@@ -8,7 +8,7 @@ catch {add_file ../../src/constraints.sdc} error
 catch {add_file ../../src/tang_mega_138k.cst} error
 
 # Disable dummy constraints
-catch {set_file_enable ../../../xilinx/dummy_constraints.xdc false} error
+catch {set_file_enable ../../src/dummy_constraints.sdc false} error
 catch {set_file_enable ../../src/constraints.sdc true} error
 
 # Run Placement and Routing

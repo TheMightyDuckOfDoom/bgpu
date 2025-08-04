@@ -32,6 +32,9 @@ TBS = $(basename $(notdir $(wildcard test/tb_*.sv)))
 vendor/: $(BENDER_DEPS)
 	$(BENDER) vendor init
 
+bgpu-gowin: TOP := bgpu_soc
+bgpu-gowin: gowin-eda gowin-eda-report gowin-eda-pnr gowin-eda-pnr-report
+
 ####################################################################################################
 # Linting
 ####################################################################################################

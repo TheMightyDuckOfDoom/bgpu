@@ -5,7 +5,7 @@
 /// Testbench for Compute Cluster
 module tb_compute_cluster import bgpu_pkg::*; #(
     /// Number of Compute Units in the cluster
-    parameter int unsigned ComputeUnits = 4,
+    parameter int unsigned ComputeUnits = 2,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps

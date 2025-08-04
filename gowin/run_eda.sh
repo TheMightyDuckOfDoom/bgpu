@@ -10,6 +10,10 @@ for i in {1..5}; do
         echo "Run failed due to a synthesis warning."
         break
     else
+        if [ $i -eq 5 ]; then
+            echo "Run $i failed with code $code. Exiting..."
+            exit $code
+        fi
         echo "Run $i failed, retrying..."
         sleep 5
     fi

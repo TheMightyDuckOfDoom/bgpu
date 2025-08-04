@@ -11,7 +11,7 @@ set_option -disable_io_insertion 1
 set_option -verilog_std sysv2017
 
 add_file ../pickled.sv
-add_file -type sdc ../../../xilinx/dummy_constraints.xdc
+add_file ../../src/dummy_constraints.sdc
 run syn
 
 # Check for synthesis errors

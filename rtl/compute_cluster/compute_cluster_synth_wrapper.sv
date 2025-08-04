@@ -8,7 +8,7 @@
 // Unpacks all interfaces into simple ports
 module compute_cluster_synth_wrapper #(
     /// Number of Compute Units in the cluster
-    parameter int unsigned ComputeUnits = 4,
+    parameter int unsigned ComputeUnits = 2,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps

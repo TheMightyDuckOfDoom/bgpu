@@ -194,7 +194,7 @@ jobs:
             - name: Post Synthesis Simulation
               run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
             - name: Place and Route
-              run: make gowin-eda-pnr TOP=bgpu_soc
+              run: DISPLAY=:1.0 make gowin-eda-pnr TOP=bgpu_soc
             - name: Show PnR Report
               run: make gowin-eda-pnr-report TOP=bgpu_soc 
             - name: Archive Results on Failure

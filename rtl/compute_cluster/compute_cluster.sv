@@ -150,16 +150,28 @@ module compute_cluster #(
     `AXI_TYPEDEF_ALL(cu_mem_axi, addr_t, req_id_t,        block_data_t, block_mask_t, logic)
     `AXI_TYPEDEF_ALL(cc_mem_axi, addr_t, mem_cc_axi_id_t, block_data_t, block_mask_t, logic)
 
+    typedef struct packed {
+        pc_t         pc;
+        addr_t       dp_addr;
+        tblock_idx_t tblock_idx;
+        tgroup_id_t  tgroup_id;
+    } allocate_data_t;
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
 
     // Compute Unit thread block distribution
-    logic       [ComputeUnits-1:0] cu_allocate, cu_warp_free;
+    logic           [ComputeUnits-1:0] cu_allocate_d, cu_allocate_q, cu_warp_free_d, cu_warp_free_q;
+    allocate_data_t [ComputeUnits-1:0] cu_allocate_data_q;
+    allocate_data_t cu_allocate_data_d;
 
     // Compute Unit thread block completion
     logic       [ComputeUnits-1:0] cu_done_ready, cu_done;
     tgroup_id_t [ComputeUnits-1:0] cu_done_id;
+
+    logic       tblock_done_d, tblock_done_ready_q;
+    tgroup_id_t tblock_done_id_d;
 
     // Compute Unit Instruction Memory Interface
     cu_imem_axi_req_t  [ComputeUnits-1:0] cu_imem_axi_req;
@@ -315,22 +327,47 @@ module compute_cluster #(
     // #######################################################################################
 
     // Atleast one warp is free in the cluster
-    assign warp_free_o = |cu_warp_free;
+    assign warp_free_o = |cu_warp_free_q;
 
     always_comb begin : distribute_thread_block
         // Default: No Compute Unit is selected
-        cu_allocate = '0;
+        cu_allocate_d = '0;
 
         // If a warp is free, allocate it to the Compute Unit
         if (allocate_warp_i) begin
             for (int unsigned cu = 0; cu < ComputeUnits; cu++) begin
-                if (cu_warp_free[cu]) begin
-                    cu_allocate[cu] = 1'b1;
+                if (cu_warp_free_q[cu]) begin
+                    cu_allocate_d[cu] = 1'b1;
                     break; // Only allocate to the first free CU
                 end
             end
         end
     end : distribute_thread_block
+
+    assign cu_allocate_data_d = '{
+        pc        : allocate_pc_i,
+        dp_addr   : allocate_dp_addr_i,
+        tblock_idx: allocate_tblock_idx_i,
+        tgroup_id : allocate_tgroup_id_i
+    };
+
+    for(genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_allocate_reg
+        spill_register #(
+            .T     ( allocate_data_t ),
+            .Bypass( 1'b0            )
+        ) i_allocate_reg (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .valid_i( cu_allocate_d [cu] ),
+            .ready_o( cu_warp_free_q[cu] ),
+            .data_i ( cu_allocate_data_d ),
+
+            .valid_o( cu_allocate_q     [cu] ),
+            .ready_i( cu_warp_free_d    [cu] ),
+            .data_o ( cu_allocate_data_q[cu] )
+        );
+    end : gen_allocate_reg
 
     // Thread block completion
     stream_arbiter #(
@@ -345,9 +382,26 @@ module compute_cluster #(
         .inp_valid_i( cu_done       ),
         .inp_ready_o( cu_done_ready ),
 
-        .oup_data_o ( tblock_done_id_o    ),
-        .oup_valid_o( tblock_done_o       ),
-        .oup_ready_i( tblock_done_ready_i )
+        .oup_data_o ( tblock_done_id_d    ),
+        .oup_valid_o( tblock_done_d       ),
+        .oup_ready_i( tblock_done_ready_q )
+    );
+
+    stream_register #(
+        .T( tgroup_id_t )
+    ) i_tblock_done_reg (
+        .clk_i     ( clk_i      ),
+        .rst_ni    ( rst_ni     ),
+        .clr_i     ( 1'b0       ),
+        .testmode_i( testmode_i ),
+
+        .valid_i( tblock_done_d       ),
+        .ready_o( tblock_done_ready_q ),
+        .data_i ( tblock_done_id_d    ),
+
+        .valid_o( tblock_done_o       ),
+        .ready_i( tblock_done_ready_i ),
+        .data_o ( tblock_done_id_o    )
     );
 
     // #######################################################################################
@@ -383,12 +437,12 @@ module compute_cluster #(
 
             .flush_ic_i( flush_ic_i ),
 
-            .warp_free_o          ( cu_warp_free[cu]      ),
-            .allocate_warp_i      ( cu_allocate [cu]      ),
-            .allocate_pc_i        ( allocate_pc_i         ),
-            .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
-            .allocate_tblock_idx_i( allocate_tblock_idx_i ),
-            .allocate_tgroup_id_i ( allocate_tgroup_id_i  ),
+            .warp_free_o          ( cu_warp_free_d    [cu]            ),
+            .allocate_warp_i      ( cu_allocate_q     [cu]            ),
+            .allocate_pc_i        ( cu_allocate_data_q[cu].pc         ),
+            .allocate_dp_addr_i   ( cu_allocate_data_q[cu].dp_addr    ),
+            .allocate_tblock_idx_i( cu_allocate_data_q[cu].tblock_idx ),
+            .allocate_tgroup_id_i ( cu_allocate_data_q[cu].tgroup_id  ),
 
             .tblock_done_ready_i( cu_done_ready[cu] ),
             .tblock_done_o      ( cu_done      [cu] ),

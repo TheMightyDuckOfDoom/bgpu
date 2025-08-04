@@ -20,13 +20,13 @@ module bgpu_soc #(
     /// Number of Compute Clusters
     parameter int unsigned ComputeClusters = 1,
     /// Number of Compute Units per Cluster
-    parameter int unsigned ComputeUnitsPerCluster = 1,
+    parameter int unsigned ComputeUnitsPerCluster = 2,
     /// Encoded instruction width, has to be 32
     parameter int unsigned EncInstWidth = 32,
     /// Width of the Program Counter in instructions
     parameter int unsigned PcWidth = MctrlAddressWidth - $clog2(EncInstWidth),
     /// Number of warps per compute unit
-    parameter int unsigned NumWarps = 1,
+    parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// Number of inflight instructions per warp
@@ -36,9 +36,9 @@ module bgpu_soc #(
     /// How many operands each instruction can have, has to be 2
     parameter int unsigned OperandsPerInst = 2,
     /// How many register banks are available
-    parameter int unsigned NumBanks = 1,
+    parameter int unsigned NumBanks = 4,
     /// How many operand collectors are available
-    parameter int unsigned NumOperandCollectors = 1,
+    parameter int unsigned NumOperandCollectors = 6,
     /// Should the register banks be dual ported?
     parameter bit          DualPortRegisterBanks = 1'b0,
     /// Width of the registers
