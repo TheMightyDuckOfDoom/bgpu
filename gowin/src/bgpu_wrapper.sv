@@ -41,7 +41,7 @@ module bgpu_wrapper (
         .init_clk( clk_i      ),
         .clkin   ( clk_i      ),
         .clkout0 ( clk_sys    ),
-        .reset   ( rst_ni     ),
+        .reset   ( !rst_ni    ),
         .lock    ( pll_locked )
     );
 
