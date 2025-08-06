@@ -39,6 +39,9 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
+    // Force instructions to execute in-order
+    parameter bit InorderExecution = 1'b0,
+
     parameter int unsigned TblocksToLaunch = 255,
     parameter int unsigned SimMemBlocks    = 65,
     parameter time         ClkPeriod       = 10ns,
@@ -205,6 +208,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     ) i_cc (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
+
+        .inorder_execution_i( InorderExecution ),
 
         .testmode_i( 1'b0 ),
 

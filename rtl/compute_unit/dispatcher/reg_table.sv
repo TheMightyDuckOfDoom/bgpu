@@ -84,6 +84,16 @@ module reg_table #(
 
         use_existing_entry = 1'b0;
 
+        // Clear logic
+        // |-> if the EU is valid, clear all entries with the same producer tag, as result is in register file
+        if (eu_valid_i) begin : clear_entry
+            for (int entry = 0; entry < NumTags; entry++) begin
+                if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
+                    table_valid_d[entry] = 1'b0;
+                end
+            end
+        end : clear_entry
+
         // Insert logic
         if (insert_i && space_available_o) begin : insert_logic
             // First check operands
@@ -110,7 +120,10 @@ module reg_table #(
             for (int entry = 0; entry < NumTags; entry++) begin : check_existing_entries
                 if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i
                     && table_q[entry].subwarp_id == subwarp_id_i) begin : modify_existing
+                    // Mark as valid, as we could have deallocated it in this cycle
                     table_valid_d[entry]    = 1'b1;
+
+                    // Update producer tag
                     table_d[entry].producer = tag_i;
                     use_existing_entry      = 1'b1;
                     break;
@@ -133,16 +146,6 @@ module reg_table #(
                 end : find_free_entry
             end : use_free_entry
         end : insert_logic
-
-        // Clear logic
-        // |-> if the EU is valid, clear all entries with the same producer tag, as result is in register file
-        if (eu_valid_i) begin : clear_entry
-            for (int entry = 0; entry < NumTags; entry++) begin
-                if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
-                    table_valid_d[entry] = 1'b0;
-                end
-            end
-        end : clear_entry
     end
 
     // ######################################################################

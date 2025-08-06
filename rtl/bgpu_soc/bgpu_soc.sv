@@ -184,6 +184,7 @@ module bgpu_soc #(
     logic flush_ic;
 
     /// Compute Cluster signals
+    logic inorder_execution;
 
     // Instruction Memory AXI
     cc_imem_axi_req_t  [ComputeClusters-1:0] cc_imem_axi_req;
@@ -248,6 +249,8 @@ module bgpu_soc #(
         .clk_o ( clk    ),
         .rst_ni( rst_ni ),
         .rst_no( rst_n  ),
+
+        .inorder_execution_o( inorder_execution ),
 
         .testmode_i( testmode_i ),
 
@@ -374,6 +377,8 @@ module bgpu_soc #(
         ) i_cc (
             .clk_i ( clk   ),
             .rst_ni( rst_n ),
+
+            .inorder_execution_i( inorder_execution ),
 
             .testmode_i( testmode_i ),
 

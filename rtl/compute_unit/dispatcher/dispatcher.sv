@@ -42,6 +42,9 @@ module dispatcher import bgpu_pkg::*; #(
     input  logic clk_i,
     input  logic rst_ni,
 
+    /// Force instructions to execute in-order
+    input  logic inorder_execution_i,
+
     /// From fetcher |-> which warp gets fetched next
     input  logic fe_handshake_i,
 
@@ -76,6 +79,10 @@ module dispatcher import bgpu_pkg::*; #(
     output reg_idx_t  disp_dst_o,
     output logic      [OperandsPerInst-1:0] disp_operands_required_o,
     output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
+
+    /// From Operand Collector -> instruction has read its operands
+    input logic opc_eu_handshake_i,
+    input tag_t opc_eu_tag_i,
 
     /// From Execution Units
     input  logic eu_valid_i,
@@ -179,6 +186,8 @@ module dispatcher import bgpu_pkg::*; #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
+        .inorder_execution_i( inorder_execution_i ),
+
         .fe_handshake_i      ( fe_handshake_i       ),
         .ib_space_available_o( ib_space_available_o ),
 
@@ -205,6 +214,9 @@ module dispatcher import bgpu_pkg::*; #(
         .disp_dst_o              ( disp_dst_o               ),
         .disp_operands_required_o( disp_operands_required_o ),
         .disp_operands_o         ( disp_operands_o          ),
+
+        .opc_eu_handshake_i( opc_eu_handshake_i ),
+        .opc_eu_tag_i      ( opc_eu_tag_i       ),
 
         .eu_valid_i( eu_valid_i ),
         .eu_tag_i  ( eu_tag_i   )

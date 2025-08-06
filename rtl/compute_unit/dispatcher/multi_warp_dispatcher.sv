@@ -36,6 +36,9 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     input  logic clk_i,
     input  logic rst_ni,
 
+    /// Force instructions to execute in-order
+    input  logic inorder_execution_i,
+
     /// From fetcher |-> which warp gets fetched next
     input  logic fe_handshake_i,
     input  wid_t fe_warp_id_i,
@@ -73,6 +76,10 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     output logic      [OperandsPerInst-1:0] disp_operands_required_o,
     output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
 
+    /// From Operand Collector -> instruction has read its operands
+    input logic opc_eu_handshake_i,
+    input iid_t opc_eu_tag_i,
+
     /// From Execution Units
     input  logic eu_valid_i,
     input  iid_t eu_tag_i
@@ -80,6 +87,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
+
+    typedef logic [NumWarps-1:0] warp_mask_t;
 
     typedef struct packed {
         tag_t       tag;
@@ -96,20 +105,23 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Dispatcher per warp
-    logic [NumWarps-1:0] dec_valid_warp, ib_ready_warp, fe_handshake_warp;
+    warp_mask_t dec_valid_warp, ib_ready_warp, fe_handshake_warp;
 
-    logic [NumWarps-1:0] eu_valid;
+    warp_mask_t eu_valid;
 
     // Round Robin Arbiter
-    logic [NumWarps-1:0] arb_gnt;
-    logic [NumWarps-1:0] rr_inst_ready;
+    warp_mask_t arb_gnt;
+    warp_mask_t rr_inst_ready;
 
     wid_t arb_sel_wid;
     disp_data_t [NumWarps-1:0] arb_in_data;
     disp_data_t arb_sel_data;
 
     // Control decoded Demultiplexer
-    logic [NumWarps-1:0] dec_control_decoded_warp;
+    warp_mask_t dec_control_decoded_warp;
+
+    // OPC EU Handshake Demultiplexer
+    warp_mask_t opc_eu_handshake_warp;
 
     // #######################################################################################
     // # Dispatcher per warp                                                                 #
@@ -145,6 +157,12 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         dec_control_decoded_warp[dec_control_decoded_warp_id_i] = dec_control_decoded_i;
     end
 
+    // OPC EU Handshake Demultiplexer
+    always_comb begin
+        opc_eu_handshake_warp = '0;
+        opc_eu_handshake_warp[opc_eu_tag_i[WidWidth-1:0]] = opc_eu_handshake_i;
+    end
+
     // Dispatcher per Warp
     for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
         dispatcher #(
@@ -157,6 +175,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         ) i_dispatcher (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
+
+            .inorder_execution_i( inorder_execution_i ),
 
             .fe_handshake_i         ( fe_handshake_warp      [warp] ),
             .ib_space_available_o   ( ib_space_available_o   [warp] ),
@@ -183,6 +203,9 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .disp_dst_o              ( arb_in_data  [warp].dst_reg           ),
             .disp_operands_required_o( arb_in_data  [warp].operands_required ),
             .disp_operands_o         ( arb_in_data  [warp].operands          ),
+
+            .opc_eu_handshake_i( opc_eu_handshake_warp[warp]      ),
+            .opc_eu_tag_i      ( opc_eu_tag_i[WidWidth+:TagWidth] ),
 
             .eu_valid_i( eu_valid[warp]         ),
             .eu_tag_i  ( eu_tag_i[WidWidth+:TagWidth] )

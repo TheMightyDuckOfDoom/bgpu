@@ -593,7 +593,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("load_store_unit.vcd");
-        $dumpvars(1,i_register_opc_stage);
+        $dumpvars(1,i_load_store_unit);
 
         @(posedge clk);
         wait(!rst_n);

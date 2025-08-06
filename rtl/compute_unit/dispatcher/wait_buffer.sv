@@ -5,15 +5,6 @@
 `include "common_cells/registers.svh"
 
 /// Wait Buffer
-// TOOD: We need some sort of memory ordering fence/barrier,
-// otherwise we cannot guarantee that WAR-RAW hazards are not violated as instruction execute out-of-order.
-// Easiest would be to have a barrier that waits until all previous memory operations are completed.
-// All following memory operations must then wait for the barrier to be released
-// When a barrier is issued:
-// 1. Take a snapshot of which entries have a memory operation
-// -> overrides the previous snapshot to handle multiple barriers after another
-// 2. When retiring an instruction, clear it from the snapshot
-// 3. Only allow issue of new instructions when the snapshot is empty
 module wait_buffer import bgpu_pkg::*; #(
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -37,6 +28,9 @@ module wait_buffer import bgpu_pkg::*; #(
     /// Clock and Reset
     input  logic clk_i,
     input  logic rst_ni,
+
+    /// Force instructions to execute in-order
+    input  logic inorder_execution_i,
 
     /// From fetcher |-> which warp gets fetched next
     input  logic fe_handshake_i,
@@ -71,24 +65,31 @@ module wait_buffer import bgpu_pkg::*; #(
     output logic      [OperandsPerInst-1:0] disp_operands_required_o,
     output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
 
+    /// From Operand Collector -> instruction has read its operands
+    input logic opc_eu_handshake_i,
+    input tag_t opc_eu_tag_i,
+
     /// From Execution Units
     input  logic eu_valid_i,
     input  tag_t eu_tag_i
 );
-    localparam int WaitBufferIndexWidth
-        = WaitBufferSizePerWarp > 1 ? $clog2(WaitBufferSizePerWarp) : 1;
-
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
 
+    // Dependency Mask
+    typedef logic [WaitBufferSizePerWarp-1:0] entry_mask_t;
+
     // Entry in the wait buffer per instruction per warp
     typedef struct packed {
-        pc_t        pc;
-        act_mask_t  act_mask;
-        tag_t       tag;
-        inst_t      inst;
-        reg_idx_t   dst_reg;
+        pc_t       pc;
+        act_mask_t act_mask;
+        tag_t      tag;
+        inst_t     inst;
+        reg_idx_t  dst_reg;
+
+        // Other instruction that we have to wait for -> allows ordering of instructions
+        entry_mask_t dep_mask;
 
         logic     [OperandsPerInst-1:0] operands_required;
         logic     [OperandsPerInst-1:0] operands_ready;
@@ -97,24 +98,39 @@ module wait_buffer import bgpu_pkg::*; #(
     } wait_buffer_entry_t;
 
     typedef struct packed {
-        pc_t        pc;
-        act_mask_t  act_mask;
-        tag_t       tag;
-        inst_t      inst;
-        reg_idx_t   dst_reg;
-        logic       [OperandsPerInst-1:0] operands_required;
-        reg_idx_t   [OperandsPerInst-1:0] operands_reg;
+        pc_t       pc;
+        act_mask_t act_mask;
+        tag_t      tag;
+        inst_t     inst;
+        reg_idx_t  dst_reg;
+        logic      [OperandsPerInst-1:0] operands_required;
+        reg_idx_t  [OperandsPerInst-1:0] operands_reg;
     } disp_data_t;
 
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
 
-    logic               [WaitBufferSizePerWarp-1:0] wait_buffer_valid_q, wait_buffer_valid_d;
-    wait_buffer_entry_t [WaitBufferSizePerWarp-1:0] wait_buffer_q,       wait_buffer_d;
+    // Dependecy mask of the new instruction
+    entry_mask_t dep_mask;
 
-    logic       [WaitBufferSizePerWarp-1:0] rr_inst_ready;
-    logic       [WaitBufferSizePerWarp-1:0] arb_gnt;
+    // Entry to insert in the wait buffer
+    entry_mask_t insert_mask;
+
+    // Which entry gets dispatched in this cycle
+    entry_mask_t dispatch_mask;
+
+    // Entry that gets remove in this cycle
+    entry_mask_t remove_mask;
+
+    entry_mask_t wait_buffer_valid_q,      wait_buffer_valid_d;
+    entry_mask_t wait_buffer_dispatched_q, wait_buffer_dispatched_d;
+
+    wait_buffer_entry_t [WaitBufferSizePerWarp-1:0] wait_buffer_q, wait_buffer_d;
+
+    entry_mask_t rr_inst_ready;
+    entry_mask_t arb_gnt;
+
     disp_data_t [WaitBufferSizePerWarp-1:0] arb_in_data;
     disp_data_t arb_sel_data;
 
@@ -152,30 +168,87 @@ module wait_buffer import bgpu_pkg::*; #(
     // Wait buffer is ready if there is space available
     assign wb_ready_o = !(&wait_buffer_valid_q);
 
-    logic [WaitBufferIndexWidth-1:0] insert_idx;
-    always_comb begin
-        insert_idx = '0;
+    // Determine which entry to insert
+    always_comb begin : build_insert_mask
+        insert_mask = '0;
         for (int i = 0; i < WaitBufferSizePerWarp; i++) begin
             if (!wait_buffer_valid_q[i]) begin
-                insert_idx = i[WaitBufferIndexWidth-1:0];
+                insert_mask[i] = 1'b1;
                 break;
             end
         end
-    end
+    end : build_insert_mask
 
+    // Which entry to dispatch in this cycle
+    assign dispatch_mask = arb_gnt & rr_inst_ready;
+
+    // Build dependency mask
+    always_comb begin : build_dep_mask
+        dep_mask = '0;
+
+        // Inorder execution, all instructions are dependent on the previous ones
+        if (inorder_execution_i) begin : inorder_execution
+            dep_mask = wait_buffer_valid_q;
+        end : inorder_execution
+
+        // If the destination of the new instruction is used as operand in the wait buffer,
+        // then we have to wait for it to be executed to avoid WAR hazards
+        for (int i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_dep_mask
+            if (wait_buffer_valid_q[i]) begin : check_entry
+                // Check if the destination register is used as operand in the wait buffer
+                for (int operand = 0; operand < OperandsPerInst; operand++)
+                begin : gen_operand_check
+                    if (wait_buffer_q[i].operands_required[operand]
+                      && wait_buffer_q[i].operands[operand] == dec_dst_reg_i) begin
+                        dep_mask[i] = 1'b1;
+                    end
+                end : gen_operand_check
+            end : check_entry
+        end : gen_dep_mask
+    end : build_dep_mask
+
+    // Build the remove mask
+    always_comb begin : build_remove_mask
+        remove_mask = '0;
+
+        if (opc_eu_handshake_i) begin
+            for (int i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_remove_mask
+                if (wait_buffer_valid_q[i]
+                  && wait_buffer_dispatched_q[i]
+                  && wait_buffer_q[i].tag == opc_eu_tag_i) begin
+                    remove_mask[i] = 1'b1;
+                end
+            end : gen_remove_mask
+        end
+    end : build_remove_mask
+
+    // Wait Buffer Entry Logic
     for (genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_insert_logic
         always_comb begin
             // Default
-            wait_buffer_d      [entry] = wait_buffer_q[entry];
-            wait_buffer_valid_d[entry] = wait_buffer_valid_q[entry];
+            wait_buffer_d           [entry] = wait_buffer_q           [entry];
+            wait_buffer_valid_d     [entry] = wait_buffer_valid_q     [entry];
+            wait_buffer_dispatched_d[entry] = wait_buffer_dispatched_q[entry];
 
-            // Dispatch: Remove instruction from buffer
-            if (arb_gnt[entry] && rr_inst_ready[entry]) begin
+            // Dispatch: Mark the instruction as dispatched
+            if (dispatch_mask[entry]) begin : mark_dispatched
+                wait_buffer_dispatched_d[entry] = 1'b1;
+            end : mark_dispatched
+
+            // Remove the instruction from the wait buffer
+            if (remove_mask[entry]) begin : remove_entry
                 wait_buffer_valid_d[entry] = 1'b0;
-            end
+            end : remove_entry
+
+            // Clear dependency bit
+            if (remove_mask != '0) begin : clear_dep_mask
+                wait_buffer_d[entry].dep_mask = wait_buffer_q[entry].dep_mask & (~remove_mask);
+            end : clear_dep_mask
+
             // From Execution Units
-            if (eu_valid_i) begin : check_ready
+            if (eu_valid_i) begin : check_operands
                 if (wait_buffer_valid_q[entry]) begin
+                    // Check if the instruction produced an operand
                     for (int operand = 0; operand < OperandsPerInst; operand++) begin
                         if (!wait_buffer_q[entry].operands_ready[operand]
                           && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i) begin
@@ -183,11 +256,12 @@ module wait_buffer import bgpu_pkg::*; #(
                         end
                     end
                 end
-            end : check_ready
+            end : check_operands
 
             // Insert instruction into buffer
-            if (dec_valid_i && wb_ready_o && insert_idx == entry) begin
-                wait_buffer_valid_d[entry]             = 1'b1;
+            if (dec_valid_i && wb_ready_o && insert_mask[entry]) begin : insert_entry
+                wait_buffer_valid_d     [entry]        = 1'b1;
+                wait_buffer_dispatched_d[entry]        = 1'b0;
 
                 wait_buffer_d[entry].pc                = dec_pc_i;
                 wait_buffer_d[entry].act_mask          = dec_act_mask_i;
@@ -195,19 +269,23 @@ module wait_buffer import bgpu_pkg::*; #(
                 wait_buffer_d[entry].dst_reg           = dec_dst_reg_i;
                 wait_buffer_d[entry].tag               = dec_tag_i;
 
+                wait_buffer_d[entry].dep_mask          = dep_mask & (~remove_mask);
+
                 wait_buffer_d[entry].operands_required = dec_operands_required_i;
                 wait_buffer_d[entry].operands_ready    = dec_operands_ready_i
-                                                         | ~dec_operands_required_i;
+                                                         | (~dec_operands_required_i);
                 wait_buffer_d[entry].operands          = dec_operands_i;
                 wait_buffer_d[entry].operand_tags      = dec_operand_tags_i;
-            end
+            end : insert_entry
         end
     end : gen_insert_logic
 
     // Which instruction is ready to be dispatched?
     for (genvar entry = 0; entry < WaitBufferSizePerWarp; entry++) begin : gen_rr_inst_ready
         assign rr_inst_ready[entry]            = wait_buffer_valid_q[entry]
-                                                    && &wait_buffer_q[entry].operands_ready;
+                                                    && &wait_buffer_q[entry].operands_ready
+                                                    && !wait_buffer_dispatched_q[entry]
+                                                    && (wait_buffer_q[entry].dep_mask == '0);
         assign arb_in_data[entry].pc           = wait_buffer_q[entry].pc;
         assign arb_in_data[entry].act_mask     = wait_buffer_q[entry].act_mask;
         assign arb_in_data[entry].tag          = wait_buffer_q[entry].tag;
@@ -257,7 +335,8 @@ module wait_buffer import bgpu_pkg::*; #(
     // # Sequential Logic                                                                    #
     // #######################################################################################
 
-    `FF(wait_buffer_valid_q, wait_buffer_valid_d, '0, clk_i, rst_ni);
+    `FF(wait_buffer_valid_q,      wait_buffer_valid_d,      '0, clk_i, rst_ni);
+    `FF(wait_buffer_dispatched_q, wait_buffer_dispatched_d, '0, clk_i, rst_ni);
     for (genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_buffer_ff
         `FF(wait_buffer_q[i], wait_buffer_d[i], '0, clk_i, rst_ni);
     end : gen_buffer_ff
@@ -278,6 +357,21 @@ module wait_buffer import bgpu_pkg::*; #(
             |-> |arb_gnt)
         else $error("No instruction selected for dispatch");
 
+        // Remove mask can only have one or no bits set
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            (remove_mask == '0 || $onehot(remove_mask)))
+        else $error("Remove mask has more than one bit set");
+
+        // Dispatch mask can only have one or no bits set
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            (dispatch_mask == '0 || $onehot(dispatch_mask)))
+        else $error("Dispatch mask has more than one bit set");
+
+        // Insert mask can only have one or no bits set
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            (insert_mask == '0 || $onehot(insert_mask)))
+        else $error("Insert mask has more than one bit set");
+
         // Generate assertions for each wait buffer entry
         for (genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_asserts
             // Assert that the arbiter only grants valid instructions
@@ -292,8 +386,23 @@ module wait_buffer import bgpu_pkg::*; #(
 
             // Assert that the wait buffer at the index is empty when the fetcher tries to insert an instruction
             assert property (@(posedge clk_i) disable iff(!rst_ni)
-                dec_valid_i && wb_ready_o |-> !wait_buffer_valid_q[insert_idx])
+                dec_valid_i && wb_ready_o && insert_mask[i] |-> !wait_buffer_valid_q[i])
             else $error("Insert index is already valid in the wait buffer");
+
+            for(genvar j = 0; j < WaitBufferSizePerWarp; j++) begin : gen_cross_entry_asserts
+                // Assert that the dependency mask is only set for valid instructions
+                assert property (@(posedge clk_i) disable iff(!rst_ni)
+                    wait_buffer_valid_q[i] && wait_buffer_q[i].dep_mask[j]
+                    |-> wait_buffer_valid_q[j])
+                else $error("Dependency mask is set for an invalid instruction in the wait buffer");
+
+                // Assert that there are no two entries with the same tag
+                assert property (@(posedge clk_i) disable iff(!rst_ni)
+                    wait_buffer_valid_q[i] && wait_buffer_q[i].tag == wait_buffer_q[j].tag
+                    && i != j |-> !wait_buffer_valid_q[j])
+                else $error("Two entries in the wait buffer have the same tag %0d, entries %d %d",
+                    wait_buffer_q[i].tag, i, j);
+            end : gen_cross_entry_asserts
         end : gen_asserts
     `endif
 

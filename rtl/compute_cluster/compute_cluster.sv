@@ -69,6 +69,9 @@ module compute_cluster #(
     input  logic clk_i,
     input  logic rst_ni,
 
+    /// Force instructions to execute in-order
+    input  logic inorder_execution_i,
+
     /// Testmode
     input  logic testmode_i,
 
@@ -432,6 +435,8 @@ module compute_cluster #(
         ) i_cu (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
+
+            .inorder_execution_i( inorder_execution_i ),
 
             .testmode_i( testmode_i ),
 

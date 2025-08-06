@@ -71,6 +71,9 @@ module compute_unit import bgpu_pkg::*; #(
     input logic clk_i,
     input logic rst_ni,
 
+    /// Force instructions to execute in-order
+    input  logic inorder_execution_i,
+
     // Testmode
     input logic testmode_i,
 
@@ -452,6 +455,8 @@ module compute_unit import bgpu_pkg::*; #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
+        .inorder_execution_i( inorder_execution_i ),
+
         .fe_handshake_i( fe_to_ic_valid_d && ic_to_fe_ready_q ),
         .fe_warp_id_i  ( fe_to_ic_data_d.warp_id              ),
 
@@ -481,6 +486,9 @@ module compute_unit import bgpu_pkg::*; #(
         .disp_dst_o              ( disp_to_opc_data.dst               ),
         .disp_operands_required_o( disp_to_opc_data.operands_required ),
         .disp_operands_o         ( disp_to_opc_data.operands          ),
+
+        .opc_eu_handshake_i( opc_to_eu_valid && eu_to_opc_ready ),
+        .opc_eu_tag_i      ( opc_to_eu_data.tag                 ),
 
         .eu_valid_i( eu_to_opc_valid && opc_to_eu_ready ),
         .eu_tag_i  ( eu_to_opc_data.tag                 )
@@ -696,6 +704,59 @@ module compute_unit import bgpu_pkg::*; #(
     );
 
 `ifndef SYNTHESIS
+    initial begin : disp_dumper
+        integer f;
+        string data, filename;
+
+        filename = $sformatf("disp_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
+        f = $fopen(filename, "w");
+
+        while(1) begin
+            @(posedge clk_i);
+            if (disp_to_opc_valid && opc_to_disp_ready) begin
+                data = $sformatf("%t: Tag: %0d, Pc: %0x, Inst: %0d, Warp: %0d, AM: %b, Dst: r%0d,",
+                    $time(), disp_to_opc_data.tag, disp_to_opc_data.pc, disp_to_opc_data.inst,
+                    disp_to_opc_data.tag[WidWidth-1:0], disp_to_opc_data.act_mask,
+                    disp_to_opc_data.dst);
+
+                data = {data, $sformatf(" OpReq: %0b", disp_to_opc_data.operands_required)};
+
+                for(int i = 0; i < OperandsPerInst; i++) begin
+                    data = {data, $sformatf(", Operand%0d: %0d", i, disp_to_opc_data.operands[i])};
+                end
+                $fwrite(f, "%s\n", data);
+                $fflush(f);
+            end
+        end
+    end : disp_dumper
+
+    initial begin : iu_dumper
+        integer f;
+        string data, filename;
+
+        filename = $sformatf("iu_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
+        f = $fopen(filename, "w");
+
+        while(1) begin
+            @(posedge clk_i);
+            if (opc_to_iu_valid && iu_to_opc_ready) begin
+                data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
+                    $time(), opc_to_eu_data.tag, opc_to_eu_data.inst.subtype,
+                    opc_to_eu_data.tag[WidWidth-1:0], opc_to_eu_data.act_mask, opc_to_eu_data.dst);
+
+                for(int i = 0; i < OperandsPerInst; i++) begin
+                    data = {data, $sformatf(", Operand%0d:", i)};
+                    for(int thread = 0; thread < WarpWidth; thread++) begin
+                        data = {data, $sformatf(" (t%0d: 0x%h)", thread,
+                            opc_to_eu_data.operands[i][thread * RegWidth +: RegWidth])};
+                    end
+                end
+                $fwrite(f, "%s\n", data);
+                $fflush(f);
+            end
+        end
+    end : iu_dumper
+
     initial begin : lsu_dumper
         integer f;
         string data, filename;

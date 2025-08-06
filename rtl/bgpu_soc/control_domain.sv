@@ -42,6 +42,9 @@ module control_domain #(
     input  logic rst_ni,
     output logic rst_no,
 
+    /// Force instructions to execute in-order
+    output  logic inorder_execution_o,
+
     // Testmode
     input logic testmode_i,
 
@@ -276,6 +279,8 @@ module control_domain #(
         .obi_rsp_o( thread_engine_obi_rsp ),
 
         .flush_ic_o( flush_ic_o ),
+
+        .inorder_execution_o( inorder_execution_o ),
 
         .warp_free_i          ( warp_free_i           ),
         .allocate_warp_o      ( allocate_warp_o       ),

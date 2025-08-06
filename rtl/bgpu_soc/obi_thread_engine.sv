@@ -38,6 +38,9 @@ module obi_thread_engine #(
     // Flush instruction cache
     output logic flush_ic_o,
 
+    // Execute instructions in-order
+    output logic inorder_execution_o,
+
     // Interface to start a new thread block -> to compute clusters
     input  logic        warp_free_i, // The is atleas one free warp that can start a new block
     output logic        allocate_warp_o,
@@ -74,6 +77,9 @@ module obi_thread_engine #(
     // How many thread blocks have finsihed?
     tblock_idx_t finished_tblocks_q, finished_tblocks_d;
 
+    // In-order execution
+    logic inorder_execution_q, inorder_execution_d;
+
     // Configuration
     pc_t         pc_d,                pc_q;
     addr_t       dp_addr_d,           dp_addr_q;
@@ -100,10 +106,11 @@ module obi_thread_engine #(
     // Main logic
     always_comb begin : main_logic
         // Default
-        start_dispatch_d   = start_dispatch_q;
-        running_d          = running_q;
-        finished_d         = finished_q;
-        finished_tblocks_d = finished_tblocks_q;
+        start_dispatch_d    = start_dispatch_q;
+        running_d           = running_q;
+        finished_d          = finished_q;
+        finished_tblocks_d  = finished_tblocks_q;
+        inorder_execution_d = inorder_execution_q;
 
         pc_d                = pc_q;
         dp_addr_d           = dp_addr_q;
@@ -155,11 +162,16 @@ module obi_thread_engine #(
                             running_d          = 1'b1;
                             finished_d         = 1'b0;
                             finished_tblocks_d = '0;
+
+                            // If first bit is set, we execute in-order
+                            if(obi_req_i.a.be[0])
+                                inorder_execution_d = obi_req_i.a.wdata[0];
                         end
                     end else begin
-                        obi_rdata_d[0] = start_dispatch_q; // Start dispatch
-                        obi_rdata_d[1] = running_q;        // Running
-                        obi_rdata_d[2] = finished_q;       // Finished
+                        obi_rdata_d[0] = start_dispatch_q;    // Start dispatch
+                        obi_rdata_d[1] = running_q;           // Running
+                        obi_rdata_d[2] = finished_q;          // Finished
+                        obi_rdata_d[3] = inorder_execution_q; // In-order execution
                         obi_rdata_d[TblockIdxBits+3:4] = finished_tblocks_q; // Finished tblocks
                         obi_rdata_d[31:32-TblockIdxBits] = dispatched_tblocks;
                     end
@@ -209,6 +221,9 @@ module obi_thread_engine #(
     // Flush Instruction Cache when dispatching starts
     assign flush_ic_o = start_dispatch_q && dispatcher_ready;
 
+    // In-order execution
+    assign inorder_execution_o = inorder_execution_q;
+
     // #######################################################################################
     // # Thread Dispatcher                                                                   #
     // #######################################################################################
@@ -244,10 +259,11 @@ module obi_thread_engine #(
     // #######################################################################################
 
     // Status
-    `FF(start_dispatch_q,   start_dispatch_d,   1'b0, clk_i, rst_ni)
-    `FF(running_q,          running_d,          1'b0, clk_i, rst_ni)
-    `FF(finished_q,         finished_d,         1'b0, clk_i, rst_ni)
-    `FF(finished_tblocks_q, finished_tblocks_d, '0,   clk_i, rst_ni);
+    `FF(start_dispatch_q,    start_dispatch_d,    1'b0, clk_i, rst_ni)
+    `FF(running_q,           running_d,           1'b0, clk_i, rst_ni)
+    `FF(finished_q,          finished_d,          1'b0, clk_i, rst_ni)
+    `FF(finished_tblocks_q,  finished_tblocks_d,  '0,   clk_i, rst_ni);
+    `FF(inorder_execution_q, inorder_execution_d, 1'b0, clk_i, rst_ni)
 
     // Configuration
     `FF(pc_q,                pc_d,                '0, clk_i, rst_ni)

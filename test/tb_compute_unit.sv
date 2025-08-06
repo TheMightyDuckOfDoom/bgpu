@@ -37,6 +37,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
+    // Force instructions to execute in-order
+    parameter bit InorderExecution = 1'b0,
+
     parameter int unsigned SimMemBlocks = 65,
 
     parameter int unsigned TblocksToLaunch = 33,
@@ -236,6 +239,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
     ) i_cu (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
+
+        .inorder_execution_i( InorderExecution ),
 
         .testmode_i( 1'b0 ),
 
@@ -549,6 +554,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
                 for (int operand = 0; operand < OperandsPerInst; operand++) begin
                     $write("  Rdy Tag Op%1d", operand);
                 end
+                $write(" Disp Dpmask");
                 $display();
                 for (int wbentry = 0; wbentry < InflightInstrPerWarp; wbentry++) begin
                     $write("WB[%2d]: %1d   %1d %4d  %2d %2d",
@@ -576,6 +582,11 @@ module tb_compute_unit import bgpu_pkg::*; #(
                                 .i_dispatcher.i_wait_buffer.wait_buffer_q[wbentry]
                                     .operands[operand]);
                     end
+                    $write("   %1d    %b",
+                        i_cu.i_warp_dispatcher.gen_dispatcher[warp]
+                            .i_dispatcher.i_wait_buffer.wait_buffer_dispatched_q[wbentry],
+                        i_cu.i_warp_dispatcher.gen_dispatcher[warp]
+                            .i_dispatcher.i_wait_buffer.wait_buffer_q[wbentry].dep_mask);
                     $display();
                 end
                 $display();
