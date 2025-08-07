@@ -485,7 +485,11 @@ module control_domain #(
     // Build Wider BGPU Request ID from OBI Request AID
     always_comb begin : build_bgpu_req_id
         bgpu_req_id = '0;
-        bgpu_req_id[2:0] = bgpu_obi_req.a.aid;
+        bgpu_req_id[1:0] = bgpu_obi_req.a.aid[2:1]; // Lower bit is always 0
+        `ifndef SYNTHESIS
+            assert (bgpu_req_id[0] == 1'b0)
+                else $error("BGPU Request ID lower bit must be 0");
+        `endif
     end : build_bgpu_req_id
 
     // Convert OBI request to Register Interface
@@ -517,7 +521,7 @@ module control_domain #(
         .reg_rsp_i( bgpu_reg_rsp )
     );
 
-    assign bgpu_obi_rsp.r.rid        = bgpu_rsp_id[2:0];
+    assign bgpu_obi_rsp.r.rid        = {bgpu_rsp_id[1:0], 1'b0};
     assign bgpu_obi_rsp.r.r_optional = '0;
 
     // Convert Register Interface to AXI
