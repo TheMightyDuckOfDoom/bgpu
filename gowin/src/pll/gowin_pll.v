@@ -1,6 +1,9 @@
-module Gowin_PLL_50m_to_40m(
+module Gowin_PLL(
     clkin,
     clkout0,
+    clkout2,
+    enclk0,
+    enclk2,
     init_clk,
     lock,
     reset
@@ -9,7 +12,10 @@ module Gowin_PLL_50m_to_40m(
 
 input clkin;
 input init_clk;
+input enclk0;
+input enclk2;
 output clkout0;
+output clkout2;
 output lock;
 input reset;
 wire [5:0] icpsel;
@@ -18,7 +24,10 @@ wire pll_lock;
 wire pll_rst;
 
 
-    Gowin_PLL_50m_to_40m_MOD u_pll(
+    Gowin_PLL_MOD u_pll(
+        .clkout2(clkout2),
+        .enclk0(enclk0),
+        .enclk2(enclk2),
         .clkout0(clkout0),
         .lock(pll_lock),
         .clkin(clkin),

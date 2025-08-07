@@ -5,20 +5,22 @@
 //Part Number: GW5AST-LV138PG484AC1/I0
 //Device: GW5AST-138
 //Device Version: B
-//Created Time: Mon Aug  4 21:23:18 2025
+//Created Time: Wed Aug  6 16:19:25 2025
 
-module Gowin_PLL_50m_to_40m_MOD (lock, clkout0, clkin, reset, icpsel, lpfres, lpfcap);
+module Gowin_PLL_MOD (lock, clkout0, clkout2, clkin, reset, icpsel, lpfres, lpfcap, enclk0, enclk2);
 
 output lock;
 output clkout0;
+output clkout2;
 input clkin;
 input reset;
 input [5:0] icpsel;
 input [2:0] lpfres;
 input [1:0] lpfcap;
+input enclk0;
+input enclk2;
 
 wire clkout1;
-wire clkout2;
 wire clkout3;
 wire clkout4;
 wire clkout5;
@@ -68,9 +70,9 @@ PLL PLL_inst (
     .PSSEL({gw_gnd,gw_gnd,gw_gnd}),
     .PSDIR(gw_gnd),
     .PSPULSE(gw_gnd),
-    .ENCLK0(gw_vcc),
+    .ENCLK0(enclk0),
     .ENCLK1(gw_vcc),
-    .ENCLK2(gw_vcc),
+    .ENCLK2(enclk2),
     .ENCLK3(gw_vcc),
     .ENCLK4(gw_vcc),
     .ENCLK5(gw_vcc),
@@ -86,7 +88,7 @@ defparam PLL_inst.IDIV_SEL = 1;
 defparam PLL_inst.FBDIV_SEL = 1;
 defparam PLL_inst.ODIV0_SEL = 20;
 defparam PLL_inst.ODIV1_SEL = 8;
-defparam PLL_inst.ODIV2_SEL = 8;
+defparam PLL_inst.ODIV2_SEL = 2;
 defparam PLL_inst.ODIV3_SEL = 8;
 defparam PLL_inst.ODIV4_SEL = 8;
 defparam PLL_inst.ODIV5_SEL = 8;
@@ -96,7 +98,7 @@ defparam PLL_inst.MDIV_FRAC_SEL = 0;
 defparam PLL_inst.ODIV0_FRAC_SEL = 0;
 defparam PLL_inst.CLKOUT0_EN = "TRUE";
 defparam PLL_inst.CLKOUT1_EN = "FALSE";
-defparam PLL_inst.CLKOUT2_EN = "FALSE";
+defparam PLL_inst.CLKOUT2_EN = "TRUE";
 defparam PLL_inst.CLKOUT3_EN = "FALSE";
 defparam PLL_inst.CLKOUT4_EN = "FALSE";
 defparam PLL_inst.CLKOUT5_EN = "FALSE";
@@ -176,4 +178,4 @@ defparam PLL_inst.DYN_DT3_SEL = "FALSE";
 defparam PLL_inst.DYN_ICP_SEL = "TRUE";
 defparam PLL_inst.DYN_LPF_SEL = "TRUE";
 
-endmodule //Gowin_PLL_50m_to_40m_MOD
+endmodule //Gowin_PLL_MOD
