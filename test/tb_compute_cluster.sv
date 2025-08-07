@@ -239,6 +239,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
 
         .testmode_i( 1'b0 ),
 
+        .inorder_execution_i( InorderExecution ),
+
         .flush_ic_i( flush_ic ),
 
         .warp_free_o          ( warp_free              ),
