@@ -8,20 +8,20 @@ create_clock -name clk_jtg -period 50.0 [get_ports {jtag_tck_i}]
 
 ### PLL Generated Clocks
 
-# 400 MHz Memory Clock to DDR3 controller -> clk_ext * 16 / 2
-create_generated_clock -name clk_mem -source [get_ports {clk_i}] -master_clock clk_ext -divide_by 2 -multiply_by 16 -duty_cycle 50 [get_nets {clk_memory}]
+# 160 MHz Memory Clock to DDR3 controller -> clk_ext * 16 / 2
+create_generated_clock -name clk_mem -source [get_ports {clk_i}] -master_clock clk_ext -divide_by 5 -multiply_by 16 -duty_cycle 50 [get_nets {clk_memory}]
 
-# 40 MHz System Clock -> clk_ext * 16 / 20
-create_generated_clock -name clk_sys -source [get_ports {clk_i}] -master_clock clk_ext -divide_by 20 -multiply_by 16 -duty_cycle 50 [get_nets {clk_sys}]
+# 50 MHz System Clock -> clk_ext
+create_generated_clock -name clk50 -source [get_ports {clk_i}] -master_clock clk_ext -duty_cycle 50 [get_nets {clk50}]
 
 ### Additional Generated Clocks
 
 # 100 Mhz Memory Controller Clock -> clk_mem / 4
-create_generated_clock -name clk_mctrl -source [get_nets {clk_memory}] -master_clock clk_mem -divide_by 4 -duty_cycle 50 [get_ports {dummy_o}]
+create_generated_clock -name clk_sys -source [get_nets {clk_memory}] -master_clock clk_mem -divide_by 4 -duty_cycle 50 [get_nets {clk_sys}]
 
 #### Clock Groups
 
-set_clock_groups -asynchronous -group [get_clocks {clk_jtg}] -group [get_clocks {clk_sys}] -group [get_clocks {clk_ext}] -group [get_clocks {clk_mem}] -group [get_clocks {clk_mctrl}]
+set_clock_groups -asynchronous -group [get_clocks {clk_jtg}] -group [get_clocks {clk_sys}] -group [get_clocks {clk_ext}] -group [get_clocks {clk_mem}] -group [get_clocks {clk50}]
 
 #### Input/Output Delays
 

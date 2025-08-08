@@ -39,15 +39,35 @@ module bgpu_wrapper (
     /// Status LEDs
     output logic status_pll_locked_no,    // PLL is locked
     output logic status_running_no,       // Not reset, i.e. system is running
-    output logic status_ddr3_init_done_no, // DDR3 initialization is done
-    output logic dummy_o
+    output logic status_ddr3_init_done_no // DDR3 initialization is done
 );
+    // #######################################################################################
+    // # Local Parameters                                                                    #
+    // #######################################################################################
+
+    // Width of the Memory Controller Data Bus
+    localparam int unsigned MctrlWidth = 256;
+
+    // Width of the Memory Controller Address Bus
+    localparam int unsigned MctrlAddressWidth = 28;
+
+    // #######################################################################################
+    // # Typedefs                                                                            #
+    // #######################################################################################
+
+    typedef logic [MctrlAddressWidth-1:0] mctrl_addr_t;
+    typedef logic [     MctrlWidth/8-1:0] mctrl_mask_t;
+    typedef logic [       MctrlWidth-1:0] mctrl_data_t;
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
 
     // PLL locked
     logic pll_locked;
+
+    // 50MHz from the PLL
+    logic clk50;
 
     // System Reset Request
     logic rst_sys_req_n;
@@ -56,9 +76,21 @@ module bgpu_wrapper (
     logic clk_sys, rst_sys_n;
 
     // DDR3 Controller signals
-    logic clk_mctrl;
     logic clk_memory;
     logic ddr3_init_done, stop_memory_clk;
+
+    // Command
+    logic        mctrl_cmd_ready, mctrl_cmd_valid, mctrl_cmd_read;
+    mctrl_addr_t mctrl_cmd_addr;
+
+    // Write Data
+    logic        mctrl_wdata_ready, mctrl_wdata_valid;
+    mctrl_data_t mctrl_wdata;
+    mctrl_mask_t mctrl_wmask;
+
+    // Read Data
+    logic        mctrl_rdata_valid;
+    mctrl_data_t mctrl_rdata;
 
     // #######################################################################################
     // # PLL                                                                                 #
@@ -68,9 +100,9 @@ module bgpu_wrapper (
     Gowin_PLL i_pll (
         .init_clk( clk_i      ), // 50Mhz
         .clkin   ( clk_i      ), // 50Mhz
-        .clkout0 ( clk_sys    ), // 40Mhz
+        .clkout0 ( clk50      ), // 50Mhz
         .enclk0  ( 1'b1       ),
-        .clkout2 ( clk_memory ), // 400Mhz
+        .clkout2 ( clk_memory ),
         .enclk2  ( stop_memory_clk ), // This seems wrong, but is correct according to Docs
         .reset   ( !rst_ni    ),
         .lock    ( pll_locked )
@@ -103,7 +135,10 @@ module bgpu_wrapper (
     // # BGPU SoC                                                                            #
     // #######################################################################################
 
-    bgpu_soc i_bgpu (
+    bgpu_soc #(
+        .MctrlWidth       ( MctrlWidth        ),
+        .MctrlAddressWidth( MctrlAddressWidth )
+    ) i_bgpu (
         .clk_i ( clk_sys   ),
         .rst_ni( rst_sys_n ),
 
@@ -113,7 +148,20 @@ module bgpu_wrapper (
         .jtag_tdi_i  ( jtag_tdi_i   ),
         .jtag_tdo_o  ( jtag_tdo_o   ),
         .jtag_tms_i  ( jtag_tms_i   ),
-        .jtag_trst_ni( jtag_trst_ni )
+        .jtag_trst_ni( jtag_trst_ni ),
+
+        .mctrl_cmd_ready_i( mctrl_cmd_ready ),
+        .mctrl_cmd_valid_o( mctrl_cmd_valid ),
+        .mctrl_cmd_read_o ( mctrl_cmd_read  ),
+        .mctrl_cmd_addr_o ( mctrl_cmd_addr  ),
+
+        .mctrl_wdata_ready_i( mctrl_wdata_ready ),
+        .mctrl_wdata_valid_o( mctrl_wdata_valid ),
+        .mctrl_wdata_o      ( mctrl_wdata       ),
+        .mctrl_wmask_o      ( mctrl_wmask       ),
+
+        .mctrl_rdata_valid_i( mctrl_rdata_valid ),
+        .mctrl_rdata_i      ( mctrl_rdata       )
     );
 
     // #######################################################################################
@@ -121,41 +169,41 @@ module bgpu_wrapper (
     // #######################################################################################
 
     DDR3_Memory_Interface_Top i_ddr3_ctrl(
-        .clk       ( clk_sys         ),
+        .clk       ( clk50           ),
         .pll_stop  ( stop_memory_clk ),
         .memory_clk( clk_memory      ),
         .pll_lock  ( pll_locked      ),
         .rst_n     ( rst_ni          ),
-        .clk_out   ( clk_mctrl       ), // clk_memory / 4
+        .clk_out   ( clk_sys         ), // clk_memory / 4
         .ddr_rst   (),
 
         .init_calib_complete( ddr3_init_done ),
 
         .burst( 1'b0 ),
-        
+
         // Command Interface
-        .cmd_ready(),
-        .cmd_en   ( 1'b0 ),
-        .cmd      ( '0   ),
-        .addr     ( '0   ),
+        .cmd_ready( mctrl_cmd_ready        ),
+        .cmd_en   ( mctrl_cmd_valid        ),
+        .cmd      ( {2'd0, mctrl_cmd_read} ),
+        .addr     ( mctrl_cmd_addr         ),
         
         // Write Data Interface
-        .wr_data_rdy (),
-        .wr_data_en  ( 1'b0 ),
-        .wr_data     ( '0   ),
-        .wr_data_end ( 1'b0 ),
-        .wr_data_mask( '0   ),
-        
+        .wr_data_rdy ( mctrl_wdata_ready ),
+        .wr_data_en  ( mctrl_wdata_valid ),
+        .wr_data     ( mctrl_wdata       ),
+        .wr_data_mask( mctrl_wmask       ),
+        .wr_data_end ( 1'b1              ),
+
         // Read Data Interface
-        .rd_data_valid(),
-        .rd_data_end  (),
-        .rd_data      (),
+        .rd_data_valid( mctrl_rdata_valid ),
+        .rd_data      ( mctrl_rdata       ),
+        .rd_data_end  ( /* Unused */      ),
 
         // Refresh Interface
-        .sr_req ( 1'b0 ),
-        .sr_ack (),
-        .ref_req( 1'b0 ),
-        .ref_ack(),
+        .sr_req ( 1'b0         ),
+        .sr_ack ( /* Unused */ ),
+        .ref_req( 1'b0         ),
+        .ref_ack( /* Unused */ ),
 
         // DDR3 Interface
         .O_ddr_addr   ( ddr_addr_o   ),
@@ -176,6 +224,5 @@ module bgpu_wrapper (
     );
 
     assign status_ddr3_init_done_no = !ddr3_init_done;
-    assign dummy_o = clk_mctrl;
 
 endmodule : bgpu_wrapper

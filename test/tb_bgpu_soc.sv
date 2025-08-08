@@ -2,10 +2,18 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`include "common_cells/registers.svh"
+
 /// BGPU SoC top-level module testbench
 module tb_bgpu_soc #(
-    parameter time ClkPeriodJtag = 50ns,
-    parameter time ClkPeriod     = 10ns,
+    /// Width of the data bus to the memory controller
+    parameter int unsigned MctrlWidth = 256,
+    /// Width of the addressable physical memory by the memory controller
+    parameter int unsigned MctrlAddressWidth = 16,
+
+    parameter time ClkPeriodJtag  = 50ns,
+    parameter time ClkPeriod      = 10ns,
+    parameter time ClkPeriodMctrl = 5ns,
 
     parameter time ApplyDelay = 1ns,
     parameter time AcqDelay   = 0.9ns,
@@ -20,6 +28,10 @@ module tb_bgpu_soc #(
     // # Type Definitions                                                                    #
     // #######################################################################################
 
+    typedef logic [MctrlAddressWidth-1:0] mctrl_addr_t;
+    typedef logic [     MctrlWidth/8-1:0] mctrl_mask_t;
+    typedef logic [       MctrlWidth-1:0] mctrl_data_t;
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
@@ -29,6 +41,19 @@ module tb_bgpu_soc #(
 
     // JTAG Interface
     logic jtag_tck, jtag_tdi, jtag_tdo, jtag_tms, jtag_trst_n;
+
+    // Command
+    logic        mctrl_cmd_ready, mctrl_cmd_valid, mctrl_cmd_read;
+    mctrl_addr_t mctrl_cmd_addr;
+
+    // Write Data
+    logic        mctrl_wdata_ready, mctrl_wdata_valid;
+    mctrl_data_t mctrl_wdata;
+    mctrl_mask_t mctrl_wmask;
+
+    // Read Data
+    logic        mctrl_rdata_valid;
+    mctrl_data_t mctrl_rdata;
 
     // #######################################################################################
     // # Clock generation                                                                    #
@@ -54,7 +79,10 @@ module tb_bgpu_soc #(
     // # DUT                                                                                 #
     // #######################################################################################
 
-    bgpu_soc i_bgpu_soc (
+    bgpu_soc #(
+        .MctrlWidth       ( MctrlWidth        ),
+        .MctrlAddressWidth( MctrlAddressWidth )
+    ) i_bgpu (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
 
@@ -64,8 +92,59 @@ module tb_bgpu_soc #(
         .jtag_tdi_i  ( jtag_tdi    ),
         .jtag_tdo_o  ( jtag_tdo    ),
         .jtag_tms_i  ( jtag_tms    ),
-        .jtag_trst_ni( jtag_trst_n )
+        .jtag_trst_ni( jtag_trst_n ),
+
+        .mctrl_cmd_ready_i( mctrl_cmd_ready ),
+        .mctrl_cmd_valid_o( mctrl_cmd_valid ),
+        .mctrl_cmd_read_o ( mctrl_cmd_read  ),
+        .mctrl_cmd_addr_o ( mctrl_cmd_addr  ),
+
+        .mctrl_wdata_ready_i( mctrl_wdata_ready ),
+        .mctrl_wdata_valid_o( mctrl_wdata_valid ),
+        .mctrl_wdata_o      ( mctrl_wdata       ),
+        .mctrl_wmask_o      ( mctrl_wmask       ),
+
+        .mctrl_rdata_valid_i( mctrl_rdata_valid ),
+        .mctrl_rdata_i      ( mctrl_rdata       )
     );
+
+    // #######################################################################################
+    // # Memory Controller                                                                   #
+    // #######################################################################################
+
+    assign mctrl_cmd_ready   = 1'b1;
+    assign mctrl_wdata_ready = 1'b1;
+
+    tc_sram #(
+        .NumWords   ( 1 << (MctrlAddressWidth - $clog2(MctrlWidth / 8)) ),
+        .DataWidth  ( MctrlWidth    ),
+        .ByteWidth  ( 8             ),
+        .NumPorts   ( 1             ),
+        .Latency    ( 1             ),
+        .SimInit    ( "zeros"       ),
+        .PrintSimCfg( 1'b1          ),
+        .ImplKey    ( "i_mctrl_mem" )
+    ) i_mctlr_mem (
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
+
+        .req_i  ( mctrl_cmd_valid ),
+        .we_i   ( !mctrl_cmd_read ),
+
+        .addr_i ( mctrl_cmd_addr[MctrlAddressWidth-1:$clog2(MctrlWidth / 8)] ),
+
+        .wdata_i( mctrl_wdata_valid ? mctrl_wdata : '0 ),
+        .be_i   ( mctrl_wdata_valid ? mctrl_wmask : '0 ),
+
+        .rdata_o( mctrl_rdata )
+    );
+
+    assert property (@(posedge clk) disable iff (!rst_n)
+        mctrl_cmd_valid |-> mctrl_cmd_addr[$clog2(MctrlWidth / 8) - 1:0] == '0
+    ) else $fatal(1, "@%t | [Memory Controller] Address must be aligned to %0d bytes!",
+        $time, MctrlWidth / 8);
+
+    `FF(mctrl_rdata_valid, mctrl_cmd_valid && mctrl_cmd_read, 1'b0, clk, rst_n)
 
     // #######################################################################################
     // # JTAG Debug Interface                                                                #

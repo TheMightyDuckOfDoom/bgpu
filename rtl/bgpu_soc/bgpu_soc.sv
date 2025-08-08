@@ -10,7 +10,7 @@
 // Contains:
 // - Control Domain
 // - Compute Clusters
-// - Dummy Memory
+// - Memory Controller / Adapter to Memory Controller
 module bgpu_soc #(
     /// Width of the data bus to the memory controller
     parameter int unsigned MctrlWidth = 64,
@@ -20,13 +20,13 @@ module bgpu_soc #(
     /// Number of Compute Clusters
     parameter int unsigned ComputeClusters = 1,
     /// Number of Compute Units per Cluster
-    parameter int unsigned ComputeUnitsPerCluster = 2,
+    parameter int unsigned ComputeUnitsPerCluster = 1,
     /// Encoded instruction width, has to be 32
     parameter int unsigned EncInstWidth = 32,
     /// Width of the Program Counter in instructions
     parameter int unsigned PcWidth = MctrlAddressWidth - $clog2(EncInstWidth),
     /// Number of warps per compute unit
-    parameter int unsigned NumWarps = 8,
+    parameter int unsigned NumWarps = 1,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
     /// Number of inflight instructions per warp
@@ -36,9 +36,9 @@ module bgpu_soc #(
     /// How many operands each instruction can have, has to be 2
     parameter int unsigned OperandsPerInst = 2,
     /// How many register banks are available
-    parameter int unsigned NumBanks = 4,
+    parameter int unsigned NumBanks = 1,
     /// How many operand collectors are available
-    parameter int unsigned NumOperandCollectors = 6,
+    parameter int unsigned NumOperandCollectors = 1,
     /// Should the register banks be dual ported?
     parameter bit          DualPortRegisterBanks = 1'b0,
     /// Width of the registers
@@ -56,7 +56,12 @@ module bgpu_soc #(
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8, // Determines max number of thread blocks per group
     // How many bits are used to identify a thread group?
-    parameter int unsigned TgroupIdBits = 8
+    parameter int unsigned TgroupIdBits = 8,
+
+    /// Dependent parameter, do **not** overwrite.
+    parameter type mctrl_addr_t = logic [MctrlAddressWidth-1:0],
+    parameter type mctrl_mask_t = logic [     MctrlWidth/8-1:0],
+    parameter type mctrl_data_t = logic [       MctrlWidth-1:0]
 ) (
     // Clock and reset
     input logic clk_i,
@@ -70,7 +75,24 @@ module bgpu_soc #(
     input  logic jtag_tdi_i,
     output logic jtag_tdo_o,
     input  logic jtag_tms_i,
-    input  logic jtag_trst_ni
+    input  logic jtag_trst_ni,
+
+    /// Memory Controller Interface
+    // Command
+    input  logic        mctrl_cmd_ready_i,
+    output logic        mctrl_cmd_valid_o,
+    output logic        mctrl_cmd_read_o,
+    output mctrl_addr_t mctrl_cmd_addr_o,
+
+    // Write
+    input  logic        mctrl_wdata_ready_i,
+    output logic        mctrl_wdata_valid_o,
+    output mctrl_data_t mctrl_wdata_o,
+    output mctrl_mask_t mctrl_wmask_o,
+
+    // Read
+    input logic        mctrl_rdata_valid_i,
+    input mctrl_data_t mctrl_rdata_i
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -156,16 +178,13 @@ module bgpu_soc #(
         logic)
 
     // Memory Controller types
-    typedef logic [MctrlAddressWidth-1:0] mctrl_addr_t;
-    typedef logic [       MctrlWidth-1:0] mctrl_data_t;
-    typedef logic [     MctrlWidth/8-1:0] mctrl_strb_t;
     typedef logic [  MctrlAxiIdWidth-1:0] mctrl_axi_id_t;
 
     // Imem/Mem Memory Controller AXI types
-    `AXI_TYPEDEF_ALL(mctrl_mem_axi, mctrl_addr_t, mem_axi_id_t, mctrl_data_t, mctrl_strb_t, logic)
+    `AXI_TYPEDEF_ALL(mctrl_mem_axi, mctrl_addr_t, mem_axi_id_t, mctrl_data_t, mctrl_mask_t, logic)
 
     // Memory Controller AXI types
-    `AXI_TYPEDEF_ALL(mctrl_axi, mctrl_addr_t, mctrl_axi_id_t, mctrl_data_t, mctrl_strb_t, logic)
+    `AXI_TYPEDEF_ALL(mctrl_axi, mctrl_addr_t, mctrl_axi_id_t, mctrl_data_t, mctrl_mask_t, logic)
 
     // Control Domain AXI types
     typedef logic [  CtrlWidth-1:0] ctrl_data_t;
@@ -665,65 +684,38 @@ module bgpu_soc #(
         .axi_resp_i( mctrl_axi_rsp )
     );
 `endif
-    localparam int unsigned DummyMemAddressWidth = 10;
-    logic [DummyMemAddressWidth-1:0] mem_addr;
 
-    logic        mem_req,   mem_we,   mem_rvalid;
-    mctrl_data_t mem_wdata, mem_rdata;
-    mctrl_strb_t mem_strb;
+    // #######################################################################################
+    // # Memory Controller Adapter                                                           #
+    // #######################################################################################
 
-    axi_to_mem #(
-        .axi_req_t   ( mctrl_axi_req_t      ),
-        .axi_resp_t  ( mctrl_axi_resp_t     ),
-        .AddrWidth   ( DummyMemAddressWidth ),
-        .DataWidth   ( MctrlWidth           ),
-        .IdWidth     ( MctrlAxiIdWidth      ),
-        .NumBanks    ( 1                    ),
-        .BufDepth    ( 1                    ),
-        .HideStrb    ( 1'b0                 ), /// This currently is buggy when enabled
-        .OutFifoDepth( 1                    )
-    ) i_axi_to_mem (
+    axi_to_mctrl #(
+        .MctrlWidth       ( MctrlWidth        ),
+        .MctrlAddressWidth( MctrlAddressWidth ),
+        .MctrlAxiIdWidth  ( MctrlAxiIdWidth   ),
+        .axi_req_t        ( mctrl_axi_req_t   ),
+        .axi_resp_t       ( mctrl_axi_resp_t  )
+    ) i_mctrl (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
 
-        .axi_req_i ( mctrl_axi_req ),
-        .axi_resp_o( mctrl_axi_rsp ),
+        .testmode_i( testmode_i ),
 
-        .mem_req_o  ( mem_req   ),
-        .mem_gnt_i  ( 1'b1      ),
-        .mem_addr_o ( mem_addr  ),
-        .mem_we_o   ( mem_we    ),
-        .mem_wdata_o( mem_wdata ),
-        .mem_strb_o ( mem_strb  ),
+        .axi_req_i( mctrl_axi_req ),
+        .axi_rsp_o( mctrl_axi_rsp ),
 
-        .mem_rvalid_i( mem_rvalid ),
-        .mem_rdata_i ( mem_rdata  ),
+        .mctrl_cmd_ready_i( mctrl_cmd_ready_i ),
+        .mctrl_cmd_valid_o( mctrl_cmd_valid_o ),
+        .mctrl_cmd_read_o ( mctrl_cmd_read_o  ),
+        .mctrl_cmd_addr_o ( mctrl_cmd_addr_o  ),
 
-        .busy_o    ( /* Unused */ ),
-        .mem_atop_o( /* Unused */ )
+        .mctrl_wdata_ready_i( mctrl_wdata_ready_i ),
+        .mctrl_wdata_valid_o( mctrl_wdata_valid_o ),
+        .mctrl_wdata_o      ( mctrl_wdata_o       ),
+        .mctrl_wmask_o      ( mctrl_wmask_o       ),
+
+        .mctrl_rdata_valid_i( mctrl_rdata_valid_i ),
+        .mctrl_rdata_i      ( mctrl_rdata_i       )
     );
 
-    tc_sram #(
-        .NumWords   ( 1 << (DummyMemAddressWidth - $clog2(MctrlWidth / 8)) ),
-        .DataWidth  ( MctrlWidth    ),
-        .ByteWidth  ( 8             ),
-        .NumPorts   ( 1             ),
-        .Latency    ( 1             ),
-        .SimInit    ( "zeros"       ),
-        .PrintSimCfg( 1'b1          ),
-        .ImplKey    ( "i_mctrl_mem" )
-    ) i_mctlr_mem (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
-
-        .req_i  ( mem_req   ),
-        .we_i   ( mem_we    ),
-        .addr_i ( mem_addr[DummyMemAddressWidth-1:$clog2(MctrlWidth / 8)] ),
-        .wdata_i( mem_wdata ),
-        .be_i   ( mem_strb  ),
-
-        .rdata_o( mem_rdata )
-    );
-
-    `FF(mem_rvalid, mem_req, 1'b0, clk, rst_n)
 endmodule : bgpu_soc

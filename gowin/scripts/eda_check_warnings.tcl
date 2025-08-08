@@ -22,6 +22,7 @@ check_for_warning "EX0205"
 check_for_warning "EX0206"
 check_for_warning "EX0210"
 check_for_warning "EX0211"
+check_for_warning "CK3000"
 
 if {$error} {
     puts "Error: Warnings that should be errors found in synthesis log, aborting."

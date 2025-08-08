@@ -18,10 +18,6 @@ IO_PORT "status_running_no" IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
 IO_LOC  "status_ddr3_init_done_no" R17;
 IO_PORT "status_ddr3_init_done_no" IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
 
-// PMOD0 LED3
-IO_LOC  "dummy_o" P16;
-IO_PORT "dummy_o" IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
-
 // JTAG on FPGAs JTAG pins
 IO_LOC  "jtag_tck_i" V12;
 IO_PORT "jtag_tck_i" IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
