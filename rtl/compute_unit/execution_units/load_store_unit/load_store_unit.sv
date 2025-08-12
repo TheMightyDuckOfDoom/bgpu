@@ -412,13 +412,11 @@ module load_store_unit import bgpu_pkg::*; #(
     // # Register between Coalesce Splitter and Wdata Assembler                              #
     // #######################################################################################
 
-    stream_register #(
+    spill_register #(
         .T( coalesce_splitter_to_wdata_t )
     ) i_cs_to_wdata_reg (
         .clk_i     ( clk_i      ),
         .rst_ni    ( rst_ni     ),
-        .clr_i     ( 1'b0       ),
-        .testmode_i( testmode_i ),
 
         .valid_i( cs_to_wdata_valid_d ),
         .ready_o( wdata_to_cs_ready_q ),

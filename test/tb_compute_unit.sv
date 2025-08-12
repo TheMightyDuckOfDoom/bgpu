@@ -722,10 +722,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Execute Stage
-            if (i_cu.opc_to_eu_valid && i_cu.eu_to_opc_ready) begin
+            if (i_cu.opc_to_eu_valid_q && i_cu.eu_to_opc_ready_d) begin
                 // Get the instruction ID from the hashmap
-
-                insn_id_in_file = opc_insn_id_in_file[i_cu.opc_to_eu_data.tag];
+                insn_id_in_file = opc_insn_id_in_file[i_cu.opc_to_eu_data_q.tag];
 
                 // Execute Stage
                 $fwrite(fd, "S\t%0d\t0\tEu\n",
