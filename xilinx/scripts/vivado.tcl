@@ -5,7 +5,7 @@ set_part $device
 source vivado.f
 
 # read constraints
-read_xdc dummy_constraints.xdc
+read_xdc src/dummy_constraints.xdc
 
 # Synthesize Design
 puts $top

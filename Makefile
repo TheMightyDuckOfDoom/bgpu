@@ -97,7 +97,7 @@ xilinx/yosys.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script flist-plus -t xilinx_yosys -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
 
 # Run Vivado synthesis
-xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/dummy_constraints.xdc xilinx/run_vivado.sh
+xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado.sh
 	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
 # Run Yosys synthesis
@@ -107,7 +107,7 @@ xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
 	yosys -c xilinx/run_yosys.tcl -l xilinx/yosys.log -t
 
 # Yosys report using Vivado
-xilinx-yosys-report: xilinx/scripts/vivado_report.tcl xilinx/dummy_constraints.xdc xilinx/run_vivado_report.sh
+xilinx-yosys-report: xilinx/scripts/vivado_report.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado_report.sh
 	time ./xilinx/run_vivado_report.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
 ####################################################################################################
