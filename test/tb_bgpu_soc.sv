@@ -4,6 +4,7 @@
 
 /// BGPU SoC top-level module testbench
 module tb_bgpu_soc #(
+    parameter time ClkPeriodMgmt = 25ns,
     parameter time ClkPeriodJtag = 50ns,
     parameter time ClkPeriod     = 10ns,
 
@@ -27,6 +28,9 @@ module tb_bgpu_soc #(
     // Clock and Reset
     logic clk, rst_n;
 
+    // Management Clock
+    logic mgmt_clk;
+
     // JTAG Interface
     logic jtag_tck, jtag_tdi, jtag_tdo, jtag_tms, jtag_trst_n;
 
@@ -40,6 +44,14 @@ module tb_bgpu_soc #(
     ) i_clk_rst_gen (
         .clk_o ( clk   ),
         .rst_no( rst_n )
+    );
+
+    clk_rst_gen #(
+        .ClkPeriod   ( ClkPeriodMgmt ),
+        .RstClkCycles( 3             )
+    ) i_clk_mgmt_rst_gen (
+        .clk_o ( mgmt_clk ),
+        .rst_no()
     );
 
     clk_rst_gen #(
@@ -59,6 +71,8 @@ module tb_bgpu_soc #(
         .rst_ni( rst_n ),
 
         .testmode_i( 1'b0 ),
+
+        .mgmt_cpu_clk_i( mgmt_clk ),
 
         .jtag_tck_i  ( jtag_tck    ),
         .jtag_tdi_i  ( jtag_tdi    ),

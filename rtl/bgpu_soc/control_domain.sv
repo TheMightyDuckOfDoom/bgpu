@@ -42,6 +42,9 @@ module control_domain #(
     input  logic rst_ni,
     output logic rst_no,
 
+    // Management CPU clock
+    input  logic mgmt_cpu_clk_i,
+
     /// Force instructions to execute in-order
     output  logic inorder_execution_o,
 
@@ -133,17 +136,20 @@ module control_domain #(
     xups_obi_req_t dbg_req_obi_req;
     xups_obi_rsp_t dbg_req_obi_rsp;
 
-    xups_obi_req_t cpu_imem_obi_req, cpu_imem_obi_req_cut, cpu_dmem_obi_req, cpu_dmem_obi_req_cut;
-    xups_obi_rsp_t cpu_imem_obi_rsp, cpu_imem_obi_rsp_cut, cpu_dmem_obi_rsp, cpu_dmem_obi_rsp_cut;
+    xups_obi_req_t cpu_imem_obi_req, cpu_dmem_obi_req;
+    xups_obi_rsp_t cpu_imem_obi_rsp, cpu_dmem_obi_rsp;
 
     xdwn_obi_req_t dbg_rsp_obi_req, thread_engine_obi_req, bgpu_obi_req, err_obi_req;
     xdwn_obi_rsp_t dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp, err_obi_rsp;
 
+    xdwn_obi_req_t dbg_rsp_obi_req_cut;
+    xdwn_obi_rsp_t dbg_rsp_obi_rsp_cut;
+
     // Register Interface signals
     bgpu_id_t bgpu_req_id, bgpu_rsp_id;
 
-    reg_req_t bgpu_reg_req;
-    reg_rsp_t bgpu_reg_rsp;
+    reg_req_t bgpu_reg_req, bgpu_reg_req_cut;
+    reg_rsp_t bgpu_reg_rsp, bgpu_reg_rsp_cut;
 
     // Address Map
     addr_map_rule_t [NumAddrRules-1:0] ObiAddrMap;
@@ -213,16 +219,16 @@ module control_domain #(
         .hartinfo_i   ( hartinfo     ),
 
         // From Crossbar
-        .slave_req_i   ( dbg_rsp_obi_req.req     ),
-        .slave_we_i    ( dbg_rsp_obi_req.a.we    ),
+        .slave_req_i   ( dbg_rsp_obi_req_cut.req     ),
+        .slave_we_i    ( dbg_rsp_obi_req_cut.a.we    ),
         .slave_addr_i  ( dm_slave_addr           ),
-        .slave_be_i    ( dbg_rsp_obi_req.a.be    ),
-        .slave_wdata_i ( dbg_rsp_obi_req.a.wdata ),
-        .slave_aid_i   ( dbg_rsp_obi_req.a.aid   ),
-        .slave_gnt_o   ( dbg_rsp_obi_rsp.gnt     ),
-        .slave_rvalid_o( dbg_rsp_obi_rsp.rvalid  ),
-        .slave_rdata_o ( dbg_rsp_obi_rsp.r.rdata ),
-        .slave_rid_o   ( dbg_rsp_obi_rsp.r.rid   ),
+        .slave_be_i    ( dbg_rsp_obi_req_cut.a.be    ),
+        .slave_wdata_i ( dbg_rsp_obi_req_cut.a.wdata ),
+        .slave_aid_i   ( dbg_rsp_obi_req_cut.a.aid   ),
+        .slave_gnt_o   ( dbg_rsp_obi_rsp_cut.gnt     ),
+        .slave_rvalid_o( dbg_rsp_obi_rsp_cut.rvalid  ),
+        .slave_rdata_o ( dbg_rsp_obi_rsp_cut.r.rdata ),
+        .slave_rid_o   ( dbg_rsp_obi_rsp_cut.r.rid   ),
 
         // To Crossbar
         .master_req_o      ( dbg_req_obi_req.req     ),
@@ -251,12 +257,12 @@ module control_domain #(
     assign dbg_req_obi_req.a.aid        = '0;
     assign dbg_req_obi_req.a.a_optional = '0;
 
-    assign dbg_rsp_obi_rsp.r.err        = 1'b0;
-    assign dbg_rsp_obi_rsp.r.r_optional = '0;
+    assign dbg_rsp_obi_rsp_cut.r.err        = 1'b0;
+    assign dbg_rsp_obi_rsp_cut.r.r_optional = '0;
 
     always_comb begin : build_dm_slave_addr
         dm_slave_addr = '0;
-        dm_slave_addr[AddressWidth-1:0] = dbg_rsp_obi_req.a.addr[AddressWidth-1:0];
+        dm_slave_addr[AddressWidth-1:0] = dbg_rsp_obi_req_cut.a.addr[AddressWidth-1:0];
     end : build_dm_slave_addr
 
     // #######################################################################################
@@ -295,121 +301,30 @@ module control_domain #(
     );
 
     // #######################################################################################
-    // # Management CPU                                                                       #
+    // # Management CPU Wrapper                                                              #
     // #######################################################################################
 
-    always_comb begin : build_cpu_boot_addr
-        // Boot address for the management CPU
-        // We boot into the Error Subordinate
-        cpu_boot_addr = '0;
-        cpu_boot_addr[AddressWidth:0] = {1'b1, {AddressWidth{1'b0}}} + 'h5000;
-    end : build_cpu_boot_addr
+    mgmt_cpu_wrapper #(
+        .AddressWidth ( AddressWidth ),
 
-    cve2_core #(
-        .PMPEnable       ( 1'b0                ),
-        .PMPGranularity  ( 0                   ),
-        .PMPNumRegions   ( 1                   ),
-        .MHPMCounterNum  ( 0                   ),
-        .MHPMCounterWidth( 40                  ),
-        .RV32E           ( 1'b1                ),
-        .RV32M           ( cve2_pkg::RV32MNone ),
-        .RV32B           ( cve2_pkg::RV32BNone ),
-        .DbgTriggerEn    ( 1'b1                ),
-        .DbgHwBreakNum   ( 1                   ),
-
-        .DmHaltAddr      ( (1 << AddressWidth) + dm::HaltAddress     [31:0] ),
-        .DmExceptionAddr ( (1 << AddressWidth) + dm::ExceptionAddress[31:0] )
-    ) i_mgmt_cpu (
-        .clk_i ( clk_o  ),
-        .rst_ni( rst_no ),
-
-        .test_en_i( testmode_i ),
-        .hart_id_i( '0         ),
-
-        .boot_addr_i( cpu_boot_addr ),
-
-        .instr_req_o   ( cpu_imem_obi_req.req     ),
-        .instr_gnt_i   ( cpu_imem_obi_rsp.gnt     ),
-        .instr_rdata_i ( cpu_imem_obi_rsp.r.rdata ),
-        .instr_rvalid_i( cpu_imem_obi_rsp.rvalid  ),
-        .instr_err_i   ( cpu_imem_obi_rsp.r.err   ),
-        .instr_addr_o  ( cpu_imem_addr            ),
-
-        .data_req_o   ( cpu_dmem_obi_req.req     ),
-        .data_gnt_i   ( cpu_dmem_obi_rsp.gnt     ),
-        .data_wdata_o ( cpu_dmem_obi_req.a.wdata ),
-        .data_we_o    ( cpu_dmem_obi_req.a.we    ),
-        .data_be_o    ( cpu_dmem_obi_req.a.be    ),
-        .data_rvalid_i( cpu_dmem_obi_rsp.rvalid  ),
-        .data_rdata_i ( cpu_dmem_obi_rsp.r.rdata ),
-        .data_err_i   ( cpu_dmem_obi_rsp.r.err   ),
-        .data_addr_o  ( cpu_dmem_addr            ),
-
-        .irq_software_i( 1'b0         ),
-        .irq_timer_i   ( 1'b0         ),
-        .irq_external_i( 1'b0         ),
-        .irq_fast_i    ( '0           ),
-        .irq_nm_i      ( 1'b0         ),
-        .irq_pending_o ( /* Unused */ ),
-
-        .debug_req_i   ( cpu_dbg_req  ),
-        .fetch_enable_i( 1'b1         ),
-        .core_busy_o   ( /* Unused */ ),
-        .crash_dump_o  ( /* Unused */ )
-    );
-
-    // Assign additional signals for CPU IMEM OBI
-    assign cpu_imem_obi_req.a.we         = 1'b0;
-    assign cpu_imem_obi_req.a.be         = '0;
-    assign cpu_imem_obi_req.a.wdata      = '0;
-    assign cpu_imem_obi_req.a.a_optional = '0;
-    assign cpu_imem_obi_req.a.aid        = '0;
-    assign cpu_imem_obi_req.a.addr       = cpu_imem_addr[AddressWidth:0];
-
-    // Assign additional signals for CPU DMEM OBI
-    assign cpu_dmem_obi_req.a.a_optional = '0;
-    assign cpu_dmem_obi_req.a.aid        = '0;
-    assign cpu_dmem_obi_req.a.addr       = cpu_dmem_addr[AddressWidth:0];
-
-    // OBI Cut for CPU IMEM and DMEM
-    obi_cut #(
-        .ObiCfg      ( XUpsObiCfg        ),
-        .obi_a_chan_t( xups_obi_a_chan_t ),
-        .obi_r_chan_t( xups_obi_r_chan_t ),
         .obi_req_t   ( xups_obi_req_t    ),
         .obi_rsp_t   ( xups_obi_rsp_t    ),
-        .Bypass      ( 1'b0              ),
-        .BypassReq   ( 1'b0              ),
-        .BypassRsp   ( 1'b0              )
-    ) i_mgmt_cpu_imem_cut (
-        .clk_i ( clk_o  ),
-        .rst_ni( rst_no ),
-
-        .sbr_port_req_i( cpu_imem_obi_req ),
-        .sbr_port_rsp_o( cpu_imem_obi_rsp ),
-
-        .mgr_port_req_o( cpu_imem_obi_req_cut ),
-        .mgr_port_rsp_i( cpu_imem_obi_rsp_cut )
-    );
-
-    obi_cut #(
-        .ObiCfg      ( XUpsObiCfg        ),
         .obi_a_chan_t( xups_obi_a_chan_t ),
-        .obi_r_chan_t( xups_obi_r_chan_t ),
-        .obi_req_t   ( xups_obi_req_t    ),
-        .obi_rsp_t   ( xups_obi_rsp_t    ),
-        .Bypass      ( 1'b0              ),
-        .BypassReq   ( 1'b0              ),
-        .BypassRsp   ( 1'b0              )
-    ) i_mgmt_cpu_dmem_cut (
-        .clk_i ( clk_o  ),
-        .rst_ni( rst_no ),
+        .obi_r_chan_t( xups_obi_r_chan_t )
+    ) i_mgmt_cpu_wrapper (
+        .clk_i     ( clk_o      ),
+        .rst_ni    ( rst_no     ),
+        .testmode_i( testmode_i ),
 
-        .sbr_port_req_i( cpu_dmem_obi_req ),
-        .sbr_port_rsp_o( cpu_dmem_obi_rsp ),
+        .cpu_dbg_req_i( cpu_dbg_req ),
 
-        .mgr_port_req_o( cpu_dmem_obi_req_cut ),
-        .mgr_port_rsp_i( cpu_dmem_obi_rsp_cut )
+        .cpu_imem_obi_req_o( cpu_imem_obi_req ),
+        .cpu_imem_obi_rsp_i( cpu_imem_obi_rsp ),
+
+        .cpu_dmem_obi_req_o( cpu_dmem_obi_req ),
+        .cpu_dmem_obi_rsp_i( cpu_dmem_obi_rsp ),
+
+        .mgmt_cpu_clk_i( mgmt_cpu_clk_i )
     );
 
     // #######################################################################################
@@ -450,8 +365,8 @@ module control_domain #(
 
         .testmode_i( testmode_i ),
 
-        .sbr_ports_req_i( { dbg_req_obi_req, cpu_imem_obi_req_cut, cpu_dmem_obi_req_cut } ),
-        .sbr_ports_rsp_o( { dbg_req_obi_rsp, cpu_imem_obi_rsp_cut, cpu_dmem_obi_rsp_cut } ),
+        .sbr_ports_req_i( { dbg_req_obi_req, cpu_imem_obi_req, cpu_dmem_obi_req } ),
+        .sbr_ports_rsp_o( { dbg_req_obi_rsp, cpu_imem_obi_rsp, cpu_dmem_obi_rsp } ),
 
         .mgr_ports_req_o( { dbg_rsp_obi_req, thread_engine_obi_req, bgpu_obi_req, err_obi_req } ),
         .mgr_ports_rsp_i( { dbg_rsp_obi_rsp, thread_engine_obi_rsp, bgpu_obi_rsp, err_obi_rsp } ),
@@ -476,6 +391,25 @@ module control_domain #(
 
         .obi_req_i( err_obi_req ),
         .obi_rsp_o( err_obi_rsp )
+    );
+
+    // Cuts
+    obi_cut #(
+        .ObiCfg      ( XDwnObiCfg        ),
+        .obi_a_chan_t( xdwn_obi_a_chan_t ),
+        .obi_r_chan_t( xdwn_obi_r_chan_t ),
+        .obi_req_t   ( xdwn_obi_req_t    ),
+        .obi_rsp_t   ( xdwn_obi_rsp_t    ),
+        .Bypass      ( 1'b0              )
+    ) i_obi_dbg_rsp_cut (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .sbr_port_req_i ( dbg_rsp_obi_req ),
+        .sbr_port_rsp_o ( dbg_rsp_obi_rsp ),
+
+        .mgr_port_req_o ( dbg_rsp_obi_req_cut ),
+        .mgr_port_rsp_i ( dbg_rsp_obi_rsp_cut )
     );
 
     // #######################################################################################
@@ -524,6 +458,21 @@ module control_domain #(
     assign bgpu_obi_rsp.r.rid        = {bgpu_rsp_id[1:0], 1'b0};
     assign bgpu_obi_rsp.r.r_optional = '0;
 
+    // Cut
+    reg_cut #(
+        .req_t( reg_req_t ),
+        .rsp_t( reg_rsp_t )
+    ) i_reg_cut (
+        .clk_i ( clk_o  ),
+        .rst_ni( rst_no ),
+
+        .src_req_i( bgpu_reg_req ),
+        .src_rsp_o( bgpu_reg_rsp ),
+
+        .dst_req_o( bgpu_reg_req_cut ),
+        .dst_rsp_i( bgpu_reg_rsp_cut )
+    );
+
     // Convert Register Interface to AXI
     reg_to_axi #(
         .DataWidth( CtrlWidth   ),
@@ -535,8 +484,8 @@ module control_domain #(
         .clk_i ( clk_o  ),
         .rst_ni( rst_no ),
 
-        .reg_req_i( bgpu_reg_req ),
-        .reg_rsp_o( bgpu_reg_rsp ),
+        .reg_req_i( bgpu_reg_req_cut ),
+        .reg_rsp_o( bgpu_reg_rsp_cut ),
 
         .axi_req_o( axi_req_o ),
         .axi_rsp_i( axi_rsp_i )

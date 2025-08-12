@@ -109,6 +109,8 @@ module bgpu_wrapper (
 
         .testmode_i( 1'b0 ),
 
+        .mgmt_cpu_clk_i( clk_sys ),
+
         .jtag_tck_i  ( jtag_tck_i   ),
         .jtag_tdi_i  ( jtag_tdi_i   ),
         .jtag_tdo_o  ( jtag_tdo_o   ),

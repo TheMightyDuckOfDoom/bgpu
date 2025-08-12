@@ -11,7 +11,7 @@ dependencies:
     axi:                { git: "https://github.com/pulp-platform/axi",                version: 0.39.8           }
     common_cells:       { git: "https://github.com/pulp-platform/common_cells",       version: 1.38.0           }
     obi:                { git: "https://github.com/pulp-platform/obi",                version: 0.1.7            }
-    register_interface: { git: "https://github.com/TheMightyDuckOfDoom/register_interface", rev: "fix-reg2axi"  }
+    register_interface: { git: "https://github.com/pulp-platform/register_interface", version: 0.4.6            }
     riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",      rev: "verilator-phsauter" }
     tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic", version: 0.2.13           }
     # hpdcache:     { git: "https://github.com/openhwgroup/cv-hpdcache",    rev: 724dcede54123f69bfac64842d8ee52833d4fd77 }
@@ -69,8 +69,9 @@ sources:
 
           - rtl/bgpu_soc/thread_dispatcher.sv
           - rtl/bgpu_soc/obi_thread_engine.sv
-          
+          - rtl/bgpu_soc/mgmt_cpu_wrapper.sv
           - rtl/bgpu_soc/control_domain.sv
+
           - rtl/bgpu_soc/bgpu_soc.sv
 
     - target: any(sim, gowin_sim, xilinx_sim)

@@ -62,6 +62,9 @@ module bgpu_soc #(
     input logic clk_i,
     input logic rst_ni,
 
+    // Clock for the management CPU
+    input logic mgmt_cpu_clk_i,
+
     // Testmode
     input logic testmode_i,
 
@@ -249,6 +252,8 @@ module bgpu_soc #(
         .clk_o ( clk    ),
         .rst_ni( rst_ni ),
         .rst_no( rst_n  ),
+
+        .mgmt_cpu_clk_i( mgmt_cpu_clk_i ),
 
         .inorder_execution_o( inorder_execution ),
 
