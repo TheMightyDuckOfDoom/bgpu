@@ -7,7 +7,8 @@ package bgpu_pkg;
 typedef enum logic [1:0] {
     EU_IU  = 'd0,
     EU_LSU = 'd1,
-    EU_BRU = 'd2
+    EU_BRU = 'd2,
+    EU_FPU = 'd3
 } eu_e;
 
 typedef enum logic [5:0] {
@@ -32,6 +33,12 @@ typedef enum logic [5:0] {
 } iu_subtype_e;
 
 typedef enum logic [5:0] {
+    FPU_ADD       = 'h00, // Add operands
+    FPU_INT_TO_FP = 'h01, // Convert integer to floating point
+    FPU_FP_TO_INT = 'h02  // Convert floating point to integer
+} fpu_subtype_e;
+
+typedef enum logic [5:0] {
     LSU_LOAD_BYTE  = 'h00, // Load from memory
     LSU_LOAD_HALF  = 'h01, // Load half-word from memory
     LSU_LOAD_WORD  = 'h02, // Load word from memory
@@ -51,6 +58,7 @@ typedef union packed {
     iu_subtype_e  iu;
     lsu_subtype_e lsu;
     bru_subtype_e bru;
+    fpu_subtype_e fpu;
 } inst_subtype_t;
 
 typedef struct packed {

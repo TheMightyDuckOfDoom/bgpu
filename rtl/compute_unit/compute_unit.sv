@@ -237,6 +237,7 @@ module compute_unit import bgpu_pkg::*; #(
     // Register Operand Collector Stage to Execution Units
     logic opc_to_eu_valid_d, opc_to_eu_valid_q,  eu_to_opc_ready_d, eu_to_opc_ready_q;
     logic opc_to_iu_valid,  iu_to_opc_ready;
+    logic opc_to_fpu_valid, fpu_to_opc_ready;
     logic opc_to_lsu_valid, lsu_to_opc_ready;
     logic opc_to_bru_valid, bru_to_opc_ready;
     opc_to_eu_data_t opc_to_eu_data_q, opc_to_eu_data_d;
@@ -244,10 +245,11 @@ module compute_unit import bgpu_pkg::*; #(
     // Execution Units to Register Operand Collector Stage
     logic eu_to_opc_valid, opc_to_eu_ready;
     logic iu_to_rc_valid,  rc_to_iu_ready;
+    logic fpu_to_rc_valid, rc_to_fpu_ready;
     logic lsu_to_rc_valid, rc_to_lsu_ready;
     logic bru_to_rc_valid, rc_to_bru_ready;
 
-    eu_to_opc_data_t eu_to_opc_data, iu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
+    eu_to_opc_data_t eu_to_opc_data, iu_to_rc_data, fpu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
 
     // Branch Unit to Fetcher
     logic      bru_branch;
@@ -560,20 +562,20 @@ module compute_unit import bgpu_pkg::*; #(
     );
 
     stream_demux #(
-        .N_OUP(3)
+        .N_OUP(4)
     ) i_eu_demux (
         .inp_valid_i( opc_to_eu_valid_q ),
         .inp_ready_o( eu_to_opc_ready_d ),
 
         .oup_sel_i( opc_to_eu_data_q.inst.eu ),
 
-        .oup_valid_o({ opc_to_bru_valid, opc_to_lsu_valid, opc_to_iu_valid }),
-        .oup_ready_i({ bru_to_opc_ready, lsu_to_opc_ready, iu_to_opc_ready })
+        .oup_valid_o({ opc_to_fpu_valid, opc_to_bru_valid, opc_to_lsu_valid, opc_to_iu_valid }),
+        .oup_ready_i({ fpu_to_opc_ready, bru_to_opc_ready, lsu_to_opc_ready, iu_to_opc_ready })
     );
 
     `ifndef SYNTHESIS
         assert property (@(posedge clk_i) opc_to_eu_valid_q
-            |-> opc_to_eu_data_q.inst.eu inside {EU_IU, EU_LSU, EU_BRU})
+            |-> opc_to_eu_data_q.inst.eu inside {EU_IU, EU_LSU, EU_BRU, EU_FPU})
             else $error("Invalid execution unit type: %0d", opc_to_eu_data_q.inst.eu);
     `endif
 
@@ -614,6 +616,38 @@ module compute_unit import bgpu_pkg::*; #(
         .eu_to_rc_tag_o     ( iu_to_rc_data.tag      ),
         .eu_to_rc_dst_o     ( iu_to_rc_data.dst      ),
         .eu_to_rc_data_o    ( iu_to_rc_data.data     )
+    );
+
+    // Floating Point Unit
+    floating_point_unit #(
+        .NumTags        ( NumTags         ),
+        .NumWarps       ( NumWarps        ),
+        .RegWidth       ( RegWidth        ),
+        .WarpWidth      ( WarpWidth       ),
+        .OperandsPerInst( OperandsPerInst ),
+        .RegIdxWidth    ( RegIdxWidth     ),
+        .AddressWidth   ( AddressWidth    ),
+        .TblockIdxBits  ( TblockIdxBits   )
+    ) i_floating_point_unit (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .testmode_i( testmode_i ),
+
+        .eu_to_opc_ready_o   ( fpu_to_opc_ready                  ),
+        .opc_to_eu_valid_i   ( opc_to_fpu_valid                  ),
+        .opc_to_eu_act_mask_i( opc_to_eu_data_q.act_mask         ),
+        .opc_to_eu_tag_i     ( opc_to_eu_data_q.tag              ),
+        .opc_to_eu_inst_sub_i( opc_to_eu_data_q.inst.subtype.fpu ),
+        .opc_to_eu_dst_i     ( opc_to_eu_data_q.dst              ),
+        .opc_to_eu_operands_i( opc_to_eu_data_q.operands         ),
+
+        .rc_to_eu_ready_i   ( rc_to_fpu_ready         ),
+        .eu_to_rc_valid_o   ( fpu_to_rc_valid         ),
+        .eu_to_rc_act_mask_o( fpu_to_rc_data.act_mask ),
+        .eu_to_rc_tag_o     ( fpu_to_rc_data.tag      ),
+        .eu_to_rc_dst_o     ( fpu_to_rc_data.dst      ),
+        .eu_to_rc_data_o    ( fpu_to_rc_data.data     )
     );
 
     // Load Store Unit
@@ -703,15 +737,15 @@ module compute_unit import bgpu_pkg::*; #(
 
     stream_arbiter #(
         .DATA_T ( eu_to_opc_data_t ),
-        .N_INP  ( 3                ),
+        .N_INP  ( 4                ),
         .ARBITER( "rr"             )
     ) i_result_collector (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .inp_data_i ({ iu_to_rc_data,  lsu_to_rc_data,  bru_to_rc_data  }),
-        .inp_valid_i({ iu_to_rc_valid, lsu_to_rc_valid, bru_to_rc_valid }),
-        .inp_ready_o({ rc_to_iu_ready, rc_to_lsu_ready, rc_to_bru_ready }),
+        .inp_data_i ({ fpu_to_rc_data,  iu_to_rc_data,  lsu_to_rc_data,  bru_to_rc_data  }),
+        .inp_valid_i({ fpu_to_rc_valid, iu_to_rc_valid, lsu_to_rc_valid, bru_to_rc_valid }),
+        .inp_ready_o({ rc_to_fpu_ready, rc_to_iu_ready, rc_to_lsu_ready, rc_to_bru_ready }),
 
         .oup_data_o ( eu_to_opc_data  ),
         .oup_valid_o( eu_to_opc_valid ),

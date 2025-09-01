@@ -35,6 +35,21 @@ packages:
     source:
       Path: vendor/cve2
     dependencies: []
+  fpnew:
+    revision: 0d3e8c4210409499dd54911068b3e0709d2896fc
+    version: null
+    source:
+      Git: https://github.com/openhwgroup/cvfpu
+    dependencies:
+    - common_cells
+    - fpu_div_sqrt_mvp
+  fpu_div_sqrt_mvp:
+    revision: 86e1f558b3c95e91577c41b2fc452c86b04e85ac
+    version: 1.0.4
+    source:
+      Git: https://github.com/pulp-platform/fpu_div_sqrt_mvp.git
+    dependencies:
+    - common_cells
   obi:
     revision: 0155fc34e900c7c884e081c0a1114a247937ff69
     version: 0.1.7
@@ -44,10 +59,10 @@ packages:
     - common_cells
     - common_verification
   register_interface:
-    revision: e6ee47680e5829dad8f3da36c7a71800f1def9d6
-    version: null
+    revision: 8e8c209ea559d3b54f45cf30fcce95ce70ff5e49
+    version: 0.4.6
     source:
-      Git: https://github.com/TheMightyDuckOfDoom/register_interface
+      Git: https://github.com/pulp-platform/register_interface
     dependencies:
     - apb
     - axi

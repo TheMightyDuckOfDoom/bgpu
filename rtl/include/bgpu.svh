@@ -36,6 +36,12 @@
         IU_SHLI\
     }
 
+    `define FPU_VALID_SUBTYPES {\
+        FPU_ADD,\
+        FPU_INT_TO_FP,\
+        FPU_FP_TO_INT\
+    }
+
     // JMP and SYNC never reach the BRU, as they are handled by the decoder
     `define BRU_VALID_SUBTYPES {\
         BRU_BEZ,\

@@ -125,9 +125,11 @@ module integer_unit import bgpu_pkg::*; #(
                 IU_SHL, IU_SHLI: result[i] = operands[1][i] << operands[0][i];
 
                 default: begin
-                    result[i] = '1; // Default case, should not happen
+                    result[i] = '0; // Default case, should not happen with valid instructions
                     `ifndef SYNTHESIS
-                        $fatal(1, "Instruction subtype not implemented: %0h", opc_to_eu_inst_sub_i);
+                        if (opc_to_eu_valid_i)
+                            $fatal(1, "Instruction subtype not implemented: %0h",
+                                opc_to_eu_inst_sub_i);
                     `endif
                 end
             endcase

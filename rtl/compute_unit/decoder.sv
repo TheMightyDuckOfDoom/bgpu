@@ -113,6 +113,17 @@ module decoder import bgpu_pkg::*; #(
             end
         end : decode_iu
 
+        // Floating Point Unit
+        else if (dec_inst_o.eu == EU_FPU) begin : decode_fpu
+            dec_operands_required_o = '1;
+
+            // Only one register operand
+            if (dec_inst_o.subtype inside {
+                FPU_INT_TO_FP, FPU_FP_TO_INT
+            })
+                dec_operands_required_o[1] = 1'b0;
+        end : decode_fpu
+
         // Load Store Unit
         else if (dec_inst_o.eu == EU_LSU) begin : decode_lsu
             // LSU instructions always have two operands register operands
