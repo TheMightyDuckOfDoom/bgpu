@@ -807,6 +807,34 @@ module compute_unit import bgpu_pkg::*; #(
         end
     end : iu_dumper
 
+    initial begin : fpu_dumper
+        integer f;
+        string data, filename;
+
+        filename = $sformatf("fpu_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
+        f = $fopen(filename, "w");
+
+        while(1) begin
+            @(posedge clk_i);
+            if (opc_to_fpu_valid && fpu_to_opc_ready) begin
+                data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
+                    $time(), opc_to_eu_data_q.tag, opc_to_eu_data_q.inst.subtype,
+                    opc_to_eu_data_q.tag[WidWidth-1:0], opc_to_eu_data_q.act_mask,
+                    opc_to_eu_data_q.dst);
+
+                for(int i = 0; i < OperandsPerInst; i++) begin
+                    data = {data, $sformatf(", Operand%0d:", i)};
+                    for(int thread = 0; thread < WarpWidth; thread++) begin
+                        data = {data, $sformatf(" (t%0d: 0x%h)", thread,
+                            opc_to_eu_data_q.operands[i][thread * RegWidth +: RegWidth])};
+                    end
+                end
+                $fwrite(f, "%s\n", data);
+                $fflush(f);
+            end
+        end
+    end : fpu_dumper
+
     initial begin : lsu_dumper
         integer f;
         string data, filename;

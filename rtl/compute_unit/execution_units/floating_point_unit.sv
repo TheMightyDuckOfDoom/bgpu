@@ -25,9 +25,6 @@ module floating_point_unit import bgpu_pkg::*; #(
     // Memory Address width in bits
     parameter int unsigned AddressWidth = 32,
 
-    // Number of waiting stations
-    parameter int unsigned NumFpuStations = 4,
-
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth    = $clog2(NumTags),
     parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
@@ -66,23 +63,31 @@ module floating_point_unit import bgpu_pkg::*; #(
     // # Local Parameters                                                                    #
     // #######################################################################################
 
+    // Should be more than the max latency of an FPU operation
+    localparam int unsigned NumFpuStations = 5;
+
     localparam fpnew_pkg::fpu_implementation_t FpnewImplementation = '{
-        PipeRegs:   '{default: 0},
+        PipeRegs:   '{
+                        '{default: 3}, // ADDMUL
+                        '{default: 1}, // DIVSQRT
+                        '{default: 1}, // NONCOMP
+                        '{default: 1}  // CONV
+                    },
         UnitTypes:  '{
-                        '{default: fpnew_pkg::MERGED},   // ADDMUL
+                        '{default: fpnew_pkg::PARALLEL},   // ADDMUL
                         '{default: fpnew_pkg::DISABLED}, // DIVSQRT
                         '{default: fpnew_pkg::PARALLEL}, // NONCOMP
                         '{default: fpnew_pkg::MERGED}    // CONV
                     },
-        PipeConfig: fpnew_pkg::BEFORE
+        PipeConfig: fpnew_pkg::DISTRIBUTED
     };
 
     localparam fpnew_pkg::fpu_features_t FpnewFeatures = '{
         Width:         32,
         EnableVectors: 1'b0,
         EnableNanBox:  1'b1,
-        FpFmtMask:     'd1 << fpnew_pkg::FP32,
-        IntFmtMask:    'd1 << fpnew_pkg::INT32
+        FpFmtMask:     {1'b1, 1'b0, 1'b0, 1'b0, 1'b0},
+        IntFmtMask:    {1'b0, 1'b0, 1'b1, 1'b0}
     };
 
     localparam int unsigned FpuStationIdxWidth = NumFpuStations > 1 ? $clog2(NumFpuStations) : 1;
@@ -95,13 +100,6 @@ module floating_point_unit import bgpu_pkg::*; #(
 
     typedef logic      [ RegWidth-1:0] reg_data_t;
     typedef reg_data_t [WarpWidth-1:0] reg_data_per_thread_t;
-
-    typedef struct packed {
-        iid_t       tag;
-        reg_idx_t   dst;
-        warp_data_t data;
-        act_mask_t  act_mask;
-    } eu_to_opc_t;
 
     typedef struct packed {
         iid_t       tag;
@@ -120,9 +118,16 @@ module floating_point_unit import bgpu_pkg::*; #(
     logic           [NumFpuStations-1:0] fpu_stations_valid_d, fpu_stations_valid_q;
     station_entry_t [NumFpuStations-1:0] fpu_stations_d,       fpu_stations_q;
 
+    station_entry_t selected_station_entry;
+
+    logic fpu_station_available;
+    logic [NumFpuStations-1:0] fpu_station_ready, fpu_station_free;
+
+    logic fpu_fork_ready;
+
     // FPU signals
     logic             [WarpWidth-1:0] fpnew_valid_in,  fpnew_ready_in;
-    logic             [WarpWidth-1:0] fpnew_valid_out, fpnew_ready_out;
+    logic             [WarpWidth-1:0] fpnew_valid_out;
     fpu_station_idx_t [WarpWidth-1:0] fpnew_tag_out;
     reg_data_t        [WarpWidth-1:0] fpnew_result;
 
@@ -175,16 +180,122 @@ module floating_point_unit import bgpu_pkg::*; #(
         endcase
     end : decode_operation
 
+    // Station is ready if valid and all results are ready
+    for (genvar i = 0; i < NumFpuStations; i++) begin : gen_fpu_station_ready
+        assign fpu_station_ready[i] = fpu_stations_valid_q[i] && (&fpu_stations_q[i].result_ready);
+    end : gen_fpu_station_ready
+
+    // One station is free, if not all are valid
+    assign fpu_station_available = !(&fpu_stations_valid_q);
+
+    // Ready if station entry is available and FPU fork is ready
+    assign eu_to_opc_ready_o = fpu_station_available && fpu_fork_ready;
+
     // Waiting station logic
     always_comb begin : waiting_station_logic
         // Default
         fpu_stations_d       = fpu_stations_q;
         fpu_stations_valid_d = fpu_stations_valid_q;
+
+        fpnew_tag_in = '0;
+
+        // Insert a new instruction
+        if (opc_to_eu_valid_i) begin : insert_new_instruction
+            // Find first free station
+            for (int unsigned i = 0; i < NumFpuStations; i++) begin
+                if (!fpu_stations_valid_q[i]) begin
+                    // Assign station values
+                    fpu_stations_d[i].tag      = opc_to_eu_tag_i;
+                    fpu_stations_d[i].dst      = opc_to_eu_dst_i;
+                    fpu_stations_d[i].act_mask = opc_to_eu_act_mask_i;
+                    fpu_stations_d[i].results  = '0;
+
+                    // Inactive threads are already ready
+                    fpu_stations_d[i].result_ready = ~opc_to_eu_act_mask_i;
+
+                    // Pass entry index as tag to FPU
+                    fpnew_tag_in = i[FpuStationIdxWidth-1:0];
+
+                    // Input handshake
+                    if (eu_to_opc_ready_o) begin
+                        // Mark station as valid
+                        fpu_stations_valid_d[i]        = 1'b1;
+                    end
+                    break;
+                end
+            end
+        end : insert_new_instruction
+
+        // New results from FPUs
+        for (int unsigned i = 0; i < WarpWidth; i++) begin : handle_fpu_results
+            if (fpnew_valid_out[i]) begin
+                // Use tag to index into stations
+                fpu_stations_d[fpnew_tag_out[i]].results     [i] = fpnew_result[i];
+                fpu_stations_d[fpnew_tag_out[i]].result_ready[i] = 1'b1;
+            end
+        end : handle_fpu_results
+
+        // Free stations that are sent to the Result Collector
+        for (int unsigned i = 0; i < NumFpuStations; i++) begin : free_sent_stations
+            // Deallocate station entry
+            if (fpu_station_free[i] && eu_to_rc_valid_o && rc_to_eu_ready_i) begin
+                fpu_stations_valid_d[i] = 1'b0;
+            end
+        end : free_sent_stations
     end : waiting_station_logic
+
+    // Arbiter for Result Collector
+    rr_arb_tree #(
+        .DataType ( station_entry_t ),
+        .NumIn    ( NumFpuStations  ),
+        .ExtPrio  ( 1'b0 ),
+        .AxiVldRdy( 1'b0 ),
+        .LockIn   ( 1'b0 ),
+        .FairArb  ( 1'b1 )
+    ) i_rr_arb (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .req_i ( fpu_station_ready ),
+        .gnt_o ( fpu_station_free  ),
+        .data_i( fpu_stations_q    ),
+
+        .req_o ( eu_to_rc_valid_o      ),
+        .gnt_i ( rc_to_eu_ready_i      ),
+        .data_o( selected_station_entry ),
+
+        // Unused
+        .idx_o  ( /* NOT CONNECTED */ ),
+        .flush_i( 1'b0                ),
+        .rr_i   ( '0                  )
+    );
+
+    // Assign outputs to Result Collector
+    assign eu_to_rc_act_mask_o = selected_station_entry.act_mask;
+    assign eu_to_rc_tag_o      = selected_station_entry.tag;
+    assign eu_to_rc_dst_o      = selected_station_entry.dst;
+    assign eu_to_rc_data_o     = selected_station_entry.results;
 
     // #######################################################################################
     // # Floating Point Units                                                                #
     // #######################################################################################
+
+    stream_fork_dynamic #(
+        .N_OUP( WarpWidth )
+    ) i_fpnew_fork (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .valid_i( opc_to_eu_valid_i && fpu_station_available ),
+        .ready_o( fpu_fork_ready ),
+
+        .sel_i      ( opc_to_eu_act_mask_i ),
+        .sel_valid_i( 1'b1                 ),
+        .sel_ready_o( /* Not used */       ),
+
+        .valid_o( fpnew_valid_in ),
+        .ready_i( fpnew_ready_in )
+    );
 
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_fpu_units
         // Instantiate one FPU per thread in the warp
@@ -199,7 +310,7 @@ module floating_point_unit import bgpu_pkg::*; #(
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
 
-            .operands_i    ( {{RegWidth{1'b0}}, operands[1][i], operands[0][i]} ),
+            .operands_i    ( {operands[1][i], operands[1][i], operands[0][i]} ),
             .rnd_mode_i    ( fpnew_rnd_mode ),
             .op_i          ( fpnew_op       ),
             .op_mod_i      ( fpnew_op_mod   ),
@@ -215,7 +326,7 @@ module floating_point_unit import bgpu_pkg::*; #(
             .flush_i   ( 1'b0              ),
 
             .out_valid_o( fpnew_valid_out[i] ),
-            .out_ready_i( fpnew_ready_out[i] ),
+            .out_ready_i( fpnew_valid_out[i] ),
             .result_o   ( fpnew_result   [i] ),
             .tag_o      ( fpnew_tag_out  [i] ),
             .status_o   ( /* Not used */     ),
