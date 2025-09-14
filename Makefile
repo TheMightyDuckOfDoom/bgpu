@@ -153,7 +153,7 @@ gowin-eda-report:
 	lynx gowin/out/$(TOP)/impl/gwsynthesis/$(TOP)_syn.rpt.html -dump -width 256 > gowin/gowin_eda_report.rpt
 	sed -i 's/\&nbsp/     /g' gowin/gowin_eda_report.rpt
 	sed -i '1,10d' gowin/gowin_eda_report.rpt
-	grep -A 64 "Resource Usage Summary" gowin/gowin_eda_report.rpt 
+	grep -A 100 "Resource Usage Summary" gowin/gowin_eda_report.rpt 
 
 gowin-eda-process-netlist: gowin/scripts/rename_ports.py gowin/scripts/process_eda_netlist.tcl
 	echo "set top_design $(TOP)"  >  gowin/run_process.tcl
@@ -170,10 +170,10 @@ gowin-yosys-report:
 	lynx gowin/out/$(TOP)_yosys/impl/gwsynthesis/$(TOP)_yosys_syn.rpt.html -dump -width 256 > gowin/gowin_yosys_report.rpt
 	sed -i 's/\&nbsp/     /g' gowin/gowin_yosys_report.rpt
 	sed -i '1,10d' gowin/gowin_yosys_report.rpt
-	grep -A 64 "Resource Usage Summary" gowin/gowin_yosys_report.rpt 
+	grep -A 100 "Resource Usage Summary" gowin/gowin_yosys_report.rpt 
 
 gowin-report:
-	tail -n 64 gowin/gowin.log
+	tail -n 100 gowin/gowin.log
 
 gowin-eda-pnr:
 	echo "set top_design $(TOP)"  >  gowin/run_pnr.tcl

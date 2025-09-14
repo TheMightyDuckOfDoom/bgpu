@@ -21,6 +21,8 @@
 // http://www.xilinx.com/support/documentation/user_guides/ug474_7Series_CLB.pdf
 // http://www.xilinx.com/support/documentation/sw_manuals/xilinx2014_4/ug953-vivado-7series-libraries.pdf
 
+/* verilator lint_off SPECIFYIGN */
+
 module VCC(output P);
   assign P = 1;
 endmodule
@@ -3978,5 +3980,6 @@ endmodule
 /* verilator lint_on WIDTHEXPAND */
 /* verilator lint_on WIDTHTRUNC */
 /* verilator lint_on COMBDLY */
+/* verilator lint_on SPECIFYIGN */
 
 // TODO: DSP48E2 (Ultrascale).

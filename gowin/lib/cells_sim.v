@@ -17,6 +17,8 @@
  *
  */
 
+/* verilator lint_off SPECIFYIGN */
+
 module GSR(input GSRI);
 endmodule
 
@@ -1250,3 +1252,4 @@ always @(posedge CLK) begin
 end
 
 endmodule
+/* verilator lint_on SPECIFYIGN */
