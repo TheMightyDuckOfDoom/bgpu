@@ -52,7 +52,7 @@ lint-verilator: verilator/verilator_lint.f verilator/config.vlt $(SRCS) $(TB_SRC
 
 # Generate filelist for Verilator linting
 verilator/verible_lint.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script flist -n $(BENDER_TARGET_LINT) > $@
+	$(BENDER) script flist -n $(BENDER_TARGET_LINT) -t verible > $@
 	tr "\n" " " < $@ > $@.tmp
 	mv $@.tmp $@
 
@@ -194,6 +194,7 @@ clean: asic-clean gowin-clean xilinx-clean verilator-clean
 	rm -f *.vcd
 	rm -f *.out
 	rm -f *.log
+	rm -rf vendor
 
 verilator-clean:
 	rm -f  verilator/*.f

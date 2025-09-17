@@ -29,8 +29,21 @@ vendor_package:
     mapping:
       - { from: 'rtl/cve2', to: '' }
 
+  - name: fpu-wrappers
+    target_dir: vendor/fpu-wrappers
+    upstream: { git: "https://github.com/jiegec/fpu-wrappers.git", rev: "6817499de98cc4d38ff4794f01e2431c09e84c40" }
+    mapping:
+      - { from: 'fpu-wrappers/resources/flopoco', to: '' }
+
 sources:
     - rtl/bgpu_pkg.sv
+
+    - target: not(any(post_synth, post_layout, verible))
+      defines:
+          FMA_S_LATENCY: 4
+      files:
+          - vendor/fpu-wrappers/IEEEFMA_S4s.v
+          - rtl/compute_unit/execution_units/floating_point_unit/fma_wrapper.sv
 
     - target: not(any(post_synth, post_layout))
       files:
@@ -54,7 +67,7 @@ sources:
 
           - rtl/compute_unit/execution_units/integer_unit.sv
 
-          - rtl/compute_unit/execution_units/floating_point_unit.sv
+          - rtl/compute_unit/execution_units/floating_point_unit/floating_point_unit.sv
 
           - rtl/compute_unit/execution_units/load_store_unit/coalesce_comparator.sv
           - rtl/compute_unit/execution_units/load_store_unit/coalesce_splitter.sv

@@ -115,6 +115,9 @@ yosys tee -q -a ${rep_dir}/${top_design}_instances.rpt  select -list "t:tc_clk*$
 # -----------------------------------------------------------------------------
 # mapping to technology
 
+yosys write_verilog -norename -noexpr -attr2comment ${out_dir}/${top_design}_unmapped.v
+yosys tee -q -o "${rep_dir}/${top_design}_area_un_mapped.rpt" stat -top $top_design
+
 # first map flip-flops
 yosys dfflibmap {*}$tech_cells_args
 
