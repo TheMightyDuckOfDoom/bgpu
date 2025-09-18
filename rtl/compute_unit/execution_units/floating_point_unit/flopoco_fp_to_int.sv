@@ -2,11 +2,8 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-`include "common_cells/registers.svh"
-
-/// Wrapper for the Flopoco FMA unit
-// Computes (A * B) + C
-module fma_wrapper #(
+/// Converts a floating point number to a signed integer
+module flopoco_fp_to_int #(
     /// Width of the Operands
     parameter int DataWidth = 32,
 
@@ -23,23 +20,19 @@ module fma_wrapper #(
     // Operands
     input logic  valid_i,
     input tag_t  tag_i,
-    input logic  negate_a_i,
-    input logic  negate_c_i,
-    input data_t operand_a_i,
-    input data_t operand_b_i,
-    input data_t operand_c_i,
+    input data_t fp_i,
 
     // Result
     output logic  valid_o,
     output tag_t  tag_o,
-    output data_t result_o
+    output data_t int_o
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
     // #######################################################################################
 
     // Determine latency based on DataWidth
-    localparam int unsigned Latency = (DataWidth == 32) ? `FMA_S_LATENCY : 0;
+    localparam int unsigned Latency = (DataWidth == 32) ? `FP2INT_S_LATENCY : 0;
 
     // #######################################################################################
     // # Valid and Tag shift register                                                        #
@@ -60,26 +53,46 @@ module fma_wrapper #(
     );
 
     // #######################################################################################
-    // # Flopoco FMA (A*B)+C                                                                 #
+    // # Flopoco Conversion                                                                  #
     // #######################################################################################
 
-    // Single precision FMA
-    if (DataWidth == 32) begin : gen_fma_s
-        IEEEFMA_S i_fma_s (
-            .clk( clk_i ),
+    logic [DataWidth+1:0] flopoco_fp;
 
-            .A( operand_a_i ),
-            .B( operand_b_i ),
-            .C( operand_c_i ),
+    // Single precision Fp2Int
+    if (DataWidth == 32) begin : gen_fp2int_s
+        IEEE2FP_S0 i_ieee2fp_s (
+            .clk( clk_i   ),
+            .rst( !rst_ni ),
 
-            .negateAB( negate_a_i ),
-            .negateC ( negate_c_i ),
+            .X( fp_i ),
 
-            .RndMode( 'd0 ), // Non Functional
-
-            .R( result_o )
+            .R( flopoco_fp )
         );
-    end : gen_fma_s
+
+        if (Latency == 0) begin
+            FP2Fix_S0 i_fp2int_s (
+                .clk( clk_i   ),
+                .rst( !rst_ni ),
+
+                .X( flopoco_fp ),
+
+                .R ( int_o        ),
+                .ov( /* unused */ )
+            );
+        end else if (Latency == 1) begin
+            FP2Fix_S1 i_fp2int_s (
+                .clk( clk_i   ),
+                .rst( !rst_ni ),
+
+                .X( flopoco_fp ),
+
+                .R ( int_o        ),
+                .ov( /* unused */ )
+            );
+        end else begin
+            initial $error("FP2INT: Unsupported Latency %0d for DataWidth %0d", Latency, DataWidth);
+        end
+    end : gen_fp2int_s
 
     // #######################################################################################
     // # Assertions                                                                  #
@@ -87,6 +100,6 @@ module fma_wrapper #(
 
     // Check that DataWidth is supported
     initial assert (DataWidth == 32)
-        else $error("FMA Wrapper: Unsupported DataWidth %0d", DataWidth);
+        else $error("FP2INT: Unsupported DataWidth %0d", DataWidth);
 
-endmodule : fma_wrapper
+endmodule : flopoco_fp_to_int

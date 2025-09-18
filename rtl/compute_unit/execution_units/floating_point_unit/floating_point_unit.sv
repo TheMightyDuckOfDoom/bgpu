@@ -64,31 +64,7 @@ module floating_point_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Should be more than the max latency of an FPU operation
-    localparam int unsigned NumFpuStations = 5;
-
-    localparam fpnew_pkg::fpu_implementation_t FpnewImplementation = '{
-        PipeRegs:   '{
-                        '{default: 3}, // ADDMUL
-                        '{default: 1}, // DIVSQRT
-                        '{default: 1}, // NONCOMP
-                        '{default: 1}  // CONV
-                    },
-        UnitTypes:  '{
-                        '{default: fpnew_pkg::PARALLEL},   // ADDMUL
-                        '{default: fpnew_pkg::DISABLED}, // DIVSQRT
-                        '{default: fpnew_pkg::PARALLEL}, // NONCOMP
-                        '{default: fpnew_pkg::MERGED}    // CONV
-                    },
-        PipeConfig: fpnew_pkg::DISTRIBUTED
-    };
-
-    localparam fpnew_pkg::fpu_features_t FpnewFeatures = '{
-        Width:         32,
-        EnableVectors: 1'b0,
-        EnableNanBox:  1'b1,
-        FpFmtMask:     {1'b1, 1'b0, 1'b0, 1'b0, 1'b0},
-        IntFmtMask:    {1'b0, 1'b0, 1'b1, 1'b0}
-    };
+    localparam int unsigned NumFpuStations = 8;
 
     localparam int unsigned FpuStationIdxWidth = NumFpuStations > 1 ? $clog2(NumFpuStations) : 1;
 
@@ -120,26 +96,24 @@ module floating_point_unit import bgpu_pkg::*; #(
 
     station_entry_t selected_station_entry;
 
-    logic fpu_station_available;
     logic [NumFpuStations-1:0] fpu_station_ready, fpu_station_free;
 
-    logic fpu_fork_ready;
+    fpu_station_idx_t fpu_tag_in;
 
-    // FPU signals
-    logic             [WarpWidth-1:0] fpnew_valid_in,  fpnew_ready_in;
-    logic             [WarpWidth-1:0] fpnew_valid_out;
-    fpu_station_idx_t [WarpWidth-1:0] fpnew_tag_out;
-    reg_data_t        [WarpWidth-1:0] fpnew_result;
+    // FMA Signals
+    logic      [WarpWidth-1:0] fma_valid_in;
+    reg_data_t [WarpWidth-1:0] fma_operand_a, fma_operand_b, fma_operand_c;
+    logic                      fma_negate_a,  fma_negate_c;
 
-    fpu_station_idx_t fpnew_tag_in;
+    logic             [WarpWidth-1:0] fma_valid_out;
+    fpu_station_idx_t [WarpWidth-1:0] fma_tag_out;
+    reg_data_t        [WarpWidth-1:0] fma_result;
 
-    logic fpnew_op_mod;
-
-    fpnew_pkg::roundmode_e  fpnew_rnd_mode;
-    fpnew_pkg::operation_e  fpnew_op;
-    fpnew_pkg::fp_format_e  fpnew_src_fmt;
-    fpnew_pkg::fp_format_e  fpnew_dst_fmt;
-    fpnew_pkg::int_format_e fpnew_int_fmt;
+    // Converions Signals
+    logic              [WarpWidth-1:0] int_to_fp_valid_in,  fp_to_int_valid_in;
+    logic              [WarpWidth-1:0] int_to_fp_valid_out, fp_to_int_valid_out;
+    reg_data_t         [WarpWidth-1:0] int_to_fp_result,    fp_to_int_result;
+    fpu_station_idx_t  [WarpWidth-1:0] int_to_fp_tag_out,   fp_to_int_tag_out;
 
     // #######################################################################################
     // # Combinational Logic                                                                 #
@@ -153,23 +127,49 @@ module floating_point_unit import bgpu_pkg::*; #(
     // Decode Operation into FPnew operation
     always_comb begin : decode_operation
         // Default values
-        fpnew_rnd_mode = fpnew_pkg::RTZ;
-        fpnew_op       = fpnew_pkg::ADD;
-        fpnew_op_mod   = 1'b0;
-        fpnew_src_fmt  = fpnew_pkg::FP32;
-        fpnew_dst_fmt  = fpnew_pkg::FP32;
-        fpnew_int_fmt  = fpnew_pkg::INT32;
+        fma_valid_in       = '0;
+        int_to_fp_valid_in = '0;
+        fp_to_int_valid_in = '0;
+
+        // Default: (op1 * op2) + op3
+        fma_operand_a = operands[0];
+        fma_operand_b = operands[1];
+        fma_operand_c = operands[1];
+
+        fma_negate_a = 1'b0;
+        fma_negate_c = 1'b0;
 
         // Check instruction subtype and perform operation
         case (opc_to_eu_inst_sub_i)
             FPU_ADD: begin
-                fpnew_op = fpnew_pkg::ADD;
+                if (opc_to_eu_valid_i && eu_to_opc_ready_o)
+                    fma_valid_in = opc_to_eu_act_mask_i;
+
+                // (op1 * 1.0) + op2
+                fma_operand_b = {WarpWidth{32'h3f800000}}; // 1.0f
+            end
+            FPU_SUB: begin
+                if (opc_to_eu_valid_i && eu_to_opc_ready_o)
+                    fma_valid_in = opc_to_eu_act_mask_i;
+
+                // (op1 * 1.0) - op2
+                fma_negate_c  = 1'b1;
+                fma_operand_b = {WarpWidth{32'h3f800000}}; // 1.0f
+            end
+            FPU_MUL: begin
+                if (opc_to_eu_valid_i && eu_to_opc_ready_o)
+                    fma_valid_in = opc_to_eu_act_mask_i;
+
+                // (op1 * op2) + 0.0
+                fma_operand_c = {WarpWidth{32'h00000000}}; // 0.0f
             end
             FPU_INT_TO_FP: begin
-                fpnew_op = fpnew_pkg::I2F;
+                if (opc_to_eu_valid_i && eu_to_opc_ready_o)
+                    int_to_fp_valid_in = opc_to_eu_act_mask_i;
             end
             FPU_FP_TO_INT: begin
-                fpnew_op = fpnew_pkg::F2I;
+                if (opc_to_eu_valid_i && eu_to_opc_ready_o)
+                    fp_to_int_valid_in = opc_to_eu_act_mask_i;
             end
             default: begin
                 `ifndef SYNTHESIS
@@ -185,11 +185,8 @@ module floating_point_unit import bgpu_pkg::*; #(
         assign fpu_station_ready[i] = fpu_stations_valid_q[i] && (&fpu_stations_q[i].result_ready);
     end : gen_fpu_station_ready
 
-    // One station is free, if not all are valid
-    assign fpu_station_available = !(&fpu_stations_valid_q);
-
-    // Ready if station entry is available and FPU fork is ready
-    assign eu_to_opc_ready_o = fpu_station_available && fpu_fork_ready;
+    // We are ready for a new operations, if not all stations are valid
+    assign eu_to_opc_ready_o = !(&fpu_stations_valid_q);
 
     // Waiting station logic
     always_comb begin : waiting_station_logic
@@ -197,7 +194,7 @@ module floating_point_unit import bgpu_pkg::*; #(
         fpu_stations_d       = fpu_stations_q;
         fpu_stations_valid_d = fpu_stations_valid_q;
 
-        fpnew_tag_in = '0;
+        fpu_tag_in = '0;
 
         // Insert a new instruction
         if (opc_to_eu_valid_i) begin : insert_new_instruction
@@ -214,7 +211,7 @@ module floating_point_unit import bgpu_pkg::*; #(
                     fpu_stations_d[i].result_ready = ~opc_to_eu_act_mask_i;
 
                     // Pass entry index as tag to FPU
-                    fpnew_tag_in = i[FpuStationIdxWidth-1:0];
+                    fpu_tag_in = i[FpuStationIdxWidth-1:0];
 
                     // Input handshake
                     if (eu_to_opc_ready_o) begin
@@ -226,12 +223,24 @@ module floating_point_unit import bgpu_pkg::*; #(
             end
         end : insert_new_instruction
 
-        // New results from FPUs
+        // New results
         for (int unsigned i = 0; i < WarpWidth; i++) begin : handle_fpu_results
-            if (fpnew_valid_out[i]) begin
+            if (fma_valid_out[i]) begin
                 // Use tag to index into stations
-                fpu_stations_d[fpnew_tag_out[i]].results     [i] = fpnew_result[i];
-                fpu_stations_d[fpnew_tag_out[i]].result_ready[i] = 1'b1;
+                fpu_stations_d[fma_tag_out[i]].results     [i] = fma_result[i];
+                fpu_stations_d[fma_tag_out[i]].result_ready[i] = 1'b1;
+            end
+
+            if (int_to_fp_valid_out[i]) begin
+                // Use tag to index into stations
+                fpu_stations_d[int_to_fp_tag_out[i]].results     [i] = int_to_fp_result[i];
+                fpu_stations_d[int_to_fp_tag_out[i]].result_ready[i] = 1'b1;
+            end
+
+            if (fp_to_int_valid_out[i]) begin
+                // Use tag to index into stations
+                fpu_stations_d[fp_to_int_tag_out[i]].results     [i] = fp_to_int_result[i];
+                fpu_stations_d[fp_to_int_tag_out[i]].result_ready[i] = 1'b1;
             end
         end : handle_fpu_results
 
@@ -277,63 +286,77 @@ module floating_point_unit import bgpu_pkg::*; #(
     assign eu_to_rc_data_o     = selected_station_entry.results;
 
     // #######################################################################################
-    // # Floating Point Units                                                                #
+    // # FMA Units                                                                           #
     // #######################################################################################
 
-    stream_fork_dynamic #(
-        .N_OUP( WarpWidth )
-    ) i_fpnew_fork (
-        .clk_i ( clk_i  ),
-        .rst_ni( rst_ni ),
-
-        .valid_i( opc_to_eu_valid_i && fpu_station_available ),
-        .ready_o( fpu_fork_ready ),
-
-        .sel_i      ( opc_to_eu_act_mask_i ),
-        .sel_valid_i( 1'b1                 ),
-        .sel_ready_o( /* Not used */       ),
-
-        .valid_o( fpnew_valid_in ),
-        .ready_i( fpnew_ready_in )
-    );
-
-    for (genvar i = 0; i < WarpWidth; i++) begin : gen_fpu_units
-        // Instantiate one FPU per thread in the warp
-        fpnew_top #(
-            .Features      ( FpnewFeatures       ),
-            .Implementation( FpnewImplementation ),
-            .DivSqrtSel    ( fpnew_pkg::PULP     ),
-            .TagType       ( fpu_station_idx_t   ),
-            .TrueSIMDClass ( 0                   ),
-            .EnableSIMDMask( 0                   )
-        ) i_fpnew (
+    for (genvar i = 0; i < WarpWidth; i++) begin : gen_fma_units
+        // Instantiate one FMA per thread in the warp
+        flopoco_fma_wrapper #(
+            .DataWidth( RegWidth          ),
+            .tag_t    ( fpu_station_idx_t )
+        ) i_fma (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
 
-            .operands_i    ( {operands[1][i], operands[1][i], operands[0][i]} ),
-            .rnd_mode_i    ( fpnew_rnd_mode ),
-            .op_i          ( fpnew_op       ),
-            .op_mod_i      ( fpnew_op_mod   ),
-            .src_fmt_i     ( fpnew_src_fmt  ),
-            .dst_fmt_i     ( fpnew_dst_fmt  ),
-            .int_fmt_i     ( fpnew_int_fmt  ),
-            .tag_i         ( fpnew_tag_in   ),
-            .vectorial_op_i( 1'b0           ),
-            .simd_mask_i   ( '1             ),
+            .valid_i    ( fma_valid_in[i]  ),
+            .tag_i      ( fpu_tag_in       ),
+            .negate_a_i ( fma_negate_a     ),
+            .negate_c_i ( fma_negate_c     ),
+            .operand_a_i( fma_operand_a[i] ),
+            .operand_b_i( fma_operand_b[i] ),
+            .operand_c_i( fma_operand_c[i] ),
 
-            .in_valid_i( fpnew_valid_in[i] ),
-            .in_ready_o( fpnew_ready_in[i] ),
-            .flush_i   ( 1'b0              ),
-
-            .out_valid_o( fpnew_valid_out[i] ),
-            .out_ready_i( fpnew_valid_out[i] ),
-            .result_o   ( fpnew_result   [i] ),
-            .tag_o      ( fpnew_tag_out  [i] ),
-            .status_o   ( /* Not used */     ),
-
-            .busy_o( /* Not used */ )
+            .valid_o ( fma_valid_out[i] ),
+            .tag_o   ( fma_tag_out  [i] ),
+            .result_o( fma_result   [i] )
         );
-    end : gen_fpu_units
+    end : gen_fma_units
+
+    // #######################################################################################
+    // # Int to FP Units                                                                     #
+    // #######################################################################################
+
+    for (genvar i = 0; i < WarpWidth; i++) begin : gen_int2fp_units
+        // Instantiate one Int2FP per thread in the warp
+        flopoco_int_to_fp #(
+            .DataWidth( RegWidth          ),
+            .tag_t    ( fpu_station_idx_t )
+        ) i_int2fp (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .valid_i( int_to_fp_valid_in[i] ),
+            .tag_i  ( fpu_tag_in            ),
+            .int_i  ( operands[0][i]        ),
+
+            .valid_o( int_to_fp_valid_out[i] ),
+            .tag_o  ( int_to_fp_tag_out  [i] ),
+            .fp_o   ( int_to_fp_result   [i] )
+        );
+    end : gen_int2fp_units
+
+    // #######################################################################################
+    // # FP to Int Units                                                                     #
+    // #######################################################################################
+
+    for (genvar i = 0; i < WarpWidth; i++) begin : gen_fp2int_units
+        // Instantiate one Int2FP per thread in the warp
+        flopoco_fp_to_int #(
+            .DataWidth( RegWidth          ),
+            .tag_t    ( fpu_station_idx_t )
+        ) i_fp2int (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .valid_i( fp_to_int_valid_in[i] ),
+            .tag_i  ( fpu_tag_in            ),
+            .fp_i   ( operands[0][i]        ),
+
+            .valid_o( fp_to_int_valid_out[i] ),
+            .tag_o  ( fp_to_int_tag_out  [i] ),
+            .int_o  ( fp_to_int_result   [i] )
+        );
+    end : gen_fp2int_units
 
     // #######################################################################################
     // # Sequential Logic                                                                    #

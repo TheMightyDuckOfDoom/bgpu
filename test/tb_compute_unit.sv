@@ -152,7 +152,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 5, op1: 2, op2: 0}, // [reg0] = reg4
 
         '{eu: EU_FPU, subtype: FPU_INT_TO_FP,  dst: 6, op1: 0, op2: 0},
-        '{eu: EU_FPU, subtype: FPU_ADD,        dst: 7, op1: 6, op2: 6},
+        '{eu: EU_FPU, subtype: FPU_MUL,        dst: 7, op1: 6, op2: 6},
         '{eu: EU_FPU, subtype: FPU_FP_TO_INT,  dst: 8, op1: 7, op2: 7},
 
         // NOPs

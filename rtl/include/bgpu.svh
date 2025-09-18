@@ -39,7 +39,9 @@
     `define FPU_VALID_SUBTYPES {\
         FPU_ADD,\
         FPU_INT_TO_FP,\
-        FPU_FP_TO_INT\
+        FPU_FP_TO_INT,\
+        FPU_SUB,\
+        FPU_MUL\
     }
 
     // JMP and SYNC never reach the BRU, as they are handled by the decoder

@@ -10,7 +10,6 @@ package:
 dependencies:
     axi:                { git: "https://github.com/pulp-platform/axi",                version: 0.39.8           }
     common_cells:       { git: "https://github.com/pulp-platform/common_cells",       version: 1.38.0           }
-    FPnew:              { git: "https://github.com/openhwgroup/cvfpu",                rev: "develop"            }
     obi:                { git: "https://github.com/pulp-platform/obi",                version: 0.1.7            }
     register_interface: { git: "https://github.com/pulp-platform/register_interface", version: 0.4.6            }
     riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",      rev: "verilator-phsauter" }
@@ -29,21 +28,38 @@ vendor_package:
     mapping:
       - { from: 'rtl/cve2', to: '' }
 
-  - name: fpu-wrappers
-    target_dir: vendor/fpu-wrappers
-    upstream: { git: "https://github.com/jiegec/fpu-wrappers.git", rev: "6817499de98cc4d38ff4794f01e2431c09e84c40" }
-    mapping:
-      - { from: 'fpu-wrappers/resources/flopoco', to: '' }
-
 sources:
     - rtl/bgpu_pkg.sv
-
+          
     - target: not(any(post_synth, post_layout, verible))
       defines:
           FMA_S_LATENCY: 4
+          INT2FP_S_LATENCY: 2
+          FP2INT_S_LATENCY: 1
       files:
-          - vendor/fpu-wrappers/IEEEFMA_S4s.v
-          - rtl/compute_unit/execution_units/floating_point_unit/fma_wrapper.sv
+          # FMA operator
+          - ip/flopoco/IEEEFMA/IEEEFMA_S1.v
+          - ip/flopoco/IEEEFMA/IEEEFMA_S2.v
+          - ip/flopoco/IEEEFMA/IEEEFMA_S3.v
+          - ip/flopoco/IEEEFMA/IEEEFMA_S4.v
+          - ip/flopoco/IEEEFMA/IEEEFMA_S6.v
+
+          # Conversions between Flopoco FP format and IEEE 754
+          - ip/flopoco/FP2IEEE/FP2IEEE_S0.v
+          - ip/flopoco/IEEE2FP/IEEE2FP_S0.v
+
+          # Int to/from Flopoco FP format
+          - ip/flopoco/Fix2FP/Fix2FP_S0.v
+          - ip/flopoco/Fix2FP/Fix2FP_S1.v
+          - ip/flopoco/Fix2FP/Fix2FP_S2.v
+
+          - ip/flopoco/FP2Fix/FP2Fix_S0.v
+          - ip/flopoco/FP2Fix/FP2Fix_S1.v
+
+          # Wrappers
+          - rtl/compute_unit/execution_units/floating_point_unit/flopoco_int_to_fp.sv
+          - rtl/compute_unit/execution_units/floating_point_unit/flopoco_fp_to_int.sv
+          - rtl/compute_unit/execution_units/floating_point_unit/flopoco_fma_wrapper.sv
 
     - target: not(any(post_synth, post_layout))
       files:
