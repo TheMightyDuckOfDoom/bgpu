@@ -243,13 +243,15 @@ module compute_unit import bgpu_pkg::*; #(
     opc_to_eu_data_t opc_to_eu_data_q, opc_to_eu_data_d;
 
     // Execution Units to Register Operand Collector Stage
-    logic eu_to_opc_valid, opc_to_eu_ready;
+    logic eu_to_opc_valid_q, eu_to_opc_valid_d;
+    logic opc_to_eu_ready_q, opc_to_eu_ready_d;
     logic iu_to_rc_valid,  rc_to_iu_ready;
     logic fpu_to_rc_valid, rc_to_fpu_ready;
     logic lsu_to_rc_valid, rc_to_lsu_ready;
     logic bru_to_rc_valid, rc_to_bru_ready;
 
-    eu_to_opc_data_t eu_to_opc_data, iu_to_rc_data, fpu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
+    eu_to_opc_data_t eu_to_opc_data_q, eu_to_opc_data_d, iu_to_rc_data, fpu_to_rc_data,
+                     lsu_to_rc_data, bru_to_rc_data;
 
     // Branch Unit to Fetcher
     logic      bru_branch;
@@ -492,8 +494,8 @@ module compute_unit import bgpu_pkg::*; #(
         .opc_eu_handshake_i( opc_to_eu_valid_d && eu_to_opc_ready_q ),
         .opc_eu_tag_i      ( opc_to_eu_data_d.tag                   ),
 
-        .eu_valid_i( eu_to_opc_valid && opc_to_eu_ready ),
-        .eu_tag_i  ( eu_to_opc_data.tag                 )
+        .eu_valid_i( eu_to_opc_valid_q && opc_to_eu_ready_d ),
+        .eu_tag_i  ( eu_to_opc_data_q.tag                   )
     );
 
     // #######################################################################################
@@ -534,12 +536,12 @@ module compute_unit import bgpu_pkg::*; #(
         .opc_dst_o         ( opc_to_eu_data_d.dst      ),
         .opc_operand_data_o( opc_to_eu_data_d.operands ),
 
-        .opc_to_eu_ready_o( opc_to_eu_ready         ),
-        .eu_valid_i       ( eu_to_opc_valid         ),
-        .eu_act_mask_i    ( eu_to_opc_data.act_mask ),
-        .eu_tag_i         ( eu_to_opc_data.tag      ),
-        .eu_dst_i         ( eu_to_opc_data.dst      ),
-        .eu_data_i        ( eu_to_opc_data.data     )
+        .opc_to_eu_ready_o( opc_to_eu_ready_d         ),
+        .eu_valid_i       ( eu_to_opc_valid_q         ),
+        .eu_act_mask_i    ( eu_to_opc_data_q.act_mask ),
+        .eu_tag_i         ( eu_to_opc_data_q.tag      ),
+        .eu_dst_i         ( eu_to_opc_data_q.dst      ),
+        .eu_data_i        ( eu_to_opc_data_q.data     )
     );
 
     // #######################################################################################
@@ -747,9 +749,26 @@ module compute_unit import bgpu_pkg::*; #(
         .inp_valid_i({ fpu_to_rc_valid, iu_to_rc_valid, lsu_to_rc_valid, bru_to_rc_valid }),
         .inp_ready_o({ rc_to_fpu_ready, rc_to_iu_ready, rc_to_lsu_ready, rc_to_bru_ready }),
 
-        .oup_data_o ( eu_to_opc_data  ),
-        .oup_valid_o( eu_to_opc_valid ),
-        .oup_ready_i( opc_to_eu_ready )
+        .oup_data_o ( eu_to_opc_data_d  ),
+        .oup_valid_o( eu_to_opc_valid_d ),
+        .oup_ready_i( opc_to_eu_ready_q )
+    );
+
+    stream_register #(
+        .T( eu_to_opc_data_t )
+    ) i_eu_to_opc_reg (
+        .clk_i     ( clk_i      ),
+        .rst_ni    ( rst_ni     ),
+        .clr_i     ( 1'b0       ),
+        .testmode_i( testmode_i ),
+
+        .valid_i( eu_to_opc_valid_d ),
+        .ready_o( opc_to_eu_ready_q ),
+        .data_i ( eu_to_opc_data_d  ),
+
+        .valid_o( eu_to_opc_valid_q ),
+        .ready_i( opc_to_eu_ready_d ),
+        .data_o ( eu_to_opc_data_q  )
     );
 
 `ifndef SYNTHESIS
@@ -872,14 +891,14 @@ module compute_unit import bgpu_pkg::*; #(
 
         while(1) begin
             @(posedge clk_i);
-            if (eu_to_opc_valid && opc_to_eu_ready) begin
+            if (eu_to_opc_valid_q && opc_to_eu_ready_d) begin
                 data = $sformatf("%t: Tag: %0d, Warp: %0d, ActMask: %b, Dst: r%0d, Data: ", $time(),
-                    eu_to_opc_data.tag, eu_to_opc_data.tag[WidWidth-1:0], eu_to_opc_data.act_mask,
-                    eu_to_opc_data.dst);
+                    eu_to_opc_data_q.tag, eu_to_opc_data_q.tag[WidWidth-1:0],
+                    eu_to_opc_data_q.act_mask, eu_to_opc_data_q.dst);
 
                 for(int thread = 0; thread < WarpWidth; thread++) begin
                     data = {data, $sformatf(" (t%0d: 0x%h)", thread,
-                        eu_to_opc_data.data[thread * RegWidth +: RegWidth])};
+                        eu_to_opc_data_q.data[thread * RegWidth +: RegWidth])};
                 end
                 $fwrite(f, "%s\n", data);
                 $fflush(f);

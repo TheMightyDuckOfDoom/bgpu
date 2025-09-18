@@ -35,21 +35,12 @@ packages:
     source:
       Path: vendor/cve2
     dependencies: []
-  fpnew:
-    revision: 0d3e8c4210409499dd54911068b3e0709d2896fc
+  flopoco-sv-lib:
+    revision: 12bb967f8b552d3e7bd632cb3905f193077fd8aa
     version: null
     source:
-      Git: https://github.com/openhwgroup/cvfpu
-    dependencies:
-    - common_cells
-    - fpu_div_sqrt_mvp
-  fpu_div_sqrt_mvp:
-    revision: 86e1f558b3c95e91577c41b2fc452c86b04e85ac
-    version: 1.0.4
-    source:
-      Git: https://github.com/pulp-platform/fpu_div_sqrt_mvp.git
-    dependencies:
-    - common_cells
+      Git: https://github.com/TheMightyDuckOfDoom/flopoco-sv-lib
+    dependencies: []
   obi:
     revision: 0155fc34e900c7c884e081c0a1114a247937ff69
     version: 0.1.7

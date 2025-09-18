@@ -37,7 +37,9 @@ typedef enum logic [5:0] {
     FPU_INT_TO_FP = 'h01, // Convert integer to floating point
     FPU_FP_TO_INT = 'h02, // Convert floating point to integer
     FPU_SUB       = 'h03, // Subtract operands
-    FPU_MUL       = 'h04  // Multiply operands
+    FPU_MUL       = 'h04, // Multiply operands
+    FPU_DIV       = 'h05, // Divide operands
+    FPU_RECIP     = 'h06  // Compute reciprocal of operand
 } fpu_subtype_e;
 
 typedef enum logic [5:0] {

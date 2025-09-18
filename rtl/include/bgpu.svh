@@ -41,7 +41,9 @@
         FPU_INT_TO_FP,\
         FPU_FP_TO_INT,\
         FPU_SUB,\
-        FPU_MUL\
+        FPU_MUL,\
+        FPU_DIV,\
+        FPU_RECIP\
     }
 
     // JMP and SYNC never reach the BRU, as they are handled by the decoder

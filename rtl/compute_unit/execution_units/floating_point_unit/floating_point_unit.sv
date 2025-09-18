@@ -25,6 +25,15 @@ module floating_point_unit import bgpu_pkg::*; #(
     // Memory Address width in bits
     parameter int unsigned AddressWidth = 32,
 
+    /// Latency of the FMA Unit
+    parameter int unsigned FmaLatency = 5,
+    /// Latency of the Divider Unit
+    parameter int unsigned DivLatency = 12,
+    /// Latency of the INT2FP Unit
+    parameter int unsigned Int2FpLatency = 2,
+    /// Latency of the FP2INT Unit
+    parameter int unsigned Fp2IntLatency = 1,
+
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth    = $clog2(NumTags),
     parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
@@ -63,8 +72,16 @@ module floating_point_unit import bgpu_pkg::*; #(
     // # Local Parameters                                                                    #
     // #######################################################################################
 
+    function static int unsigned max(input int unsigned a, input int unsigned b);
+        if (a > b)
+            return a;
+        else
+            return b;
+    endfunction
+
     // Should be more than the max latency of an FPU operation
-    localparam int unsigned NumFpuStations = 8;
+    localparam int unsigned NumFpuStations = max(max(FmaLatency, DivLatency),
+                                                 max(Int2FpLatency, Fp2IntLatency)) + 2;
 
     localparam int unsigned FpuStationIdxWidth = NumFpuStations > 1 ? $clog2(NumFpuStations) : 1;
 
@@ -109,6 +126,13 @@ module floating_point_unit import bgpu_pkg::*; #(
     fpu_station_idx_t [WarpWidth-1:0] fma_tag_out;
     reg_data_t        [WarpWidth-1:0] fma_result;
 
+    // Divider Signals
+    logic             [WarpWidth-1:0] fdiv_valid_in;
+    reg_data_t        [WarpWidth-1:0] fdiv_operand_a, fdiv_operand_b;
+    logic             [WarpWidth-1:0] fdiv_valid_out;
+    fpu_station_idx_t [WarpWidth-1:0] fdiv_tag_out;
+    reg_data_t        [WarpWidth-1:0] fdiv_result;
+
     // Converions Signals
     logic              [WarpWidth-1:0] int_to_fp_valid_in,  fp_to_int_valid_in;
     logic              [WarpWidth-1:0] int_to_fp_valid_out, fp_to_int_valid_out;
@@ -128,6 +152,7 @@ module floating_point_unit import bgpu_pkg::*; #(
     always_comb begin : decode_operation
         // Default values
         fma_valid_in       = '0;
+        fdiv_valid_in      = '0;
         int_to_fp_valid_in = '0;
         fp_to_int_valid_in = '0;
 
@@ -135,9 +160,12 @@ module floating_point_unit import bgpu_pkg::*; #(
         fma_operand_a = operands[0];
         fma_operand_b = operands[1];
         fma_operand_c = operands[1];
-
         fma_negate_a = 1'b0;
         fma_negate_c = 1'b0;
+
+        // Default: op1 / op2
+        fdiv_operand_a = operands[0];
+        fdiv_operand_b = operands[1];
 
         // Check instruction subtype and perform operation
         case (opc_to_eu_inst_sub_i)
@@ -162,6 +190,18 @@ module floating_point_unit import bgpu_pkg::*; #(
 
                 // (op1 * op2) + 0.0
                 fma_operand_c = {WarpWidth{32'h00000000}}; // 0.0f
+            end
+            FPU_DIV: begin
+                if (opc_to_eu_valid_i && eu_to_opc_ready_o)
+                    fdiv_valid_in = opc_to_eu_act_mask_i;
+            end
+            FPU_RECIP: begin
+                if (opc_to_eu_valid_i && eu_to_opc_ready_o)
+                    fdiv_valid_in = opc_to_eu_act_mask_i;
+
+                // 1.0 / op1
+                fdiv_operand_a = {WarpWidth{32'h3f800000}}; // 1.0f
+                fdiv_operand_b = operands[0];
             end
             FPU_INT_TO_FP: begin
                 if (opc_to_eu_valid_i && eu_to_opc_ready_o)
@@ -231,6 +271,12 @@ module floating_point_unit import bgpu_pkg::*; #(
                 fpu_stations_d[fma_tag_out[i]].result_ready[i] = 1'b1;
             end
 
+            if (fdiv_valid_out[i]) begin
+                // Use tag to index into stations
+                fpu_stations_d[fdiv_tag_out[i]].results     [i] = fdiv_result[i];
+                fpu_stations_d[fdiv_tag_out[i]].result_ready[i] = 1'b1;
+            end
+
             if (int_to_fp_valid_out[i]) begin
                 // Use tag to index into stations
                 fpu_stations_d[int_to_fp_tag_out[i]].results     [i] = int_to_fp_result[i];
@@ -269,8 +315,8 @@ module floating_point_unit import bgpu_pkg::*; #(
         .gnt_o ( fpu_station_free  ),
         .data_i( fpu_stations_q    ),
 
-        .req_o ( eu_to_rc_valid_o      ),
-        .gnt_i ( rc_to_eu_ready_i      ),
+        .req_o ( eu_to_rc_valid_o       ),
+        .gnt_i ( rc_to_eu_ready_i       ),
         .data_o( selected_station_entry ),
 
         // Unused
@@ -291,8 +337,9 @@ module floating_point_unit import bgpu_pkg::*; #(
 
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_fma_units
         // Instantiate one FMA per thread in the warp
-        flopoco_fma_wrapper #(
+        fma #(
             .DataWidth( RegWidth          ),
+            .Latency  ( FmaLatency        ),
             .tag_t    ( fpu_station_idx_t )
         ) i_fma (
             .clk_i ( clk_i  ),
@@ -313,13 +360,39 @@ module floating_point_unit import bgpu_pkg::*; #(
     end : gen_fma_units
 
     // #######################################################################################
+    // # Divider Units                                                                       #
+    // #######################################################################################
+
+    for (genvar i = 0; i < WarpWidth; i++) begin : gen_div_units
+        // Instantiate one Divider per thread in the warp
+        fdiv #(
+            .DataWidth( RegWidth          ),
+            .Latency  ( DivLatency        ),
+            .tag_t    ( fpu_station_idx_t )
+        ) i_div (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .valid_i    ( fdiv_valid_in[i]  ),
+            .tag_i      ( fpu_tag_in        ),
+            .operand_a_i( fdiv_operand_a[i] ),
+            .operand_b_i( fdiv_operand_b[i] ),
+
+            .valid_o ( fdiv_valid_out[i] ),
+            .tag_o   ( fdiv_tag_out  [i] ),
+            .result_o( fdiv_result   [i] )
+        );
+    end : gen_div_units
+
+    // #######################################################################################
     // # Int to FP Units                                                                     #
     // #######################################################################################
 
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_int2fp_units
         // Instantiate one Int2FP per thread in the warp
-        flopoco_int_to_fp #(
+        int_to_fp #(
             .DataWidth( RegWidth          ),
+            .Latency  ( Int2FpLatency     ),
             .tag_t    ( fpu_station_idx_t )
         ) i_int2fp (
             .clk_i ( clk_i  ),
@@ -341,8 +414,9 @@ module floating_point_unit import bgpu_pkg::*; #(
 
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_fp2int_units
         // Instantiate one Int2FP per thread in the warp
-        flopoco_fp_to_int #(
+        fp_to_int #(
             .DataWidth( RegWidth          ),
+            .Latency  ( Fp2IntLatency     ),
             .tag_t    ( fpu_station_idx_t )
         ) i_fp2int (
             .clk_i ( clk_i  ),

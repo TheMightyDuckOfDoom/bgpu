@@ -8,12 +8,13 @@ package:
         - "Tobias Senti <git@tsenti.li>"
 
 dependencies:
-    axi:                { git: "https://github.com/pulp-platform/axi",                version: 0.39.8           }
-    common_cells:       { git: "https://github.com/pulp-platform/common_cells",       version: 1.38.0           }
-    obi:                { git: "https://github.com/pulp-platform/obi",                version: 0.1.7            }
-    register_interface: { git: "https://github.com/pulp-platform/register_interface", version: 0.4.6            }
-    riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",      rev: "verilator-phsauter" }
-    tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic", version: 0.2.13           }
+    axi:                { git: "https://github.com/pulp-platform/axi",                  version: 0.39.8           }
+    common_cells:       { git: "https://github.com/pulp-platform/common_cells",         version: 1.38.0           }
+    flopoco-sv-lib:     { git: "https://github.com/TheMightyDuckOfDoom/flopoco-sv-lib", rev: "main"               }
+    obi:                { git: "https://github.com/pulp-platform/obi",                  version: 0.1.7            }
+    register_interface: { git: "https://github.com/pulp-platform/register_interface",   version: 0.4.6            }
+    riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",        rev: "verilator-phsauter" }
+    tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic",   version: 0.2.13           }
     # hpdcache:     { git: "https://github.com/openhwgroup/cv-hpdcache",    rev: 724dcede54123f69bfac64842d8ee52833d4fd77 }
 
     cve2:               { path: "vendor/cve2" }
@@ -30,36 +31,6 @@ vendor_package:
 
 sources:
     - rtl/bgpu_pkg.sv
-          
-    - target: not(any(post_synth, post_layout, verible))
-      defines:
-          FMA_S_LATENCY: 4
-          INT2FP_S_LATENCY: 2
-          FP2INT_S_LATENCY: 1
-      files:
-          # FMA operator
-          - ip/flopoco/IEEEFMA/IEEEFMA_S1.v
-          - ip/flopoco/IEEEFMA/IEEEFMA_S2.v
-          - ip/flopoco/IEEEFMA/IEEEFMA_S3.v
-          - ip/flopoco/IEEEFMA/IEEEFMA_S4.v
-          - ip/flopoco/IEEEFMA/IEEEFMA_S6.v
-
-          # Conversions between Flopoco FP format and IEEE 754
-          - ip/flopoco/FP2IEEE/FP2IEEE_S0.v
-          - ip/flopoco/IEEE2FP/IEEE2FP_S0.v
-
-          # Int to/from Flopoco FP format
-          - ip/flopoco/Fix2FP/Fix2FP_S0.v
-          - ip/flopoco/Fix2FP/Fix2FP_S1.v
-          - ip/flopoco/Fix2FP/Fix2FP_S2.v
-
-          - ip/flopoco/FP2Fix/FP2Fix_S0.v
-          - ip/flopoco/FP2Fix/FP2Fix_S1.v
-
-          # Wrappers
-          - rtl/compute_unit/execution_units/floating_point_unit/flopoco_int_to_fp.sv
-          - rtl/compute_unit/execution_units/floating_point_unit/flopoco_fp_to_int.sv
-          - rtl/compute_unit/execution_units/floating_point_unit/flopoco_fma_wrapper.sv
 
     - target: not(any(post_synth, post_layout))
       files:
@@ -83,6 +54,10 @@ sources:
 
           - rtl/compute_unit/execution_units/integer_unit.sv
 
+          - rtl/compute_unit/execution_units/floating_point_unit/int_to_fp.sv
+          - rtl/compute_unit/execution_units/floating_point_unit/fp_to_int.sv
+          - rtl/compute_unit/execution_units/floating_point_unit/fma.sv
+          - rtl/compute_unit/execution_units/floating_point_unit/fdiv.sv
           - rtl/compute_unit/execution_units/floating_point_unit/floating_point_unit.sv
 
           - rtl/compute_unit/execution_units/load_store_unit/coalesce_comparator.sv

@@ -134,7 +134,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     mem_rsp_t mem_rsp_q,       mem_rsp_d;
 
     // Test program
-    enc_inst_t test_program [8] = {
+    enc_inst_t test_program [13] = {
         // Calculate byte offset from thread ID and warp ID
         '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = warp ID
 
@@ -151,9 +151,14 @@ module tb_compute_unit import bgpu_pkg::*; #(
         // Store result back to memory
         '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 5, op1: 2, op2: 0}, // [reg0] = reg4
 
-        '{eu: EU_FPU, subtype: FPU_INT_TO_FP,  dst: 6, op1: 0, op2: 0},
-        '{eu: EU_FPU, subtype: FPU_MUL,        dst: 7, op1: 6, op2: 6},
-        '{eu: EU_FPU, subtype: FPU_FP_TO_INT,  dst: 8, op1: 7, op2: 7},
+        '{eu: EU_FPU, subtype: FPU_INT_TO_FP,  dst:  6, op1:  0, op2:  0},
+        '{eu: EU_FPU, subtype: FPU_MUL,        dst:  7, op1:  6, op2:  6},
+        '{eu: EU_FPU, subtype: FPU_FP_TO_INT,  dst:  8, op1:  7, op2:  7},
+        '{eu: EU_FPU, subtype: FPU_DIV,        dst:  9, op1:  7, op2:  6},
+        '{eu: EU_FPU, subtype: FPU_FP_TO_INT,  dst: 10, op1:  9, op2:  9},
+        '{eu: EU_FPU, subtype: FPU_RECIP,      dst: 11, op1:  9, op2:  9},
+        '{eu: EU_FPU, subtype: FPU_RECIP,      dst: 12, op1: 11, op2: 11},
+        '{eu: EU_FPU, subtype: FPU_FP_TO_INT,  dst: 13, op1: 12, op2: 12},
 
         // NOPs
         '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}  // STOP thread
@@ -736,8 +741,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Retire
-            if (i_cu.eu_to_opc_valid && i_cu.opc_to_eu_ready) begin
-                insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data.tag];
+            if (i_cu.eu_to_opc_valid_q && i_cu.opc_to_eu_ready_d) begin
+                insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data_q.tag];
 
                 // Retire
                 $fwrite(fd, "R\t%0d\t%0d\t0\n",
