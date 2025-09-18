@@ -457,10 +457,10 @@ module load_store_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Buffer valid bits
-    `FF(buffer_valid_q, buffer_valid_d, '0, clk_i, rst_ni);
+    `FF(buffer_valid_q, buffer_valid_d, '0, clk_i, rst_ni)
 
     // Buffer entries
-    `FF(buffer_q, buffer_d, '0, clk_i, rst_ni);
+    `FF(buffer_q, buffer_d, '0, clk_i, rst_ni)
 
     // #######################################################################################
     // # Assertions                                                                          #

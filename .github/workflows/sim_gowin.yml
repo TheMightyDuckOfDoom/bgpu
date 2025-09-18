@@ -16,7 +16,7 @@ jobs:
                 vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
-        run: make tb_bgpu_soc BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
 
   # Main testbench for compute unit
   gowin_tb_compute_unit:
@@ -33,7 +33,7 @@ jobs:
                 vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
-        run: make tb_compute_unit BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make PROCESSORS=8 tb_compute_unit BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
 
   # Instruction Cache Testbench
   gowin_tb_instruction_cache:
@@ -49,7 +49,7 @@ jobs:
                 vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
-        run: make tb_instruction_cache BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make PROCESSORS=8 tb_instruction_cache BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
 
   # Register File Bank Testbenches
   gowin_tb_register_file_bank_singleport:
@@ -65,7 +65,7 @@ jobs:
                 vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
-        run: make tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make PROCESSORS=8 tb_register_file_bank VERILATOR_ARGS="-GDualPort=1\'b0" BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
 
   # Register Operand Collector Stage Testbenches
   gowin_tb_register_opc_stage:
@@ -82,4 +82,4 @@ jobs:
                 vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
-        run: make tb_register_opc_stage BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make PROCESSORS=8 tb_register_opc_stage BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"

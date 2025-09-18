@@ -161,8 +161,8 @@ module register_file_bank #(
     // #######################################################################################
 
     // Delay read valid and tag by one cycle
-    `FF(read_valid_o, read_valid_d, '0, clk_i, rst_ni);
-    `FF(read_tag_o,   read_tag_i,   '0, clk_i, rst_ni);
+    `FF(read_valid_o, read_valid_d, '0, clk_i, rst_ni)
+    `FF(read_tag_o,   read_tag_i,   '0, clk_i, rst_ni)
 
     // #######################################################################################
     // # Memory                                                                              #

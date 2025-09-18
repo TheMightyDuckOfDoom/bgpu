@@ -24,7 +24,7 @@ jobs:
             - name: Copy netlist...
               run: cp gowin/out/compute_unit_yosys.v gowin/out/post_synth.v
             - name: Post Synthesis Simulation
-              run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
+              run: make PROCESSORS=8 tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -56,7 +56,7 @@ jobs:
             - name: Process Netlist for Verilator
               run: make gowin-eda-process-netlist TOP=compute_unit
             - name: Post Synthesis Simulation
-              run: make tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
+              run: make PROCESSORS=8 tb_compute_unit BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -92,7 +92,7 @@ jobs:
             - name: Copy netlist...
               run: cp gowin/out/compute_cluster_synth_wrapper_yosys.v gowin/out/post_synth.v
             - name: Post Synthesis Simulation
-              run: make tb_compute_cluster BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
+              run: make PROCESSORS=8 tb_compute_cluster BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -124,7 +124,7 @@ jobs:
             - name: Process Netlist for Verilator
               run: make gowin-eda-process-netlist TOP=compute_cluster_synth_wrapper
             - name: Post Synthesis Simulation
-              run: make tb_compute_cluster BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
+              run: make PROCESSORS=8 tb_compute_cluster BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -160,7 +160,7 @@ jobs:
             - name: Copy netlist...
               run: cp gowin/out/bgpu_soc_yosys.v gowin/out/post_synth.v
             - name: Post Synthesis Simulation
-              run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
+              run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -192,7 +192,7 @@ jobs:
             - name: Process Netlist for Verilator
               run: make gowin-eda-process-netlist TOP=bgpu_soc
             - name: Post Synthesis Simulation
-              run: make tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
+              run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth -t gowin_eda_postsynth"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()

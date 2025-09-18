@@ -153,8 +153,8 @@ module reg_table #(
     // ######################################################################
 
     for (genvar i = 0; i < NumTags; i++) begin : gen_ffs
-        `FF(table_valid_q[i], table_valid_d[i], '0, clk_i, rst_ni);
-        `FF(table_q      [i], table_d      [i], '0, clk_i, rst_ni);
+        `FF(table_valid_q[i], table_valid_d[i], '0, clk_i, rst_ni)
+        `FF(table_q      [i], table_d      [i], '0, clk_i, rst_ni)
     end
 
     // ######################################################################

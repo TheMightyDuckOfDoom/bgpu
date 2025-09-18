@@ -335,10 +335,10 @@ module wait_buffer import bgpu_pkg::*; #(
     // # Sequential Logic                                                                    #
     // #######################################################################################
 
-    `FF(wait_buffer_valid_q,      wait_buffer_valid_d,      '0, clk_i, rst_ni);
-    `FF(wait_buffer_dispatched_q, wait_buffer_dispatched_d, '0, clk_i, rst_ni);
+    `FF(wait_buffer_valid_q,      wait_buffer_valid_d,      '0, clk_i, rst_ni)
+    `FF(wait_buffer_dispatched_q, wait_buffer_dispatched_d, '0, clk_i, rst_ni)
     for (genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_buffer_ff
-        `FF(wait_buffer_q[i], wait_buffer_d[i], '0, clk_i, rst_ni);
+        `FF(wait_buffer_q[i], wait_buffer_d[i], '0, clk_i, rst_ni)
     end : gen_buffer_ff
 
     // #######################################################################################

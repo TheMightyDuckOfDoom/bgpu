@@ -383,8 +383,8 @@ module instruction_cache #(
     );
 
     // Valid FFs
-    `FF(cache_valid_q,  cache_valid_d,  '0, clk_i, rst_ni);
-    `FF(cache_valids_q, cache_valids_d, '0, clk_i, rst_ni);
+    `FF(cache_valid_q,  cache_valid_d,  '0, clk_i, rst_ni)
+    `FF(cache_valids_q, cache_valids_d, '0, clk_i, rst_ni)
 
     // Instruction memory
     tc_sram #(
@@ -416,16 +416,16 @@ module instruction_cache #(
     // #######################################################################################
 
     // Flush request
-    `FF(flush_q, flush_d, 1'b0, clk_i, rst_ni);
+    `FF(flush_q, flush_d, 1'b0, clk_i, rst_ni)
 
     // State machine
-    `FF(state_q, state_d, IDLE, clk_i, rst_ni);
+    `FF(state_q, state_d, IDLE, clk_i, rst_ni)
 
     // Active request
-    `FF(active_req_q, active_req_d, '0, clk_i, rst_ni);
+    `FF(active_req_q, active_req_d, '0, clk_i, rst_ni)
 
     // Data from memory
-    `FF(mem_data_q, mem_data_d, '0, clk_i, rst_ni);
+    `FF(mem_data_q, mem_data_d, '0, clk_i, rst_ni)
 
     // #######################################################################################
     // # Assertions                                                                          #

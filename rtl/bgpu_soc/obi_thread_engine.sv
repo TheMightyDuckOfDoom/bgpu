@@ -262,7 +262,7 @@ module obi_thread_engine #(
     `FF(start_dispatch_q,    start_dispatch_d,    1'b0, clk_i, rst_ni)
     `FF(running_q,           running_d,           1'b0, clk_i, rst_ni)
     `FF(finished_q,          finished_d,          1'b0, clk_i, rst_ni)
-    `FF(finished_tblocks_q,  finished_tblocks_d,  '0,   clk_i, rst_ni);
+    `FF(finished_tblocks_q,  finished_tblocks_d,  '0,   clk_i, rst_ni)
     `FF(inorder_execution_q, inorder_execution_d, 1'b0, clk_i, rst_ni)
 
     // Configuration

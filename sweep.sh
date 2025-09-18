@@ -17,7 +17,7 @@ do
         echo "Running simulation for NumWarp: $NumWarp, InflightInstructionsPerWarp: $InflightInstructionsPerWarp, TblocksToLaunch: $TblocksToLaunch"
         for try in {1..5}
         do
-            result=$(make tb_compute_unit VERILATOR_ARGS="-GNumWarps=$NumWarp -GInflightInstrPerWarp=$InflightInstructionsPerWarp -GTblocksToLaunch=$TblocksToLaunch -GMaxSimCycles=4000")
+            result=$(make PROCESSORS=8 tb_compute_unit VERILATOR_ARGS="-GNumWarps=$NumWarp -GInflightInstrPerWarp=$InflightInstructionsPerWarp -GTblocksToLaunch=$TblocksToLaunch -GMaxSimCycles=4000")
             if [ $? -eq 0 ]; then
                 echo "$result" | grep -A1 "All thread blocks done."
                 echo "Passed!"

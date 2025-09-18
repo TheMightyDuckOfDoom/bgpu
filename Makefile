@@ -18,6 +18,8 @@ GOWIN_EDA ?= /tools/Gowin/IDE_1.9.11.02
 BENDER_TARGET_LINT ?= -t sim
 BENDER_TARGET_SIM  ?= -t sim
 
+PROCESSORS ?= 0
+
 TOP                ?= compute_unit
 TB_TOP             ?= tb_$(TOP)
 
@@ -70,7 +72,7 @@ verilator/verilator_tb.f: $(BENDER_DEPS) vendor/
 
 # Translate RTL to C++ using Verilator
 verilator/obj_dir/V%.mk: verilator/verilator_tb.f verilator/config.vlt $(SRCS) $(TB_SRCS)
-	$(VERILATOR) $(VERILATOR_FLAGS) $(VERILATOR_ARGS) -f $< --top $* --binary -j 0 --timing --assert --trace --trace-structs --Mdir verilator/obj_dir
+	$(VERILATOR) $(VERILATOR_FLAGS) $(VERILATOR_ARGS) -f $< --top $* --binary -j $(PROCESSORS) --timing --assert --trace --trace-structs --Mdir verilator/obj_dir
 
 # Build the testbench
 verilator/obj_dir/V%: verilator/obj_dir/V%.mk

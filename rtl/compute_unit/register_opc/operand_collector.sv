@@ -200,11 +200,11 @@ module operand_collector import bgpu_pkg::*; #(
     // ########################################################################################
 
     // Common
-    `FF(common_q, common_d, '0, clk_i, rst_ni);
+    `FF(common_q, common_d, '0, clk_i, rst_ni)
 
     // Operands
     for (genvar i = 0; i < OperandsPerInst; i++) begin : gen_operand_ff
-        `FF(operand_q[i], operand_d[i], '0, clk_i, rst_ni);
+        `FF(operand_q[i], operand_d[i], '0, clk_i, rst_ni)
     end : gen_operand_ff
 
     // ########################################################################################

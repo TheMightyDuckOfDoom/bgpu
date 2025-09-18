@@ -20,7 +20,7 @@ module bgpu_soc #(
     /// Number of Compute Clusters
     parameter int unsigned ComputeClusters = 1,
     /// Number of Compute Units per Cluster
-    parameter int unsigned ComputeUnitsPerCluster = 2,
+    parameter int unsigned ComputeUnitsPerCluster = 1,
     /// Encoded instruction width, has to be 32
     parameter int unsigned EncInstWidth = 32,
     /// Width of the Program Counter in instructions

@@ -144,6 +144,6 @@ module coalesce_splitter #(
     // # Sequential logic                                                                    #
     // #######################################################################################
 
-    `FF(state_q, state_d, '0, clk_i, rst_ni);
+    `FF(state_q, state_d, '0, clk_i, rst_ni)
 
 endmodule : coalesce_splitter
