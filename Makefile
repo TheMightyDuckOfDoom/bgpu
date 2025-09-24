@@ -100,7 +100,7 @@ xilinx/yosys.f: $(BENDER_DEPS) vendor/
 
 # Run Vivado synthesis
 xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado.sh
-	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP) vivado.tcl
 
 # Run Yosys synthesis
 xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
@@ -111,6 +111,9 @@ xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
 # Yosys report using Vivado
 xilinx-yosys-report: xilinx/scripts/vivado_report.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado_report.sh
 	time ./xilinx/run_vivado_report.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
+
+vivado-ips:	
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP) vivado_ip.tcl
 
 ####################################################################################################
 # ASIC Synthesis
