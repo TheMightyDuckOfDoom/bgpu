@@ -21,5 +21,8 @@ clean -purge
 
 synth_xilinx -top $top_design -family xc7 -noclkbuf -noiopad -nowidelut -abc9 -flatten -run coarse:
 
+# Work around Verilator V3String bug when hashing long names
+yosys rename -scramble-name -seed 42
+
 write_verilog -simple-lhs -attr2comment -renameprefix gen xilinx/out/${top_design}_yosys.v
 stat -tech xilinx

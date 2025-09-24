@@ -22,4 +22,7 @@ clean -purge
 
 synth_gowin -top $top_design -noiopads -nowidelut -nolutram -run coarse:
 
+# Work around Verilator V3String bug when hashing long names
+yosys rename -scramble-name -seed 42
+
 write_verilog -simple-lhs -decimal -attr2comment -renameprefix gen gowin/out/${top_design}_yosys.v
