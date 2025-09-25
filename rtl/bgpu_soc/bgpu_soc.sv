@@ -10,12 +10,16 @@
 // Contains:
 // - Control Domain
 // - Compute Clusters
-// - Dummy Memory
+// - Dummy Memory (if no external memory controller is used)
 module bgpu_soc #(
     /// Width of the data bus to the memory controller
-    parameter int unsigned MctrlWidth = 64,
+    parameter int unsigned MctrlWidth = 512,
     /// Width of the addressable physical memory by the memory controller
-    parameter int unsigned MctrlAddressWidth = 24,
+    parameter int unsigned MctrlAddressWidth = 30,
+
+    parameter bit  ExtMctrl = 1'b0,
+    parameter type ext_mctrl_axi_req_t = logic,
+    parameter type ext_mctrl_axi_rsp_t = logic,
 
     /// Number of Compute Clusters
     parameter int unsigned ComputeClusters = 1,
@@ -73,7 +77,11 @@ module bgpu_soc #(
     input  logic jtag_tdi_i,
     output logic jtag_tdo_o,
     input  logic jtag_tms_i,
-    input  logic jtag_trst_ni
+    input  logic jtag_trst_ni,
+
+    /// Memory Controller AXI Interface
+    output ext_mctrl_axi_req_t mctrl_axi_req_o,
+    input  ext_mctrl_axi_rsp_t mctrl_axi_rsp_i
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -670,65 +678,74 @@ module bgpu_soc #(
         .axi_resp_i( mctrl_axi_rsp )
     );
 `endif
-    localparam int unsigned DummyMemAddressWidth = 10;
-    logic [DummyMemAddressWidth-1:0] mem_addr;
+    if (ExtMctrl) begin : gen_external_mctrl
+        assign mctrl_axi_req_o = mctrl_axi_req;
+        assign mctrl_axi_rsp   = mctrl_axi_rsp_i;
+    end : gen_external_mctrl
+    else begin : gen_dummy_memory
+        // Tie off external memory controller interface
+        assign mctrl_axi_req_o = '0;
 
-    logic        mem_req,   mem_we,   mem_rvalid;
-    mctrl_data_t mem_wdata, mem_rdata;
-    mctrl_strb_t mem_strb;
+        localparam int unsigned DummyMemAddressWidth = 10;
+        logic [DummyMemAddressWidth-1:0] mem_addr;
 
-    axi_to_mem #(
-        .axi_req_t   ( mctrl_axi_req_t      ),
-        .axi_resp_t  ( mctrl_axi_resp_t     ),
-        .AddrWidth   ( DummyMemAddressWidth ),
-        .DataWidth   ( MctrlWidth           ),
-        .IdWidth     ( MctrlAxiIdWidth      ),
-        .NumBanks    ( 1                    ),
-        .BufDepth    ( 1                    ),
-        .HideStrb    ( 1'b0                 ), /// This currently is buggy when enabled
-        .OutFifoDepth( 1                    )
-    ) i_axi_to_mem (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
+        logic        mem_req,   mem_we,   mem_rvalid;
+        mctrl_data_t mem_wdata, mem_rdata;
+        mctrl_strb_t mem_strb;
 
-        .axi_req_i ( mctrl_axi_req ),
-        .axi_resp_o( mctrl_axi_rsp ),
+        axi_to_mem #(
+            .axi_req_t   ( mctrl_axi_req_t      ),
+            .axi_resp_t  ( mctrl_axi_resp_t     ),
+            .AddrWidth   ( DummyMemAddressWidth ),
+            .DataWidth   ( MctrlWidth           ),
+            .IdWidth     ( MctrlAxiIdWidth      ),
+            .NumBanks    ( 1                    ),
+            .BufDepth    ( 1                    ),
+            .HideStrb    ( 1'b0                 ), /// This currently is buggy when enabled
+            .OutFifoDepth( 1                    )
+        ) i_axi_to_mem (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
 
-        .mem_req_o  ( mem_req   ),
-        .mem_gnt_i  ( 1'b1      ),
-        .mem_addr_o ( mem_addr  ),
-        .mem_we_o   ( mem_we    ),
-        .mem_wdata_o( mem_wdata ),
-        .mem_strb_o ( mem_strb  ),
+            .axi_req_i ( mctrl_axi_req ),
+            .axi_resp_o( mctrl_axi_rsp ),
 
-        .mem_rvalid_i( mem_rvalid ),
-        .mem_rdata_i ( mem_rdata  ),
+            .mem_req_o  ( mem_req   ),
+            .mem_gnt_i  ( 1'b1      ),
+            .mem_addr_o ( mem_addr  ),
+            .mem_we_o   ( mem_we    ),
+            .mem_wdata_o( mem_wdata ),
+            .mem_strb_o ( mem_strb  ),
 
-        .busy_o    ( /* Unused */ ),
-        .mem_atop_o( /* Unused */ )
-    );
+            .mem_rvalid_i( mem_rvalid ),
+            .mem_rdata_i ( mem_rdata  ),
 
-    tc_sram #(
-        .NumWords   ( 1 << (DummyMemAddressWidth - $clog2(MctrlWidth / 8)) ),
-        .DataWidth  ( MctrlWidth    ),
-        .ByteWidth  ( 8             ),
-        .NumPorts   ( 1             ),
-        .Latency    ( 1             ),
-        .SimInit    ( "zeros"       ),
-        .PrintSimCfg( 1'b1          ),
-        .ImplKey    ( "i_mctrl_mem" )
-    ) i_mctlr_mem (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
+            .busy_o    ( /* Unused */ ),
+            .mem_atop_o( /* Unused */ )
+        );
 
-        .req_i  ( mem_req   ),
-        .we_i   ( mem_we    ),
-        .addr_i ( mem_addr[DummyMemAddressWidth-1:$clog2(MctrlWidth / 8)] ),
-        .wdata_i( mem_wdata ),
-        .be_i   ( mem_strb  ),
+        tc_sram #(
+            .NumWords   ( 1 << (DummyMemAddressWidth - $clog2(MctrlWidth / 8)) ),
+            .DataWidth  ( MctrlWidth    ),
+            .ByteWidth  ( 8             ),
+            .NumPorts   ( 1             ),
+            .Latency    ( 1             ),
+            .SimInit    ( "zeros"       ),
+            .PrintSimCfg( 1'b1          ),
+            .ImplKey    ( "i_mctrl_mem" )
+        ) i_mctlr_mem (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
 
-        .rdata_o( mem_rdata )
-    );
+            .req_i  ( mem_req   ),
+            .we_i   ( mem_we    ),
+            .addr_i ( mem_addr[DummyMemAddressWidth-1:$clog2(MctrlWidth / 8)] ),
+            .wdata_i( mem_wdata ),
+            .be_i   ( mem_strb  ),
 
-    `FF(mem_rvalid, mem_req, 1'b0, clk, rst_n)
+            .rdata_o( mem_rdata )
+        );
+
+        `FF(mem_rvalid, mem_req, 1'b0, clk, rst_n)
+    end : gen_dummy_memory
 endmodule : bgpu_soc

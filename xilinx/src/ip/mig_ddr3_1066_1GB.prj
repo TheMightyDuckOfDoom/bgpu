@@ -171,7 +171,7 @@
             <Pin PADName="No connect" Bank="Select Bank" name="tg_compare_error" />
         </System_Control>
         <TimingParameters>
-            <Parameters twtr="7.5" trrd="6" trefi="7.8" tfaw="30" trtp="7.5" tcke="5" trfc="110" trp="13.75" tras="35" trcd="13.75" />
+            <Parameters twtr="7.5" trrd="7.5" trefi="7.8" tfaw="37.5" trtp="7.5" tcke="5.625" trfc="110" trp="13.13" tras="37.5" trcd="13.13" />
         </TimingParameters>
         <mrBurstLength name="Burst Length" >8 - Fixed</mrBurstLength>
         <mrBurstType name="Read Burst Type and Length" >Sequential</mrBurstType>
@@ -198,9 +198,8 @@
           <C0_C_RD_WR_ARB_ALGORITHM>RD_PRI_REG</C0_C_RD_WR_ARB_ALGORITHM>
           <C0_S_AXI_ADDR_WIDTH>30</C0_S_AXI_ADDR_WIDTH>
           <C0_S_AXI_DATA_WIDTH>512</C0_S_AXI_DATA_WIDTH>
-          <C0_S_AXI_ID_WIDTH>4</C0_S_AXI_ID_WIDTH>
+          <C0_S_AXI_ID_WIDTH>8</C0_S_AXI_ID_WIDTH>
           <C0_S_AXI_SUPPORTS_NARROW_BURST>0</C0_S_AXI_SUPPORTS_NARROW_BURST>
         </AXIParameters>
-        </Controller>
-
+    </Controller>
 </Project>

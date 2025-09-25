@@ -10,7 +10,7 @@ echo 'set device "xc7k325tffg676-2l"' >> run_vivado.tcl
 # echo 'set device "xcku13p-ffve900-1-i"' >> run_vivado.tcl
 echo -n "source scripts/" >> run_vivado.tcl
 echo $4 >> run_vivado.tcl
-echo "source run_vivado.tcl" | $2 vivado -mode tcl
+echo "source run_vivado.tcl" | LD_PRELOAD=/lib/x86_64-linux-gnu/libudev.so.1 $2 vivado -mode tcl
 
 num_errors=$(grep -c ERROR vivado.log)
 

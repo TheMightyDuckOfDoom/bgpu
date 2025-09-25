@@ -115,7 +115,10 @@ module bgpu_wrapper (
         .jtag_tdi_i  ( jtag_tdi_i   ),
         .jtag_tdo_o  ( jtag_tdo_o   ),
         .jtag_tms_i  ( jtag_tms_i   ),
-        .jtag_trst_ni( jtag_trst_ni )
+        .jtag_trst_ni( jtag_trst_ni ),
+
+        .mctrl_axi_req_o( /* Not Connected */ ),
+        .mctrl_axi_rsp_i( '0                  )
     );
 
     // #######################################################################################

@@ -92,11 +92,11 @@ tb-all: $(TBS)
 
 # Generate filelist for Vivado synthesis
 xilinx/vivado.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS -D PRIM_ASSERT_SV > $@
+	$(BENDER) script vivado -t xilinx -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS -D PRIM_ASSERT_SV > $@
 
 # Generate filelist for Yosys synthesis
 xilinx/yosys.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script flist-plus -t xilinx_yosys -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
+	$(BENDER) script flist-plus -t xilinx_yosys -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
 
 # Run Vivado synthesis
 xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado.sh
@@ -112,8 +112,18 @@ xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
 xilinx-yosys-report: xilinx/scripts/vivado_report.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado_report.sh
 	time ./xilinx/run_vivado_report.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
-vivado-ips:	
+xilinx/out/ip/memory_controller/memory_controller.xci: xilinx/src/ip/*
 	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP) vivado_ip.tcl
+
+xilinx-vivado-ip: xilinx/out/ip/memory_controller/memory_controller.xci
+
+xilinx/out/bgpu.bit: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado_impl.tcl xilinx/src/constraints.xdc xilinx/run_vivado.sh xilinx/src/bgpu_wrapper.sv xilinx/out/ip/memory_controller/memory_controller.xci
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) bgpu_wrapper vivado_impl.tcl
+
+xilinx-vivado-impl: xilinx/out/bgpu.bit
+
+xilinx-program-board: xilinx/out/bgpu.bit
+	openocd -c "source [find interface/ftdi/digilent_jtag_smt2.cfg]; source [find cpld/xilinx-xc7.cfg]; adapter speed 25000; init; pld load 0 xilinx/out/bgpu.bit; shutdown"
 
 ####################################################################################################
 # ASIC Synthesis
@@ -211,9 +221,8 @@ xilinx-clean:
 	rm -rf xilinx/.Xil
 	rm -f  xilinx/*.log
 	rm -f  xilinx/*.jou
+	rm -f  xilinx/*.txt
 	rm -rf xilinx/out
-	rm -rf xilinx/cong
-	rm -f  xilinx/clockInfo.txt
 
 gowin-clean:
 	rm -f  gowin/*.f

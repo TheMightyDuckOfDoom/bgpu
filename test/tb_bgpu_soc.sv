@@ -78,7 +78,10 @@ module tb_bgpu_soc #(
         .jtag_tdi_i  ( jtag_tdi    ),
         .jtag_tdo_o  ( jtag_tdo    ),
         .jtag_tms_i  ( jtag_tms    ),
-        .jtag_trst_ni( jtag_trst_n )
+        .jtag_trst_ni( jtag_trst_n ),
+
+        .mctrl_axi_req_o( /* Not Connected */ ),
+        .mctrl_axi_rsp_i( '0                  )
     );
 
     // #######################################################################################
