@@ -11,7 +11,9 @@ module tb_bgpu_soc #(
     parameter time ApplyDelay = 1ns,
     parameter time AcqDelay   = 0.9ns,
 
-    parameter int unsigned MaxCycles = 1000000
+    parameter int unsigned MaxCycles = 1000000,
+
+    parameter string Benchmark = "add_2"
 ) ();
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -234,166 +236,180 @@ module tb_bgpu_soc #(
         finished = status[2];
     endtask
 
-    // 2x2 matrix addition, 1 tblock
-    // int TblocksToLaunch = 1;
-    // int DataPerMatrix = 2 ** 2;
-    // int unsigned prog [$] = {
-    //     'h04000000,
-    //     'h42010000,
-    //     'h0c020004,
-    //     'h42020200,
-    //     'h0c000008,
-    //     'h42000000,
-    //     'h0c030200,
-    //     'h42030300,
-    //     'h0c040204,
-    //     'h42040400,
-    //     'h0c050208,
-    //     'h42050500,
-    //     'h0c02020c,
-    //     'h42020200,
-    //     'h0c060000,
-    //     'h42060600,
-    //     'h0c070004,
-    //     'h42070700,
-    //     'h0c080008,
-    //     'h42080800,
-    //     'h0c00000c,
-    //     'h42000000,
-    //     'h0c090100,
-    //     'h0c0a0104,
-    //     'h0c0b0108,
-    //     'h0c01010c,
-    //     'h05030306,
-    //     'h45090903,
-    //     'h05030407,
-    //     'h450a0a03,
-    //     'h05030508,
-    //     'h450b0b03,
-    //     'h05000200,
-    //     'h45010100,
-    //     'hff000000,
-    //     'hff000000
-    // };
+    int TblocksToLaunch;
+    int DataPerMatrix;
+    int unsigned prog [$];
 
-    // 4x4 matrix addition, 1 tblock
-    // int TblocksToLaunch = 1;
-    // int DataPerMatrix = 4 ** 2;
-    // int unsigned prog [$] = {
-    //     'h04000000,
-    //     'h42010000,
-    //     'h0c020004,
-    //     'h42020200,
-    //     'h0c030008,
-    //     'h42030300,
-    //     'h00000000,
-    //     'h0e040002,
-    //     'h0e050402,
-    //     'h05050205,
-    //     'h42060500,
-    //     'h0e050402,
-    //     'h05050305,
-    //     'h42070500,
-    //     'h0c050401,
-    //     'h0e080502,
-    //     'h05080208,
-    //     'h42090800,
-    //     'h0e080502,
-    //     'h05080308,
-    //     'h420a0800,
-    //     'h0c080402,
-    //     'h0e0b0802,
-    //     'h050b020b,
-    //     'h420c0b00,
-    //     'h0e0b0802,
-    //     'h050b030b,
-    //     'h420d0b00,
-    //     'h0c0b0403,
-    //     'h0e0e0b02,
-    //     'h050e020e,
-    //     'h42020e00,
-    //     'h0e0e0b02,
-    //     'h050e030e,
-    //     'h42030e00,
-    //     'h0e0e0502,
-    //     'h050e010e,
-    //     'h0e050802,
-    //     'h05050105,
-    //     'h0e080b02,
-    //     'h05080108,
-    //     'h0e0b0402,
-    //     'h050b010b,
-    //     'h0501090a,
-    //     'h450e0e01,
-    //     'h05010c0d,
-    //     'h45050501,
-    //     'h05010203,
-    //     'h45080801,
-    //     'h05010607,
-    //     'h450b0b01,
-    //     'hff000000
-    // };
-
-    // 8x8 matrix addition, 4 tblock
-    int TblocksToLaunch = 4;
-    int DataPerMatrix = 8 ** 2;
-    int unsigned prog [$] = {
-        'h04000000, // special                   r0, %param
-        'h42010000, // ld.int32.param            r1,   r0
-        'h0c020004, // add.ri.int32              r2,   r0, 4
-        'h42020200, // ld.int32.param            r2,   r2
-        'h0c030008, // add.ri.int32              r3,   r0, 8
-        'h42030300, // ld.int32.param            r3,   r3
-        'h02000000, // special                   r0, %gidx0
-        'h00040000, // special                   r4, %lidx0
-        'h0e050004, // shl.ri.int32              r5,   r0,    4
-        'h0e060402, // shl.ri.int32              r6,   r4,    2
-        'h05070506, // add.rr.int32              r7,   r5,   r6
-        'h0e050702, // shl.ri.int32              r5,   r7,    2
-        'h05050205, // add.rr.int32              r5,   r2,   r5
-        'h42060500, // ld.int32.global           r6,   r5
-        'h0e050702, // shl.ri.int32              r5,   r7,    2
-        'h05050305, // add.rr.int32              r5,   r3,   r5
-        'h42080500, // ld.int32.global           r8,   r5
-        'h0c050701, // add.ri.int32              r5,   r7,    1
-        'h0e090502, // shl.ri.int32              r9,   r5,    2
-        'h05090209, // add.rr.int32              r9,   r2,   r9
-        'h420a0900, // ld.int32.global          r10,   r9
-        'h0e090502, // shl.ri.int32              r9,   r5,    2
-        'h05090309, // add.rr.int32              r9,   r3,   r9
-        'h420b0900, // ld.int32.global          r11,   r9
-        'h0c090702, // add.ri.int32              r9,   r7,    2
-        'h0e0c0902, // shl.ri.int32             r12,   r9,    2
-        'h050c020c, // add.rr.int32             r12,   r2,  r12
-        'h420d0c00, // ld.int32.global          r13,  r12
-        'h0e0c0902, // shl.ri.int32             r12,   r9,    2
-        'h050c030c, // add.rr.int32             r12,   r3,  r12
-        'h420e0c00, // ld.int32.global          r14,  r12
-        'h0c0c0703, // add.ri.int32             r12,   r7,    3
-        'h0e0f0c02, // shl.ri.int32             r15,  r12,    2
-        'h050f020f, // add.rr.int32             r15,   r2,  r15
-        'h42020f00, // ld.int32.global           r2,  r15
-        'h0e0f0c02, // shl.ri.int32             r15,  r12,    2
-        'h050f030f, // add.rr.int32             r15,   r3,  r15
-        'h42030f00, // ld.int32.global           r3,  r15
-        'h0e0f0502, // shl.ri.int32             r15,   r5,    2
-        'h050f010f, // add.rr.int32             r15,   r1,  r15
-        'h0e050902, // shl.ri.int32              r5,   r9,    2
-        'h05050105, // add.rr.int32              r5,   r1,   r5
-        'h0e090c02, // shl.ri.int32              r9,  r12,    2
-        'h05090109, // add.rr.int32              r9,   r1,   r9
-        'h0e0c0702, // shl.ri.int32             r12,   r7,    2
-        'h050c010c, // add.rr.int32             r12,   r1,  r12
-        'h05010a0b, // add.rr.int32              r1,  r10,  r11
-        'h450f0f01, // st.int32.global          r15,   r1
-        'h05010d0e, // add.rr.int32              r1,  r13,  r14
-        'h45050501, // st.int32.global           r5,   r1
-        'h05010203, // add.rr.int32              r1,   r2,   r3
-        'h45090901, // st.int32.global           r9,   r1
-        'h05010608, // add.rr.int32              r1,   r6,   r8
-        'h450c0c01, // st.int32.global          r12,   r1
-        'hff000000  // stop
-    };
+    if (Benchmark == "add_2") begin : gen_add_2
+        // 2x2 matrix addition, 1 tblock
+        initial begin
+            TblocksToLaunch = 1;
+            DataPerMatrix = 2 ** 2;
+            prog = {
+                'h04000000,
+                'h42010000,
+                'h0c020004,
+                'h42020200,
+                'h0c000008,
+                'h42000000,
+                'h0c030200,
+                'h42030300,
+                'h0c040204,
+                'h42040400,
+                'h0c050208,
+                'h42050500,
+                'h0c02020c,
+                'h42020200,
+                'h0c060000,
+                'h42060600,
+                'h0c070004,
+                'h42070700,
+                'h0c080008,
+                'h42080800,
+                'h0c00000c,
+                'h42000000,
+                'h0c090100,
+                'h0c0a0104,
+                'h0c0b0108,
+                'h0c01010c,
+                'h05030306,
+                'h45090903,
+                'h05030407,
+                'h450a0a03,
+                'h05030508,
+                'h450b0b03,
+                'h05000200,
+                'h45010100,
+                'hff000000,
+                'hff000000
+            };
+        end
+    end : gen_add_2
+    else if (Benchmark == "add_4") begin : gen_add_4
+        // 4x4 matrix addition, 1 tblock
+        initial begin
+            TblocksToLaunch = 1;
+            DataPerMatrix = 4 ** 2;
+            prog = {
+                'h04000000,
+                'h42010000,
+                'h0c020004,
+                'h42020200,
+                'h0c030008,
+                'h42030300,
+                'h00000000,
+                'h0e040002,
+                'h0e050402,
+                'h05050205,
+                'h42060500,
+                'h0e050402,
+                'h05050305,
+                'h42070500,
+                'h0c050401,
+                'h0e080502,
+                'h05080208,
+                'h42090800,
+                'h0e080502,
+                'h05080308,
+                'h420a0800,
+                'h0c080402,
+                'h0e0b0802,
+                'h050b020b,
+                'h420c0b00,
+                'h0e0b0802,
+                'h050b030b,
+                'h420d0b00,
+                'h0c0b0403,
+                'h0e0e0b02,
+                'h050e020e,
+                'h42020e00,
+                'h0e0e0b02,
+                'h050e030e,
+                'h42030e00,
+                'h0e0e0502,
+                'h050e010e,
+                'h0e050802,
+                'h05050105,
+                'h0e080b02,
+                'h05080108,
+                'h0e0b0402,
+                'h050b010b,
+                'h0501090a,
+                'h450e0e01,
+                'h05010c0d,
+                'h45050501,
+                'h05010203,
+                'h45080801,
+                'h05010607,
+                'h450b0b01,
+                'hff000000
+            };
+        end
+    end : gen_add_4
+    else if (Benchmark == "add_8_4t") begin : gen_add_8
+        // 8x8 matrix addition, 4 tblock
+        initial begin
+            TblocksToLaunch = 4;
+            DataPerMatrix = 8 ** 2;
+            prog = {
+                'h04000000, // special                   r0, %param
+                'h42010000, // ld.int32.param            r1,   r0
+                'h0c020004, // add.ri.int32              r2,   r0, 4
+                'h42020200, // ld.int32.param            r2,   r2
+                'h0c030008, // add.ri.int32              r3,   r0, 8
+                'h42030300, // ld.int32.param            r3,   r3
+                'h02000000, // special                   r0, %gidx0
+                'h00040000, // special                   r4, %lidx0
+                'h0e050004, // shl.ri.int32              r5,   r0,    4
+                'h0e060402, // shl.ri.int32              r6,   r4,    2
+                'h05070506, // add.rr.int32              r7,   r5,   r6
+                'h0e050702, // shl.ri.int32              r5,   r7,    2
+                'h05050205, // add.rr.int32              r5,   r2,   r5
+                'h42060500, // ld.int32.global           r6,   r5
+                'h0e050702, // shl.ri.int32              r5,   r7,    2
+                'h05050305, // add.rr.int32              r5,   r3,   r5
+                'h42080500, // ld.int32.global           r8,   r5
+                'h0c050701, // add.ri.int32              r5,   r7,    1
+                'h0e090502, // shl.ri.int32              r9,   r5,    2
+                'h05090209, // add.rr.int32              r9,   r2,   r9
+                'h420a0900, // ld.int32.global          r10,   r9
+                'h0e090502, // shl.ri.int32              r9,   r5,    2
+                'h05090309, // add.rr.int32              r9,   r3,   r9
+                'h420b0900, // ld.int32.global          r11,   r9
+                'h0c090702, // add.ri.int32              r9,   r7,    2
+                'h0e0c0902, // shl.ri.int32             r12,   r9,    2
+                'h050c020c, // add.rr.int32             r12,   r2,  r12
+                'h420d0c00, // ld.int32.global          r13,  r12
+                'h0e0c0902, // shl.ri.int32             r12,   r9,    2
+                'h050c030c, // add.rr.int32             r12,   r3,  r12
+                'h420e0c00, // ld.int32.global          r14,  r12
+                'h0c0c0703, // add.ri.int32             r12,   r7,    3
+                'h0e0f0c02, // shl.ri.int32             r15,  r12,    2
+                'h050f020f, // add.rr.int32             r15,   r2,  r15
+                'h42020f00, // ld.int32.global           r2,  r15
+                'h0e0f0c02, // shl.ri.int32             r15,  r12,    2
+                'h050f030f, // add.rr.int32             r15,   r3,  r15
+                'h42030f00, // ld.int32.global           r3,  r15
+                'h0e0f0502, // shl.ri.int32             r15,   r5,    2
+                'h050f010f, // add.rr.int32             r15,   r1,  r15
+                'h0e050902, // shl.ri.int32              r5,   r9,    2
+                'h05050105, // add.rr.int32              r5,   r1,   r5
+                'h0e090c02, // shl.ri.int32              r9,  r12,    2
+                'h05090109, // add.rr.int32              r9,   r1,   r9
+                'h0e0c0702, // shl.ri.int32             r12,   r7,    2
+                'h050c010c, // add.rr.int32             r12,   r1,  r12
+                'h05010a0b, // add.rr.int32              r1,  r10,  r11
+                'h450f0f01, // st.int32.global          r15,   r1
+                'h05010d0e, // add.rr.int32              r1,  r13,  r14
+                'h45050501, // st.int32.global           r5,   r1
+                'h05010203, // add.rr.int32              r1,   r2,   r3
+                'h45090901, // st.int32.global           r9,   r1
+                'h05010608, // add.rr.int32              r1,   r6,   r8
+                'h450c0c01, // st.int32.global          r12,   r1
+                'hff000000  // stop
+            };
+        end
+    end : gen_add_8
 
     initial begin : testbench_logic
         logic [31:0] idcode, data;

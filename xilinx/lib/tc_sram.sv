@@ -2,7 +2,7 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
-// CAUTION: Im not confident that this works correctly, but it seems to work
+// CAUTION: I'm not confident that this works correctly, but it seems to work
 module tc_sram #(
   parameter int unsigned NumWords     = 32'd1024, // Number of Words in data array
   parameter int unsigned DataWidth    = 32'd128,  // Data signal width (in bits)
@@ -142,7 +142,8 @@ module tc_sram #(
             // Generate BRAMs
             for (genvar y = 0; y < BramsInColumn; y++) begin : gen_bram
                 // See AMD UG473 for details
-                RAMB36E1 #(
+                // Needed to add DONT_TOUCH as phys_opt_design somehow broke the design without it
+                (* DONT_TOUCH = "yes" *) RAMB36E1 #(
                     .DOA_REG          ( 1             ),
                     .DOB_REG          ( 1             ),
                     .EN_ECC_READ      ( "FALSE"       ),

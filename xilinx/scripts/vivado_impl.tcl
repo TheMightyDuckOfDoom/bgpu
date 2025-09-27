@@ -5,7 +5,7 @@ set_param general.maxThreads 8
 set_part $device
 
 # read all design files
-source vivado.f
+source vivado_impl.f
 add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/xilinx/src/bgpu_wrapper.sv \
 ]

@@ -12,7 +12,7 @@ VERIBLE_LINT    ?= verible-verilog-lint
 VERILATOR_FLAGS:= verilator/config.vlt -Wno-UNOPTFLAT -Wno-TIMESCALEMOD
 VERILATOR_ARGS ?= ""
 
-GOWIN_EDA ?= /tools/Gowin/IDE_1.9.11.02
+GOWIN_EDA ?= /tools/Gowin/IDE_1.9.11.03_Edu
 
 # Bender Targets
 BENDER_TARGET_LINT ?= -t sim
@@ -92,6 +92,9 @@ tb-all: $(TBS)
 
 # Generate filelist for Vivado synthesis
 xilinx/vivado.f: $(BENDER_DEPS) vendor/
+	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS -D PRIM_ASSERT_SV > $@
+
+xilinx/vivado_impl.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script vivado -t xilinx -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS -D PRIM_ASSERT_SV > $@
 
 # Generate filelist for Yosys synthesis
@@ -101,6 +104,13 @@ xilinx/yosys.f: $(BENDER_DEPS) vendor/
 # Run Vivado synthesis
 xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado.sh
 	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP) vivado.tcl
+
+# Process Vivado netlist for Verilator simulation
+xilinx-vivado-process-netlist: xilinx/scripts/rename_ports.py xilinx/scripts/process_vivado_netlist.tcl
+	sed -ni '/`ifndef GLBL/q;p' xilinx/out/$(TOP)_vivado.v
+	echo "set top_design $(TOP)"  >  xilinx/run_process.tcl
+	echo "source xilinx/scripts/process_vivado_netlist.tcl" >> xilinx/run_process.tcl
+	yosys -c xilinx/run_process.tcl -l xilinx/yosys_process_vivado.log -t
 
 # Run Yosys synthesis
 xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
@@ -117,7 +127,7 @@ xilinx/out/ip/memory_controller/memory_controller.xci: xilinx/src/ip/*
 
 xilinx-vivado-ip: xilinx/out/ip/memory_controller/memory_controller.xci
 
-xilinx/out/bgpu.bit: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado_impl.tcl xilinx/src/constraints.xdc xilinx/run_vivado.sh xilinx/src/bgpu_wrapper.sv xilinx/out/ip/memory_controller/memory_controller.xci
+xilinx/out/bgpu.bit: xilinx/vivado_impl.f $(SRCS) xilinx/scripts/vivado_impl.tcl xilinx/src/constraints.xdc xilinx/run_vivado.sh xilinx/src/bgpu_wrapper.sv xilinx/out/ip/memory_controller/memory_controller.xci
 	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) bgpu_wrapper vivado_impl.tcl
 
 xilinx-vivado-impl: xilinx/out/bgpu.bit

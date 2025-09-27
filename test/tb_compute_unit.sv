@@ -277,7 +277,14 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .imem_rsp_data_i_2( imem_rsp_data_q[2] ),
         .imem_rsp_data_i_3( imem_rsp_data_q[3] ),
 `else
+    `ifdef TARGET_XILINX_VIVADO_POSTSYNTH
+        .imem_rsp_data_i_BRA_0_KET_( imem_rsp_data_q[0] ),
+        .imem_rsp_data_i_BRA_1_KET_( imem_rsp_data_q[1] ),
+        .imem_rsp_data_i_BRA_2_KET_( imem_rsp_data_q[2] ),
+        .imem_rsp_data_i_BRA_3_KET_( imem_rsp_data_q[3] ),
+    `else
         .imem_rsp_data_i( imem_rsp_data_q ),
+    `endif
 `endif
 
         .mem_ready_i      ( mem_ready       ),
@@ -303,7 +310,26 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .mem_req_wdata_o_14( mem_req.data[14] ),
         .mem_req_wdata_o_15( mem_req.data[15] ),
 `else
+    `ifdef TARGET_XILINX_VIVADO_POSTSYNTH
+        .mem_req_wdata_o_BRA_0_KET_ ( mem_req.data[ 0] ),
+        .mem_req_wdata_o_BRA_1_KET_ ( mem_req.data[ 1] ),
+        .mem_req_wdata_o_BRA_2_KET_ ( mem_req.data[ 2] ),
+        .mem_req_wdata_o_BRA_3_KET_ ( mem_req.data[ 3] ),
+        .mem_req_wdata_o_BRA_4_KET_ ( mem_req.data[ 4] ),
+        .mem_req_wdata_o_BRA_5_KET_ ( mem_req.data[ 5] ),
+        .mem_req_wdata_o_BRA_6_KET_ ( mem_req.data[ 6] ),
+        .mem_req_wdata_o_BRA_7_KET_ ( mem_req.data[ 7] ),
+        .mem_req_wdata_o_BRA_8_KET_ ( mem_req.data[ 8] ),
+        .mem_req_wdata_o_BRA_9_KET_ ( mem_req.data[ 9] ),
+        .mem_req_wdata_o_BRA_10_KET_( mem_req.data[10] ),
+        .mem_req_wdata_o_BRA_11_KET_( mem_req.data[11] ),
+        .mem_req_wdata_o_BRA_12_KET_( mem_req.data[12] ),
+        .mem_req_wdata_o_BRA_13_KET_( mem_req.data[13] ),
+        .mem_req_wdata_o_BRA_14_KET_( mem_req.data[14] ),
+        .mem_req_wdata_o_BRA_15_KET_( mem_req.data[15] ),
+    `else
         .mem_req_wdata_o( mem_req.data ),
+    `endif
 `endif
 
         .mem_rsp_valid_i( mem_rsp_valid_q ),
@@ -326,7 +352,26 @@ module tb_compute_unit import bgpu_pkg::*; #(
         .mem_rsp_data_i_14( mem_rsp_q.data[14] ),
         .mem_rsp_data_i_15( mem_rsp_q.data[15] )
 `else
+    `ifdef TARGET_XILINX_VIVADO_POSTSYNTH
+        .mem_rsp_data_i_BRA_0_KET_ ( mem_rsp_q.data[ 0] ),
+        .mem_rsp_data_i_BRA_1_KET_ ( mem_rsp_q.data[ 1] ),
+        .mem_rsp_data_i_BRA_2_KET_ ( mem_rsp_q.data[ 2] ),
+        .mem_rsp_data_i_BRA_3_KET_ ( mem_rsp_q.data[ 3] ),
+        .mem_rsp_data_i_BRA_4_KET_ ( mem_rsp_q.data[ 4] ),
+        .mem_rsp_data_i_BRA_5_KET_ ( mem_rsp_q.data[ 5] ),
+        .mem_rsp_data_i_BRA_6_KET_ ( mem_rsp_q.data[ 6] ),
+        .mem_rsp_data_i_BRA_7_KET_ ( mem_rsp_q.data[ 7] ),
+        .mem_rsp_data_i_BRA_8_KET_ ( mem_rsp_q.data[ 8] ),
+        .mem_rsp_data_i_BRA_9_KET_ ( mem_rsp_q.data[ 9] ),
+        .mem_rsp_data_i_BRA_10_KET_( mem_rsp_q.data[10] ),
+        .mem_rsp_data_i_BRA_11_KET_( mem_rsp_q.data[11] ),
+        .mem_rsp_data_i_BRA_12_KET_( mem_rsp_q.data[12] ),
+        .mem_rsp_data_i_BRA_13_KET_( mem_rsp_q.data[13] ),
+        .mem_rsp_data_i_BRA_14_KET_( mem_rsp_q.data[14] ),
+        .mem_rsp_data_i_BRA_15_KET_( mem_rsp_q.data[15] )
+    `else
         .mem_rsp_data_i( mem_rsp_q.data )
+    `endif
 `endif
     );
 

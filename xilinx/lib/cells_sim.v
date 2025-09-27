@@ -135,22 +135,26 @@ module BUFGCTRL(
     (* invertible_pin = "IS_IGNORE1_INVERTED" *)
     input IGNORE1);
 
-parameter [0:0] INIT_OUT = 1'b0;
-parameter PRESELECT_I0 = "FALSE";
-parameter PRESELECT_I1 = "FALSE";
-parameter [0:0] IS_CE0_INVERTED = 1'b0;
-parameter [0:0] IS_CE1_INVERTED = 1'b0;
-parameter [0:0] IS_S0_INVERTED = 1'b0;
-parameter [0:0] IS_S1_INVERTED = 1'b0;
-parameter [0:0] IS_IGNORE0_INVERTED = 1'b0;
-parameter [0:0] IS_IGNORE1_INVERTED = 1'b0;
+parameter int    INIT_OUT            = 1'b0;
+parameter string PRESELECT_I0        = "FALSE";
+parameter string PRESELECT_I1        = "FALSE";
+parameter bit    IS_CE0_INVERTED     = 1'b0;
+parameter bit    IS_CE1_INVERTED     = 1'b0;
+parameter bit    IS_S0_INVERTED      = 1'b0;
+parameter bit    IS_S1_INVERTED      = 1'b0;
+parameter bit    IS_IGNORE0_INVERTED = 1'b0;
+parameter bit    IS_IGNORE1_INVERTED = 1'b0;
+parameter string SIM_DEVICE          = "7SERIES";
 
-wire I0_internal = ((CE0 ^ IS_CE0_INVERTED) ? I0 : INIT_OUT);
-wire I1_internal = ((CE1 ^ IS_CE1_INVERTED) ? I1 : INIT_OUT);
+initial assert(SIM_DEVICE == "7SERIES")
+    else $error("BUFGCTRL: SIM_DEVICE != 7SERIES not supported");
+
+wire I0_internal = ((CE0 ^ IS_CE0_INVERTED) ? I0 : INIT_OUT[0]);
+wire I1_internal = ((CE1 ^ IS_CE1_INVERTED) ? I1 : INIT_OUT[0]);
 wire S0_true = (S0 ^ IS_S0_INVERTED);
 wire S1_true = (S1 ^ IS_S1_INVERTED);
 
-assign O = S0_true ? I0_internal : (S1_true ? I1_internal : INIT_OUT);
+assign O = S0_true ? I0_internal : (S1_true ? I1_internal : INIT_OUT[0]);
 
 endmodule
 
