@@ -541,7 +541,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("cu.vcd");
-        $dumpvars(1,i_cu);
+        $dumpvars();
 
         while(1) begin
             @(posedge clk);

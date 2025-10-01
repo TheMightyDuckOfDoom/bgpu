@@ -363,7 +363,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("register_opc_stage.vcd");
-        $dumpvars(1,i_register_opc_stage);
+        $dumpvars();
 
         $display("Initializing registers...");
         eu_valid = 1'b0;

@@ -10,17 +10,18 @@ add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/xilinx/src/bgpu_wrapper.sv \
 ]
 
-# read constraints
-read_xdc src/constraints.xdc
-
 # read ip
 read_ip $ROOT/xilinx/out/ip/memory_controller/memory_controller.xci
+
+# read constraints
+read_xdc src/constraints.xdc
 
 # Synthesize Design
 puts $top
 puts $device
 synth_design -top $top -part $device -verbose -debug_log
 
+# Report helper function
 exec mkdir -p $ROOT/xilinx/out/reports/
 exec rm -rf $ROOT/xilinx/out/reports/$top
 exec mkdir -p $ROOT/xilinx/out/reports/$top
@@ -33,39 +34,85 @@ proc make_reports {prefix} {
     report_utilization -hierarchical -hierarchical_percentages -file $ROOT/xilinx/out/reports/$top/${prefix}_util.rpt
 }
 
+# Synthesis Reports
 make_reports 1_synth
+write_verilog -force -mode funcsim out/${top}_1_synth.v
+write_checkpoint -force out/checkpoint_1_synth.dcp
 
+# Optimize Design (Integrating IPs)
 opt_design -verbose
 make_reports 2_opt
+write_verilog -force -mode funcsim out/${top}_2_opt.v
+write_checkpoint -force out/checkpoint_2_opt.dcp
 
+# Optional Power Optimization
 if {$power_opt} {
     power_opt_design -verbose
     report_power_opt -file $ROOT/xilinx/out/reports/$top/3_power_opt_power_opt.rpt
     make_reports 3_power_opt
 }
 
-place_design -verbose 
+# Place the design
+place_design -verbose -directive Explore
 make_reports 4_place
+write_verilog -force -mode funcsim out/${top}_4_place.v
+write_checkpoint -force out/checkpoint_4_place.dcp
 
-phys_opt_design -directive AddRetime -verbose
-report_phys_opt -file $ROOT/xilinx/out/reports/$top/5_phys_opt_phys_opt.rpt
+# Physical Optimization looping
+set_clock_uncertainty -setup 0.2 [get_clocks clk_pll_i]
+set opt_loops 5
+set loop_num 1
+while {1} {
+    phys_opt_design -directive AggressiveExplore -verbose
+    report_phys_opt -file $ROOT/xilinx/out/reports/$top/5_phys_opt_phys_opt_${loop_num}_1.rpt
+    set wns [get_property SLACK [get_timing_paths]]
+    if {$wns >= 0} {
+        break
+    }
+    phys_opt_design -directive AggressiveFanoutOpt
+    report_phys_opt -file $ROOT/xilinx/out/reports/$top/5_phys_opt_phys_opt_${loop_num}_2.rpt
+    set wns [get_property SLACK [get_timing_paths]]
+    if {$wns >= 0} {
+        break
+    }
+    phys_opt_design -directive AlternateReplication
+    report_phys_opt -file $ROOT/xilinx/out/reports/$top/5_phys_opt_phys_opt_${loop_num}_3.rpt
+    set wns [get_property SLACK [get_timing_paths]]
+    if {$wns >= 0} {
+        break
+    }
+    if {$loop_num >= $opt_loops} {
+        puts "WARNING: Failed to meet timing after ${opt_loops} phys_opt loops, WNS=${wns}"
+        break
+    }
+    set loop_num [expr $loop_num + 1]
+}
+set_clock_uncertainty -setup 0 [get_clocks clk_pll_i]
 make_reports 5_phys_opt
+write_verilog -force -mode funcsim out/${top}_5_phys_opt.v
+write_checkpoint -force out/checkpoint_5_phys_opt.dcp
 
+# Another round of optional Power Optimizations
 if {$power_opt} {
     power_opt_design -verbose
     report_power_opt -file $ROOT/xilinx/out/reports/$top/6_postplace_power_opt_power_opt.rpt
     make_reports 6_postplace_power_opt
 }
 
-route_design
+# Route the design
+route_design -directive AggressiveExplore
 make_reports 7_route
+write_verilog -force -mode funcsim out/${top}_7_route.v
+write_checkpoint -force out/checkpoint_7_route.dcp
 
+# Final Physical Optimizations
 phys_opt_design -directive AggressiveExplore -verbose
 report_phys_opt -file $ROOT/xilinx/out/reports/$top/8_phys_opt_phys_opt.rpt
 make_reports 8_phys_opt
+write_verilog -force -mode funcsim out/${top}_8_phys_opt.v
 
 # Write checkpoint
-write_checkpoint -force out/final.dcp
+write_checkpoint -force out/checkpoint_8_phys_opt.dcp
 
 # Write out bitfile
 write_bitstream -force out/bgpu.bit

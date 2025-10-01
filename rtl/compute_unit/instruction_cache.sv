@@ -434,7 +434,7 @@ module instruction_cache #(
     `ifndef SYNTHESIS
         assert property (@(posedge clk_i) disable iff (!rst_ni)
             mem_valid_i |-> state_q == WAIT_FOR_MEM
-        ) else $fatal("Memory response received, but not in WAIT_FOR_MEM state.");
+        ) else $fatal(1, "Memory response received, but not in WAIT_FOR_MEM state.");
     `endif
 
 endmodule : instruction_cache

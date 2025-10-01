@@ -370,6 +370,11 @@ module RAMB36E1 (CASCADEOUTA, CASCADEOUTB, DBITERR, DOADO, DOBDO, DOPADOP, DOPBD
    assign rstregarstreg_in = RSTREGARSTREG ^ IS_RSTREGARSTREG_INVERTED;
    assign rstregb_in = RSTREGB ^ IS_RSTREGB_INVERTED;
 
+   initial assert(DOA_REG == 0)
+        else $error("Simulation model with DOA_REG set to 1 is not working correctly!");
+   initial assert(DOB_REG == 0)
+        else $error("Simulation model with DOB_REG set to 1 is not working correctly!");
+
    initial begin
 
 

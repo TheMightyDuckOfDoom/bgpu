@@ -23,7 +23,7 @@ report_utilization -hierarchical -hierarchical_percentages
 # Place Design
 place_design -verbose 
 
-phys_opt_design -directive AddRetime
+phys_opt_design -directive AggressiveExplore
 # Route Design
 # route_design -verbose -timing_summary
 # report_timing_summary

@@ -12,7 +12,7 @@ VERIBLE_LINT    ?= verible-verilog-lint
 VERILATOR_FLAGS:= verilator/config.vlt -Wno-UNOPTFLAT -Wno-TIMESCALEMOD
 VERILATOR_ARGS ?= ""
 
-GOWIN_EDA ?= /tools/Gowin/IDE_1.9.11.03_Edu
+GOWIN_EDA ?= /tools/Gowin/IDE_1.9.11.02
 
 # Bender Targets
 BENDER_TARGET_LINT ?= -t sim
@@ -97,6 +97,9 @@ xilinx/vivado.f: $(BENDER_DEPS) vendor/
 xilinx/vivado_impl.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script vivado -t xilinx -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS -D PRIM_ASSERT_SV > $@
 
+xilinx/vivado_sim.f: $(BENDER_DEPS) vendor/
+	$(BENDER) script vivado -t sim -t simulation -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D PRIM_ASSERT_SV -D XSIM > $@
+
 # Generate filelist for Yosys synthesis
 xilinx/yosys.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script flist-plus -t xilinx_yosys -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
@@ -134,6 +137,11 @@ xilinx-vivado-impl: xilinx/out/bgpu.bit
 
 xilinx-program-board: xilinx/out/bgpu.bit
 	openocd -c "source [find interface/ftdi/digilent_jtag_smt2.cfg]; source [find cpld/xilinx-xc7.cfg]; adapter speed 25000; init; pld load 0 xilinx/out/bgpu.bit; shutdown"
+
+xilinx-vivado-sim-%: xilinx/vivado_sim.f $(SRCS) $(TB_SRCS) xilinx/scripts/vivado_sim.tcl xilinx/run_vivado.sh
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $* vivado_sim.tcl
+
+vivado-sim-all: xilinx-vivado-sim-tb_wdata_assembler
 
 ####################################################################################################
 # ASIC Synthesis
@@ -232,6 +240,7 @@ xilinx-clean:
 	rm -f  xilinx/*.log
 	rm -f  xilinx/*.jou
 	rm -f  xilinx/*.txt
+	rm -f  xilinx/*.pb
 	rm -rf xilinx/out
 
 gowin-clean:

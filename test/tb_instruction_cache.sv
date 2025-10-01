@@ -318,7 +318,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("instruction_cache.vcd");
-        $dumpvars(1,i_instruction_cache);
+        $dumpvars();
 
         while (cycles < MaxSimCycles && dec_rsp_count < NumInsts) begin
             @(posedge clk);

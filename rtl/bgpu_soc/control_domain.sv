@@ -420,11 +420,12 @@ module control_domain #(
     always_comb begin : build_bgpu_req_id
         bgpu_req_id = '0;
         bgpu_req_id[1:0] = bgpu_obi_req.a.aid[2:1]; // Lower bit is always 0
-        `ifndef SYNTHESIS
-            assert (bgpu_req_id[0] == 1'b0)
-                else $error("BGPU Request ID lower bit must be 0");
-        `endif
     end : build_bgpu_req_id
+
+    `ifndef SYNTHESIS
+        assert property (@(posedge clk_o) disable iff (!rst_no) bgpu_req_id[0] == 1'b0)
+            else $error("BGPU Request ID lower bit must be 0");
+    `endif
 
     // Convert OBI request to Register Interface
     periph_to_reg #(

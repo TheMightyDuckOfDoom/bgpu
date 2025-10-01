@@ -359,8 +359,9 @@ module load_store_unit import bgpu_pkg::*; #(
                     & 'hffffffff;
             end else begin
                 `ifndef SYNTHESIS
-                    $error("Invalid load width %0d for register width %0d",
-                        selected_buffer_entry.load_width, RegWidthInBytes);
+                    if (selected_buffer_entry.load_width !== 'X)
+                        $error("Invalid load width %0d for register width %0d",
+                            selected_buffer_entry.load_width, RegWidthInBytes);
                 `endif
             end
             /* verilator lint_on WIDTHEXPAND */

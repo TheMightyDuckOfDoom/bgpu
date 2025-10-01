@@ -135,7 +135,7 @@ module BUFGCTRL(
     (* invertible_pin = "IS_IGNORE1_INVERTED" *)
     input IGNORE1);
 
-parameter int    INIT_OUT            = 1'b0;
+parameter int    INIT_OUT            = '0;
 parameter string PRESELECT_I0        = "FALSE";
 parameter string PRESELECT_I1        = "FALSE";
 parameter bit    IS_CE0_INVERTED     = 1'b0;

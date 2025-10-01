@@ -38,10 +38,10 @@ module bgpu_wrapper (
     // #######################################################################################
 
     // Should BGPU use the DDR3 Memory Controller?
-    localparam bit UseMctrl = 1'b0;
+    localparam bit UseMctrl = 1'b1;
 
     localparam int unsigned WarpWidth              = 4;
-    localparam int unsigned ComputeUnitsPerCluster = 1;
+    localparam int unsigned ComputeUnitsPerCluster = 4; //1, 2 work
     localparam int unsigned OutstandingReqIdxWidth = 1;
     localparam int unsigned ComputeClusters        = 1;
     

@@ -165,12 +165,12 @@ module decoder import bgpu_pkg::*; #(
 
     `ifndef SYNTHESIS
         initial assert (EncInstWidth == 32)
-            else $fatal("EncInstWidth must be 32 bits, got %0d", EncInstWidth);
+            else $fatal(1, "EncInstWidth must be 32 bits, got %0d", EncInstWidth);
 
         initial assert (RegIdxWidth == 8)
-            else $fatal("RegIdxWidth must be 8 bits, got %0d", RegIdxWidth);
+            else $fatal(1, "RegIdxWidth must be 8 bits, got %0d", RegIdxWidth);
 
         initial assert (OperandsPerInst == 2)
-            else $fatal("OperandsPerInst must be 2, got %0d", OperandsPerInst);
+            else $fatal(1, "OperandsPerInst must be 2, got %0d", OperandsPerInst);
     `endif
 endmodule : decoder

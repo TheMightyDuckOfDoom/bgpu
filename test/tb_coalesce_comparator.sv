@@ -112,11 +112,13 @@ module tb_coalesce_comparator #(
                     member_block_offsets[j]);
             end
 
-            assert((|req.valid) -> ($countones(members) > 0))
-                else $error("No members found for valid request");
-
-            assert(req.valid == '0 -> members == '0)
-                else $error("Members should be zero for invalid requests");
+            if (|req.valid) begin
+                assert($countones(members) > 0)
+                    else $error("No members found for valid request");
+            end else begin
+                assert(members == '0)
+                    else $error("Members should be zero for invalid requests");
+            end
 
             coalesced_match_count = 0;
             for (int j = 0; j < NumRequests; j++) begin
@@ -125,15 +127,19 @@ module tb_coalesce_comparator #(
                     else $error("Member block offset %0h does not match request address %0h",
                         member_block_offsets[j], req.addr[j][BlockIdxbits-1:0]);
 
-                assert(req.valid[j] && req.addr[j][AddressWidth-1:BlockIdxbits] == coalesced_addr
-                        -> members[j])
-                    else $error("Member %0d is in coalesced address %0h, but members[%0d] is %0d",
-                        j, coalesced_addr, j, members[j]);
+                if (req.valid[j] && req.addr[j][AddressWidth-1:BlockIdxbits] == coalesced_addr)
+                begin
+                    assert(members[j])
+                        else $error("Member %0d in coalesced address %0h, but members[%0d] is %0d",
+                            j, coalesced_addr, j, members[j]);
+                end
 
-                assert(req.valid[j] && req.addr[j][AddressWidth-1:BlockIdxbits] != coalesced_addr
-                        -> !members[j])
-                    else $error("Member %0d is not in coalesced addr %0h, but members[%0d] is %0d",
-                        j, coalesced_addr, j, members[j]);
+                if (req.valid[j] && req.addr[j][AddressWidth-1:BlockIdxbits] != coalesced_addr)
+                begin
+                    assert(!members[j])
+                        else $error("Member %0d not in coalesced addr %0h, but members[%0d] is %0d",
+                            j, coalesced_addr, j, members[j]);
+                end
 
                 if (req.valid[j] && req.addr[j][AddressWidth-1:BlockIdxbits] == coalesced_addr)
                 begin

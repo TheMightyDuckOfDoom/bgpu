@@ -564,7 +564,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("cc.vcd");
-        $dumpvars(1,i_cu);
+        $dumpvars();
 
         while(1) begin
             @(posedge clk);

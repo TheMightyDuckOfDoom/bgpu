@@ -179,7 +179,7 @@ module riscv_dbg_simple_bgpu #(
 
   localparam int unsigned DMIWidth = $bits(dm::dmi_req_t);
 
-  jtag_driver_simple #(
+  jtag_driver_simple_bgpu #(
     .IrLength ( IrLength ),
     .TA       ( TA       ),
     .TT       ( TT       )

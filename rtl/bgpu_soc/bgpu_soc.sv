@@ -24,7 +24,7 @@ module bgpu_soc #(
     /// Number of Compute Clusters
     parameter int unsigned ComputeClusters = 1,
     /// Number of Compute Units per Cluster
-    parameter int unsigned ComputeUnitsPerCluster = 1,
+    parameter int unsigned ComputeUnitsPerCluster = 2,
     /// Encoded instruction width, has to be 32
     parameter int unsigned EncInstWidth = 32,
     /// Width of the Program Counter in instructions
@@ -686,7 +686,7 @@ module bgpu_soc #(
         // Tie off external memory controller interface
         assign mctrl_axi_req_o = '0;
 
-        localparam int unsigned DummyMemAddressWidth = 10;
+        localparam int unsigned DummyMemAddressWidth = 12;
         logic [DummyMemAddressWidth-1:0] mem_addr;
 
         logic        mem_req,   mem_we,   mem_rvalid;

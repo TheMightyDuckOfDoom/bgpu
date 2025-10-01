@@ -229,7 +229,7 @@ module tb_thread_dispatcher #(
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("thread_dispatcher.vcd");
-        $dumpvars(1,i_thread_dispatcher);
+        $dumpvars();
 
         @(posedge clk);
         wait(!rst_n);

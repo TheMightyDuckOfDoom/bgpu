@@ -144,8 +144,8 @@ module tc_sram #(
                 // See AMD UG473 for details
                 // Needed to add DONT_TOUCH as phys_opt_design somehow broke the design without it
                 (* DONT_TOUCH = "yes" *) RAMB36E1 #(
-                    .DOA_REG          ( 1             ),
-                    .DOB_REG          ( 1             ),
+                    .DOA_REG          ( 0             ),
+                    .DOB_REG          ( 0             ),
                     .EN_ECC_READ      ( "FALSE"       ),
                     .EN_ECC_WRITE     ( "FALSE"       ),
                     .INIT_A           ( '0            ),
@@ -353,7 +353,7 @@ module tc_sram #(
 // Validate parameters.
 `ifndef SYNTHESIS
   initial begin: p_assertions
-    assert (SimInit inside {"zeros", "ones"})
+    assert ((SimInit == "zeros") || (SimInit == "ones"))
         else $fatal(1, "The Gowin `tc_sram` has fixed SimInit: 'zeros' or 'ones'");
     assert ($bits(addr_i)  == NumPorts * AddrWidth)
         else $fatal(1, "AddrWidth problem on `addr_i`");

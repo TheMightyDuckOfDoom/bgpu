@@ -42,6 +42,8 @@ module tb_register_file_bank #(
         we_mask_t we_mask;
     } write_req_t;
 
+    localparam addr_t MaxAddr = NumRegisters[$clog2(NumRegisters)-1:0] - 'd1;
+
     // #######################################################################################
     // # Signals                                                                           #
     // #######################################################################################
@@ -52,13 +54,13 @@ module tb_register_file_bank #(
     // Write port
     logic write_valid_mst, write_valid_sub, write_ready_mst, write_ready_sub;
     write_req_t write_req;
-    addr_t write_addr_rand, write_addr;
+    addr_t write_addr;
     warp_data_t write_data;
 
     // Read port
     logic read_valid, read_ready, read_out_valid;
     read_req_t read_req;
-    addr_t read_addr_rand, read_addr;
+    addr_t read_addr;
     tag_t read_tag, read_out_tag;
     warp_data_t read_out_data;
 
@@ -123,9 +125,16 @@ module tb_register_file_bank #(
         .ready_i( write_ready_mst )
     );
 
-    assign write_addr_rand = write_req.addr;
-    assign write_addr      = write_addr_rand % NumRegisters[$clog2(NumRegisters)-1:0];
-    assign write_data      = write_req.data;
+    always_comb begin : gen_write_addr
+        write_addr = write_req.addr;
+        /* verilator lint_off CMPCONST */
+        if (write_addr > MaxAddr) begin
+        /* verilator lint_on CMPCONST */
+            write_addr = write_addr % MaxAddr;
+        end
+    end : gen_write_addr
+
+    assign write_data = write_req.data;
 
     // Read port
     rand_stream_mst #(
@@ -142,9 +151,16 @@ module tb_register_file_bank #(
         .ready_i( read_ready )
     );
 
-    assign read_addr_rand = read_req.addr;
-    assign read_addr      = read_addr_rand % NumRegisters[$clog2(NumRegisters)-1:0];
-    assign read_tag       = read_req.tag;
+    always_comb begin : gen_read_addr
+        read_addr = read_req.addr;
+        /* verilator lint_off CMPCONST */
+        if (read_addr > MaxAddr) begin
+        /* verilator lint_on CMPCONST */
+            read_addr = read_addr % MaxAddr;
+        end
+    end : gen_read_addr
+
+    assign read_tag = read_req.tag;
 
     // Prevent write port from writing to the same address as the read port
     always_comb begin
@@ -173,7 +189,7 @@ module tb_register_file_bank #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             /* verilator lint_off WIDTHCONCAT */
-            golden_mem <= '1;
+            golden_mem <= '0;
             /* verilator lint_on WIDTHCONCAT */
         end else begin
             // Write handshake
@@ -234,26 +250,26 @@ module tb_register_file_bank #(
 
     // Check read valids
     assert property (@(posedge clk) disable iff (!rst_n)
-        (read_out_valid || golden_read_valid) -> (read_out_valid == golden_read_valid)
+        (read_out_valid || golden_read_valid) |-> (read_out_valid == golden_read_valid)
     ) else $error("Read valid mismatch: DUT %b, Golden %b",
             read_out_valid, golden_read_valid);
 
     // Check read tags
     assert property (@(posedge clk) disable iff (!rst_n)
-        (read_out_valid || golden_read_valid) -> (read_out_tag == golden_read_tag)
+        (read_out_valid || golden_read_valid) |-> (read_out_tag == golden_read_tag)
     ) else $error("Read tag mismatch: DUT %b, Golden %b",
             read_out_tag, golden_read_tag);
 
     // Check read data
     assert property (@(posedge clk) disable iff (!rst_n)
-        (read_out_valid || golden_read_valid) -> (read_out_data == golden_read_data)
+        (read_out_valid || golden_read_valid) |-> (read_out_data == golden_read_data)
     ) else $error("Read data mismatch: DUT %h, Golden %h",
             read_out_data, golden_read_data);
 
     if (!DualPort) begin : gen_single_port_read_write_assertions
         assert property (@(posedge clk) disable iff (!rst_n)
             (read_valid && read_ready) && (write_valid_sub && write_ready_mst)
-            -> (read_addr != write_addr)
+            |-> (read_addr != write_addr)
         ) else $error("Read and write ports access the same address: read addr %0h, write addr %0h",
                 read_addr, write_addr);
     end : gen_single_port_read_write_assertions
@@ -280,7 +296,7 @@ module tb_register_file_bank #(
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("register_file_bank.vcd");
-        $dumpvars(1,i_register_file_bank);
+        $dumpvars();
         $display("Simulation started, running for %0d cycles", MaxSimCycles);
 
         while(cycles < MaxSimCycles) begin

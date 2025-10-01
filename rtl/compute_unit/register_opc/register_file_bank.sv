@@ -77,6 +77,9 @@ module register_file_bank #(
     // Write mask as byte enable
     be_t write_mask_be;
 
+    // Read tag
+    tag_t read_tag_d, read_tag_q;
+
     // #######################################################################################
     // # Combinational logic                                                                 #
     // #######################################################################################
@@ -102,6 +105,7 @@ module register_file_bank #(
         assign mem_be   [0] = '1;
         assign read_ready_o = 1'b1;
         assign read_valid_d = read_valid_i;
+        assign read_tag_d   = read_tag_i;
 
         // Port 1: Write port
         assign mem_req  [1]  = write_valid_i;
@@ -128,6 +132,8 @@ module register_file_bank #(
             // We have not started a read yet
             read_valid_d = 1'b0;
 
+            read_tag_d = read_tag_q;
+
             // Write has priority over read
             if (write_valid_i) begin
                 // Write request
@@ -146,6 +152,7 @@ module register_file_bank #(
                 mem_addr [0] = read_addr_i;
                 mem_be   [0] = '1;
                 read_valid_d = 1'b1;
+                read_tag_d   = read_tag_i;
 
                 // Write is not ready
                 write_ready_o = 1'b0;
@@ -156,13 +163,15 @@ module register_file_bank #(
     // Read data comes one cycle later from the memory
     assign read_data_o = mem_rdata[0];
 
+    assign read_tag_o = read_tag_q;
+
     // #######################################################################################
     // # Sequential logic                                                                    #
     // #######################################################################################
 
     // Delay read valid and tag by one cycle
     `FF(read_valid_o, read_valid_d, '0, clk_i, rst_ni)
-    `FF(read_tag_o,   read_tag_i,   '0, clk_i, rst_ni)
+    `FF(read_tag_q,   read_tag_d,   '0, clk_i, rst_ni)
 
     // #######################################################################################
     // # Memory                                                                              #
@@ -174,7 +183,7 @@ module register_file_bank #(
         .ByteWidth  ( 8                         ),
         .NumPorts   ( NumPorts                  ),
         .Latency    ( 1                         ),
-        .SimInit    ( "ones"                    ),
+        .SimInit    ( "zeros"                   ),
         .PrintSimCfg( 1'b1                      ),
         .ImplKey    ( "register_file_bank"      )
     ) i_tc_sram (

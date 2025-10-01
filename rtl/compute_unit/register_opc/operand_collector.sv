@@ -215,7 +215,7 @@ module operand_collector import bgpu_pkg::*; #(
     `ifndef SYNTHESIS
         for (genvar i = 0; i < OperandsPerInst; i++) begin : gen_operand_assertions
             // Assert that we do not request an operand if we are not occupied
-            assert property (@(posedge clk_i) !common_q.occupied |-> !opc_read_req_valid_o[i])
+            assert property (@(posedge clk_i) opc_read_req_valid_o[i] |-> common_q.occupied)
                 else $error("Operand %0d requested while not occupied", i);
 
             // Assert that we do not receive an operand if we are not occupied or have not requested it or are already ready

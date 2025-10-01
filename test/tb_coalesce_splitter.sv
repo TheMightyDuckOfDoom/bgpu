@@ -352,7 +352,7 @@ module tb_coalesce_splitter #(
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
         $dumpfile("coalesce_splitter.vcd");
-        $dumpvars(1,i_coalesce_splitter);
+        $dumpvars();
 
         @(posedge clk);
         wait(!rst_n);
