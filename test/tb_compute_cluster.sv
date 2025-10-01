@@ -79,7 +79,6 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     typedef logic [   BlockAddrWidth-1:0] block_addr_t;
     typedef logic [       BlockWidth-1:0] block_mask_t;
     typedef logic [  BlockWidth * 8 -1:0] block_data_t;
-    typedef logic [      ICAddrWidth-1:0] imem_addr_t;
     typedef logic [     AddressWidth-1:0] addr_t;
     typedef logic [    TblockIdxBits-1:0] tblock_idx_t;
     typedef logic [     TgroupIdBits-1:0] tgroup_id_t;
@@ -106,12 +105,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     typedef logic [ImemAxiIdWidth-1:0] imem_axi_id_t;
     typedef logic [MemAxiIdWidth -1:0] mem_axi_id_t;
 
-    localparam int unsigned ImemAxiAddrWidth = PcWidth + $clog2($bits(enc_inst_t) / 8);
-    typedef logic [ImemAxiAddrWidth-1:0] imem_axi_addr_t;
-
-    `AXI_TYPEDEF_ALL(imem_axi, imem_axi_addr_t, imem_axi_id_t, imem_data_t, imem_data_strb_t,
+    `AXI_TYPEDEF_ALL(imem_axi, addr_t, imem_axi_id_t, imem_data_t, imem_data_strb_t,
         logic)
-
 
     `AXI_TYPEDEF_ALL(mem_axi, addr_t, mem_axi_id_t, block_data_t, block_mask_t, logic)
 
@@ -426,14 +421,14 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         for (int unsigned i = 0; i < $size(test_program); i++) begin
             inst = test_program[i];
             for (int unsigned b = 0; b < $bits(enc_inst_t) / 8; b++) begin
-                i_imem.mem[imem_axi_addr_t'((i * $bits(enc_inst_t) / 8) + b)] = inst[b * 8 +: 8];
+                i_imem.mem[addr_t'((i * $bits(enc_inst_t) / 8) + b)] = inst[b * 8 +: 8];
             end
         end
     end : init_imem
 
     // Instruction Memory
     axi_sim_mem #(
-        .AddrWidth        ( ImemAxiAddrWidth   ),
+        .AddrWidth        ( AddressWidth       ),
         .DataWidth        ( $bits(imem_data_t) ),
         .IdWidth          ( ImemAxiIdWidth     ),
         .UserWidth        ( 1                  ),
@@ -496,18 +491,18 @@ module tb_compute_cluster import bgpu_pkg::*; #(
 
     // Data Memory
     axi_sim_mem #(
-        .AddrWidth        ( AddressWidth        ),
-        .DataWidth        ( BlockWidth * 8      ),
-        .IdWidth          ( MemAxiIdWidth       ),
-        .UserWidth        ( 1                   ),
-        .NumPorts         ( 1                   ),
-        .axi_req_t        ( mem_axi_req_t       ),
-        .axi_rsp_t        ( mem_axi_resp_t      ),
-        .WarnUninitialized( 1'b1                ),
-        .UninitializedData( "ones"              ),
-        .ClearErrOnAccess ( 1'b0                ),
-        .ApplDelay        ( ApplDelay           ),
-        .AcqDelay         ( AcqDelay            )
+        .AddrWidth        ( AddressWidth   ),
+        .DataWidth        ( BlockWidth * 8 ),
+        .IdWidth          ( MemAxiIdWidth  ),
+        .UserWidth        ( 1              ),
+        .NumPorts         ( 1              ),
+        .axi_req_t        ( mem_axi_req_t  ),
+        .axi_rsp_t        ( mem_axi_resp_t ),
+        .WarnUninitialized( 1'b1           ),
+        .UninitializedData( "ones"         ),
+        .ClearErrOnAccess ( 1'b0           ),
+        .ApplDelay        ( ApplDelay      ),
+        .AcqDelay         ( AcqDelay       )
     ) i_mem (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),

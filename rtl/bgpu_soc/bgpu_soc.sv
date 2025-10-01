@@ -24,11 +24,11 @@ module bgpu_soc #(
     /// Number of Compute Clusters
     parameter int unsigned ComputeClusters = 1,
     /// Number of Compute Units per Cluster
-    parameter int unsigned ComputeUnitsPerCluster = 2,
+    parameter int unsigned ComputeUnitsPerCluster = 1,
     /// Encoded instruction width, has to be 32
     parameter int unsigned EncInstWidth = 32,
     /// Width of the Program Counter in instructions
-    parameter int unsigned PcWidth = MctrlAddressWidth - $clog2(EncInstWidth),
+    parameter int unsigned PcWidth = MctrlAddressWidth - $clog2(EncInstWidth / 8),
     /// Number of warps per compute unit
     parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
@@ -91,10 +91,6 @@ module bgpu_soc #(
     localparam int unsigned ImemDataWidth    = (1 << IClineIdxBits) * EncInstWidth;
     // I-Cacheline width in bytes
     localparam int unsigned ImemAxiStrbWidth = ImemDataWidth / 8;
-    // Address in I-Cachelines
-    localparam int unsigned ImemAddrWidth    = PcWidth - IClineIdxBits;
-    // Address in bytes
-    localparam int unsigned ImemAxiAddrWidth = PcWidth + $clog2(EncInstWidth / 8);
     // AXI ID width for the Compute Cluster IMEM
     localparam int unsigned ImemCcAxiIdWidth = ComputeUnitsPerCluster > 1
                                                 ? $clog2(ComputeUnitsPerCluster) + 1 : 1;
@@ -132,7 +128,6 @@ module bgpu_soc #(
     typedef logic [ TgroupIdBits-1:0] tgroup_id_t;
 
     // Data Memory Types
-    typedef logic [ BlockAddrWidth-1:0] block_addr_t;
     typedef logic [     BlockWidth-1:0] block_mask_t;
     typedef logic [ BlockWidth * 8-1:0] block_data_t;
     typedef logic [MemCcAxiIdWidth-1:0] mem_cc_axi_id_t;
@@ -145,25 +140,23 @@ module bgpu_soc #(
     `AXI_TYPEDEF_ALL(mem_axi, addr_t, mem_axi_id_t, block_data_t, block_mask_t, logic)
 
     // Instruction Memory Types
-    typedef logic [ImemAddrWidth-1:0] imem_addr_t;
     typedef logic [ImemDataWidth-1:0] imem_data_t;
 
     typedef logic [ImemAxiStrbWidth-1:0] imem_data_strb_t;
-    typedef logic [ImemAxiAddrWidth-1:0] imem_axi_addr_t;
 
     typedef logic [ImemCcAxiIdWidth-1:0] imem_cc_axi_id_t;
     typedef logic [  ImemAxiIdWidth-1:0] imem_axi_id_t;
 
     // Compute Cluster Instruction Memory AXI types
-    `AXI_TYPEDEF_ALL(cc_imem_axi, imem_axi_addr_t, imem_cc_axi_id_t, imem_data_t, imem_data_strb_t,
+    `AXI_TYPEDEF_ALL(cc_imem_axi, addr_t, imem_cc_axi_id_t, imem_data_t, imem_data_strb_t,
         logic)
 
     // Instruction Memory AXI types
-    `AXI_TYPEDEF_ALL(imem_axi, imem_axi_addr_t, imem_axi_id_t, imem_data_t, imem_data_strb_t,
+    `AXI_TYPEDEF_ALL(imem_axi, addr_t, imem_axi_id_t, imem_data_t, imem_data_strb_t,
         logic)
 
     // Instruction Memory AXI types with same ID width as the data memory
-    `AXI_TYPEDEF_ALL(imem_lid_axi, imem_axi_addr_t, mem_axi_id_t, imem_data_t, imem_data_strb_t,
+    `AXI_TYPEDEF_ALL(imem_lid_axi, addr_t, mem_axi_id_t, imem_data_t, imem_data_strb_t,
         logic)
 
     // Memory Controller types
@@ -414,6 +407,42 @@ module bgpu_soc #(
             .mem_req_o( cc_mem_axi_req[i] ),
             .mem_rsp_i( cc_mem_axi_rsp[i] )
         );
+
+    `ifndef SYNTHESIS
+            axi_dumper #(
+                .BusName   ( $sformatf("mem_cc%0d", i) ),
+                .LogAW     ( 1'b1              ),
+                .LogAR     ( 1'b1              ),
+                .LogW      ( 1'b1              ),
+                .LogB      ( 1'b1              ),
+                .LogR      ( 1'b1              ),
+                .axi_req_t ( cc_mem_axi_req_t  ),
+                .axi_resp_t( cc_mem_axi_resp_t )
+            ) i_mem_monitor (
+                .clk_i ( clk   ),
+                .rst_ni( rst_n ),
+
+                .axi_req_i ( cc_mem_axi_req[i] ),
+                .axi_resp_i( cc_mem_axi_rsp[i] )
+            );
+
+            axi_dumper #(
+                .BusName   ( $sformatf("imem_cc%0d", i) ),
+                .LogAW     ( 1'b1               ),
+                .LogAR     ( 1'b1               ),
+                .LogW      ( 1'b1               ),
+                .LogB      ( 1'b1               ),
+                .LogR      ( 1'b1               ),
+                .axi_req_t ( cc_imem_axi_req_t  ),
+                .axi_resp_t( cc_imem_axi_resp_t )
+            ) i_imem_monitor (
+                .clk_i ( clk   ),
+                .rst_ni( rst_n ),
+
+                .axi_req_i ( cc_imem_axi_req[i] ),
+                .axi_resp_i( cc_imem_axi_rsp[i] )
+            );
+        `endif
     end : gen_compute_clusters
 
     // #######################################################################################
@@ -459,8 +488,25 @@ module bgpu_soc #(
     // TODO: Here we could place a data cache
 
     // Adjust Data width to match the memory controller
-    // initial if(BlockWidth * 8 != MctrlWidth)
-    //     $error("Block width (%0d) != Mctrl width (%0d), breaks yosys post_synth sim", BlockWidth * 8, MctrlWidth);
+
+    `ifndef SYNTHESIS
+        axi_dumper #(
+            .BusName   ( "mem"          ),
+            .LogAW     ( 1'b1           ),
+            .LogAR     ( 1'b1           ),
+            .LogW      ( 1'b1           ),
+            .LogB      ( 1'b1           ),
+            .LogR      ( 1'b1           ),
+            .axi_req_t ( mem_axi_req_t  ),
+            .axi_resp_t( mem_axi_resp_t )
+        ) i_mem_monitor (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
+
+            .axi_req_i ( mem_axi_req ),
+            .axi_resp_i( mem_axi_rsp )
+        );
+    `endif
 
     axi_dw_converter #(
         .AxiMaxReads        ( ComputeClusters         ),
@@ -489,6 +535,25 @@ module bgpu_soc #(
         .mst_req_o ( mem_mctrl_axi_req ),
         .mst_resp_i( mem_mctrl_axi_rsp )
     );
+
+    `ifndef SYNTHESIS
+        axi_dumper #(
+            .BusName   ( "mem_mctrl"          ),
+            .LogAW     ( 1'b1                 ),
+            .LogAR     ( 1'b1                 ),
+            .LogW      ( 1'b1                 ),
+            .LogB      ( 1'b1                 ),
+            .LogR      ( 1'b1                 ),
+            .axi_req_t ( mctrl_mem_axi_req_t  ),
+            .axi_resp_t( mctrl_mem_axi_resp_t )
+        ) i_mem_mctrl_monitor (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
+
+            .axi_req_i ( mem_mctrl_axi_req ),
+            .axi_resp_i( mem_mctrl_axi_rsp )
+        );
+    `endif
 
     // #######################################################################################
     // # Compute Cluster Instruction Memory Interconnect                                     #
@@ -528,6 +593,25 @@ module bgpu_soc #(
         .mst_req_o ( imem_axi_req ),
         .mst_resp_i( imem_axi_rsp )
     );
+
+    `ifndef SYNTHESIS
+        axi_dumper #(
+            .BusName   ( "imem"          ),
+            .LogAW     ( 1'b1            ),
+            .LogAR     ( 1'b1            ),
+            .LogW      ( 1'b1            ),
+            .LogB      ( 1'b1            ),
+            .LogR      ( 1'b1            ),
+            .axi_req_t ( imem_axi_req_t  ),
+            .axi_resp_t( imem_axi_resp_t )
+        ) i_imem_monitor (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
+
+            .axi_req_i ( imem_axi_req ),
+            .axi_resp_i( imem_axi_rsp )
+        );
+    `endif
 
     // Increase the ID width of the instruction memory AXI to match the data memory
     axi_id_prepend #(
@@ -588,6 +672,25 @@ module bgpu_soc #(
         .mst_r_readies_o( imem_lid_axi_req.r_ready )
     );
 
+    `ifndef SYNTHESIS
+        axi_dumper #(
+            .BusName   ( "imem_lid"          ),
+            .LogAW     ( 1'b1                ),
+            .LogAR     ( 1'b1                ),
+            .LogW      ( 1'b1                ),
+            .LogB      ( 1'b1                ),
+            .LogR      ( 1'b1                ),
+            .axi_req_t ( imem_lid_axi_req_t  ),
+            .axi_resp_t( imem_lid_axi_resp_t )
+        ) i_imem_lid_monitor (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
+
+            .axi_req_i ( imem_lid_axi_req ),
+            .axi_resp_i( imem_lid_axi_rsp )
+        );
+    `endif
+
     // TODO: Here we could place an instruction cache
 
     // Adjust Data width to match the memory controller
@@ -595,7 +698,7 @@ module bgpu_soc #(
         .AxiMaxReads        ( ComputeClusters         ),
         .AxiSlvPortDataWidth( ImemDataWidth           ),
         .AxiMstPortDataWidth( MctrlWidth              ),
-        .AxiAddrWidth       ( ImemAddrWidth           ),
+        .AxiAddrWidth       ( AddressWidth            ),
         .AxiIdWidth         ( MemAxiIdWidth           ),
         .aw_chan_t          ( mctrl_mem_axi_aw_chan_t ),
         .mst_w_chan_t       ( mctrl_mem_axi_w_chan_t  ),
@@ -618,6 +721,25 @@ module bgpu_soc #(
         .mst_req_o ( imem_mctrl_axi_req ),
         .mst_resp_i( imem_mctrl_axi_rsp )
     );
+
+    `ifndef SYNTHESIS
+        axi_dumper #(
+            .BusName   ( "imem_mctrl"         ),
+            .LogAW     ( 1'b1                 ),
+            .LogAR     ( 1'b1                 ),
+            .LogW      ( 1'b1                 ),
+            .LogB      ( 1'b1                 ),
+            .LogR      ( 1'b1                 ),
+            .axi_req_t ( mctrl_mem_axi_req_t  ),
+            .axi_resp_t( mctrl_mem_axi_resp_t )
+        ) i_imem_mctrl_monitor (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
+
+            .axi_req_i ( imem_mctrl_axi_req ),
+            .axi_resp_i( imem_mctrl_axi_rsp )
+        );
+    `endif
 
     // #######################################################################################
     // # Memory Controller Interconnect                                                      #
@@ -678,8 +800,44 @@ module bgpu_soc #(
         .axi_resp_i( mctrl_axi_rsp )
     );
 `endif
+
     if (ExtMctrl) begin : gen_external_mctrl
-        assign mctrl_axi_req_o = mctrl_axi_req;
+        // External Memory Controller Request (with MctrlAddressWidth)
+        assign mctrl_axi_req_o.ar_valid = mctrl_axi_req.ar_valid;
+        assign mctrl_axi_req_o.aw_valid = mctrl_axi_req.aw_valid;
+        assign mctrl_axi_req_o.w_valid  = mctrl_axi_req.w_valid;
+
+        assign mctrl_axi_req_o.ar.id     = mctrl_axi_req.ar.id;
+        assign mctrl_axi_req_o.ar.addr   = mctrl_axi_req.ar.addr[MctrlAddressWidth-1:0];
+        assign mctrl_axi_req_o.ar.len    = mctrl_axi_req.ar.len;
+        assign mctrl_axi_req_o.ar.size   = mctrl_axi_req.ar.size;
+        assign mctrl_axi_req_o.ar.burst  = mctrl_axi_req.ar.burst;
+        assign mctrl_axi_req_o.ar.lock   = mctrl_axi_req.ar.lock;
+        assign mctrl_axi_req_o.ar.cache  = mctrl_axi_req.ar.cache;
+        assign mctrl_axi_req_o.ar.prot   = mctrl_axi_req.ar.prot;
+        assign mctrl_axi_req_o.ar.qos    = mctrl_axi_req.ar.qos;
+        assign mctrl_axi_req_o.ar.region = mctrl_axi_req.ar.region;
+        assign mctrl_axi_req_o.ar.user   = mctrl_axi_req.ar.user;
+
+        assign mctrl_axi_req_o.aw.id     = mctrl_axi_req.aw.id;
+        assign mctrl_axi_req_o.aw.addr   = mctrl_axi_req.aw.addr[MctrlAddressWidth-1:0];
+        assign mctrl_axi_req_o.aw.len    = mctrl_axi_req.aw.len;
+        assign mctrl_axi_req_o.aw.size   = mctrl_axi_req.aw.size;
+        assign mctrl_axi_req_o.aw.burst  = mctrl_axi_req.aw.burst;
+        assign mctrl_axi_req_o.aw.lock   = mctrl_axi_req.aw.lock;
+        assign mctrl_axi_req_o.aw.cache  = mctrl_axi_req.aw.cache;
+        assign mctrl_axi_req_o.aw.prot   = mctrl_axi_req.aw.prot;
+        assign mctrl_axi_req_o.aw.qos    = mctrl_axi_req.aw.qos;
+        assign mctrl_axi_req_o.aw.region = mctrl_axi_req.aw.region;
+        assign mctrl_axi_req_o.aw.atop   = mctrl_axi_req.aw.atop;
+        assign mctrl_axi_req_o.aw.user   = mctrl_axi_req.aw.user;
+
+        assign mctrl_axi_req_o.w = mctrl_axi_req.w;
+
+        assign mctrl_axi_req_o.b_ready = mctrl_axi_req.b_ready;
+        assign mctrl_axi_req_o.r_ready = mctrl_axi_req.r_ready;
+
+        // External Memory Controller Response
         assign mctrl_axi_rsp   = mctrl_axi_rsp_i;
     end : gen_external_mctrl
     else begin : gen_dummy_memory

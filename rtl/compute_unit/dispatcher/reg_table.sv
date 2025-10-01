@@ -48,7 +48,7 @@ module reg_table #(
 
     // Regsiter Table Entry
     typedef struct packed {
-        subwarp_id_t subwarp_id; // TODO: Handle this properly
+        subwarp_id_t subwarp_id;
         reg_idx_t    dst;
         tag_t        producer;
     } reg_table_entry_t;

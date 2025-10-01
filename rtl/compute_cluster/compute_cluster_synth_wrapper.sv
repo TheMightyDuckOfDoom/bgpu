@@ -48,7 +48,6 @@ module compute_cluster_synth_wrapper #(
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned ImemAxiIdWidth = ComputeUnits > 1 ? $clog2(ComputeUnits) + 1 : 1,
-    parameter int unsigned ImemAxiAddrWidth = PcWidth + $clog2(EncInstWidth / 8),
 
     parameter int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
     parameter int unsigned MemAxiIdWidth = $clog2(ComputeUnits) + OutstandingReqIdxWidth
@@ -56,7 +55,6 @@ module compute_cluster_synth_wrapper #(
     parameter int unsigned BlockWidth = 1 << BlockIdxBits,
 
     parameter type imem_axi_id_t   = logic [ImemAxiIdWidth-1:0],
-    parameter type imem_axi_addr_t = logic [ImemAxiAddrWidth-1:0],
 
     parameter type imem_data_strb_t = logic [EncInstWidth * (1 << IClineIdxBits) / 8-1:0],
     parameter type imem_data_t      = logic [EncInstWidth * (1 << IClineIdxBits)    -1:0],
@@ -98,7 +96,7 @@ module compute_cluster_synth_wrapper #(
 
     /// Instruction Memory AXI Request and Response
     output imem_axi_id_t     imem_axi_ar_id_o,
-    output imem_axi_addr_t   imem_axi_ar_addr_o,
+    output addr_t            imem_axi_ar_addr_o,
     output axi_pkg::len_t    imem_axi_ar_len_o,
     output axi_pkg::size_t   imem_axi_ar_size_o,
     output axi_pkg::burst_t  imem_axi_ar_burst_o,
@@ -120,7 +118,7 @@ module compute_cluster_synth_wrapper #(
     output logic           imem_axi_r_ready_o,
 
     output imem_axi_id_t     imem_axi_aw_id_o,
-    output imem_axi_addr_t   imem_axi_aw_addr_o,
+    output addr_t            imem_axi_aw_addr_o,
     output axi_pkg::len_t    imem_axi_aw_len_o,
     output axi_pkg::size_t   imem_axi_aw_size_o,
     output axi_pkg::burst_t  imem_axi_aw_burst_o,
@@ -199,7 +197,7 @@ module compute_cluster_synth_wrapper #(
     output logic           mem_axi_b_ready_o
 );
 
-    `AXI_TYPEDEF_ALL(imem_axi, imem_axi_addr_t, imem_axi_id_t, imem_data_t, imem_data_strb_t,
+    `AXI_TYPEDEF_ALL(imem_axi, addr_t, imem_axi_id_t, imem_data_t, imem_data_strb_t,
         logic)
 
     `AXI_TYPEDEF_ALL(mem_axi, addr_t, mem_axi_id_t, block_data_t, block_mask_t, logic)

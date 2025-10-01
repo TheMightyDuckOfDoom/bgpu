@@ -109,8 +109,6 @@ module compute_cluster #(
     localparam int unsigned ImemAxiStrbWidth = ImemDataWidth / 8;
     // Address in I-Cachelines
     localparam int unsigned ImemAddrWidth    = PcWidth - IClineIdxBits;
-    // Address in bytes
-    localparam int unsigned ImemAxiAddrWidth = PcWidth + $clog2(EncInstWidth / 8);
     // AXI ID width for the Compute Cluster IMEM
     localparam int unsigned ImemCcAxiIdWidth = ComputeUnits > 1 ? $clog2(ComputeUnits) + 1 : 1;
 
@@ -139,13 +137,12 @@ module compute_cluster #(
     typedef logic [ImemDataWidth-1:0] imem_data_t;
 
     typedef logic [ImemAxiStrbWidth-1:0] imem_data_strb_t;
-    typedef logic [ImemAxiAddrWidth-1:0] imem_axi_addr_t;
 
     typedef logic [ImemCcAxiIdWidth-1:0] imem_cc_axi_id_t;
 
-    `AXI_TYPEDEF_ALL(cu_imem_axi, imem_axi_addr_t, logic[0:0],       imem_data_t, imem_data_strb_t,
+    `AXI_TYPEDEF_ALL(cu_imem_axi, addr_t, logic[0:0],       imem_data_t, imem_data_strb_t,
         logic)
-    `AXI_TYPEDEF_ALL(cc_imem_axi, imem_axi_addr_t, imem_cc_axi_id_t, imem_data_t, imem_data_strb_t,
+    `AXI_TYPEDEF_ALL(cc_imem_axi, addr_t, imem_cc_axi_id_t, imem_data_t, imem_data_strb_t,
         logic)
 
     typedef logic [MemCcAxiIdWidth-1:0] mem_cc_axi_id_t;
@@ -261,6 +258,25 @@ module compute_cluster #(
             .axi_req_o( cu_mem_axi_req[cu] ),
             .axi_rsp_i( cu_mem_axi_rsp[cu] )
         );
+
+        `ifndef SYNTHESIS
+            axi_dumper #(
+                .BusName   ( $sformatf("mem_cc%0d_cu%0d", ClusterId, cu) ),
+                .LogAW     ( 1'b1              ),
+                .LogAR     ( 1'b1              ),
+                .LogW      ( 1'b1              ),
+                .LogB      ( 1'b1              ),
+                .LogR      ( 1'b1              ),
+                .axi_req_t ( cu_mem_axi_req_t  ),
+                .axi_resp_t( cu_mem_axi_resp_t )
+            ) i_mem_monitor (
+                .clk_i ( clk_i  ),
+                .rst_ni( rst_ni ),
+
+                .axi_req_i ( cu_mem_axi_req[cu] ),
+                .axi_resp_i( cu_mem_axi_rsp[cu] )
+            );
+        `endif
     end : gen_mem_to_axi
 
     // #######################################################################################
@@ -306,7 +322,7 @@ module compute_cluster #(
         imem_to_axi #(
             .axi_req_t  ( cu_imem_axi_req_t  ),
             .axi_rsp_t  ( cu_imem_axi_resp_t ),
-            .axi_addr_t ( imem_axi_addr_t    ),
+            .axi_addr_t ( addr_t             ),
             .imem_addr_t( imem_addr_t        ),
             .imem_data_t( imem_data_t        )
         ) i_imem_to_axi (
@@ -323,6 +339,25 @@ module compute_cluster #(
             .axi_req_o( cu_imem_axi_req[cu] ),
             .axi_rsp_i( cu_imem_axi_rsp[cu] )
         );
+
+        `ifndef SYNTHESIS
+            axi_dumper #(
+                .BusName   ( $sformatf("imem_cc%0d_cu%0d", ClusterId, cu) ),
+                .LogAW     ( 1'b1              ),
+                .LogAR     ( 1'b1              ),
+                .LogW      ( 1'b1              ),
+                .LogB      ( 1'b1              ),
+                .LogR      ( 1'b1              ),
+                .axi_req_t ( cu_imem_axi_req_t  ),
+                .axi_resp_t( cu_imem_axi_resp_t )
+            ) i_imem_monitor (
+                .clk_i ( clk_i  ),
+                .rst_ni( rst_ni ),
+
+                .axi_req_i ( cu_imem_axi_req[cu] ),
+                .axi_resp_i( cu_imem_axi_rsp[cu] )
+            );
+        `endif
     end : gen_imem_to_axi
 
     // #######################################################################################
@@ -473,4 +508,12 @@ module compute_cluster #(
         );
     end : gen_compute_units
 
+    // #######################################################################################
+    // # Assertions                                                                          #
+    // #######################################################################################
+
+    `ifndef SYNTHESIS
+        initial assert((PcWidth + $clog2(EncInstWidth / 8)) <= AddressWidth)
+            else $error("Error: PcWidth + log2(EncInstWidth/8) must be <= AddressWidth");
+    `endif
 endmodule : compute_cluster
