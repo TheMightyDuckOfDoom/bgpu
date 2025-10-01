@@ -84,7 +84,7 @@ jobs:
             - name: Copy netlist...
               run: cp xilinx/out/bgpu_soc_yosys.v xilinx/out/post_synth.v
             - name: Post Synthesis Simulation
-              run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
+              run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING" VERILATOR_ARGS="-GBenchmark='add_2'"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()

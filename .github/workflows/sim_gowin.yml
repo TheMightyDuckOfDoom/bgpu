@@ -16,7 +16,7 @@ jobs:
                 vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
-        run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram"
+        run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t gowin_sim -t tech_cells_generic_exclude_tc_sram" VERILATOR_ARGS="-GBenchmark='add_2'"
 
   # Main testbench for compute unit
   gowin_tb_compute_unit:
