@@ -8,8 +8,10 @@
 // - DDR3 Memory Controller
 module bgpu_wrapper (
     /// System Clock and Reset
-    input logic sys_clk_p, // Differential 200MHz Clock
-    input logic sys_clk_n, // Differential 200MHz Clock
+    input logic sys_clk_200_pi, // Differential 200MHz Clock
+    input logic sys_clk_200_ni, // Differential 200MHz Clock
+
+    input logic sys_clk_100_i, // 100MHz Clock
 
     input logic sys_rst_ni, // System Reset
 
@@ -31,7 +33,7 @@ module bgpu_wrapper (
     output logic [ 0:0] ddr3_odt,
 
     /// Status LEDs
-    output logic [7:0] led
+    output logic [7:0] led_o
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -41,7 +43,7 @@ module bgpu_wrapper (
     localparam bit UseMctrl = 1'b1;
 
     localparam int unsigned WarpWidth              = 4;
-    localparam int unsigned ComputeUnitsPerCluster = 4; //1, 2 work
+    localparam int unsigned ComputeUnitsPerCluster = 1; //1, 2 and 4 fit, but do not all work
     localparam int unsigned OutstandingReqIdxWidth = 1;
     localparam int unsigned ComputeClusters        = 1;
     
@@ -82,8 +84,9 @@ module bgpu_wrapper (
     // SoC Reset
     logic soc_rst_n;
 
-    // Differential System Clock
-    logic sys_clk, sys_clk_unbuffered;
+    // Clocks
+    logic sys_clk_200, sys_clk_200_unbuffered;
+    logic sys_clk_100, sys_clk_100_unbuffered;
     
     /// Memory Controller Signals
     // Calibration Complete
@@ -102,15 +105,25 @@ module bgpu_wrapper (
 
     IBUFGDS #(
         .DIFF_TERM( "TRUE" )
-    ) i_sys_clk_diff_buf (
-        .I ( sys_clk_p          ),
-        .IB( sys_clk_n          ),
-        .O ( sys_clk_unbuffered )
+    ) i_sys_clk_200_diff_ibuf (
+        .I ( sys_clk_200_pi         ),
+        .IB( sys_clk_200_ni         ),
+        .O ( sys_clk_200_unbuffered )
     );
 
-    BUFG i_sys_clk_buf (
-        .I( sys_clk_unbuffered ),
-        .O( sys_clk            )
+    BUFG i_sys_clk_200_buf (
+        .I( sys_clk_200_unbuffered ),
+        .O( sys_clk_200            )
+    );
+
+    IBUFG i_sys_clk_100_ibuf (
+        .I ( sys_clk_100_i          ),
+        .O ( sys_clk_100_unbuffered )
+    );
+
+    BUFG i_sys_clk_100_buf (
+        .I( sys_clk_100_unbuffered ),
+        .O( sys_clk_100            )
     );
 
     // #######################################################################################
@@ -118,10 +131,6 @@ module bgpu_wrapper (
     // #######################################################################################
 
     assign soc_rst_n = (!mctrl_rst) & mctrl_init_calib_complete;
-
-    // #######################################################################################
-    // # BGPU SoC                                                                            #
-    // #######################################################################################
 
     // #######################################################################################
     // # BGPU SoC                                                                            #
@@ -145,7 +154,7 @@ module bgpu_wrapper (
 
         .testmode_i( 1'b0 ),
 
-        .mgmt_cpu_clk_i( mctrl_axi_clk ),
+        .mgmt_cpu_clk_i( sys_clk_100 ),
 
         // Using BSCANE2 internally
         .jtag_tck_i  ( 1'b0           ),
@@ -163,11 +172,11 @@ module bgpu_wrapper (
     // #######################################################################################
 
     // LEDs are active low
-    assign led[0] = !mctrl_init_calib_complete; // Lit when memory controller is ready
-    assign led[1] = !soc_rst_n; // Lit when not in reset
-    assign led[2] = sys_rst_ni; // Lit when reset button is pressed
+    assign led_o[0] = !mctrl_init_calib_complete; // Lit when memory controller is ready
+    assign led_o[1] = !soc_rst_n; // Lit when not in reset
+    assign led_o[2] = sys_rst_ni; // Lit when reset button is pressed
 
-    assign led[7:3] = '1; // Unused
+    assign led_o[7:3] = '1; // Unused
 
     // #######################################################################################
     // # DDR3 Memory Controller                                                              #
@@ -251,8 +260,8 @@ module bgpu_wrapper (
         .s_axi_rvalid( mctrl_axi_rsp.r_valid  ),
 
         // System Clock Ports
-        .sys_clk_i( sys_clk    ),
-        .sys_rst  ( sys_rst_ni ),
+        .sys_clk_i( sys_clk_200 ),
+        .sys_rst  ( sys_rst_ni  ),
 
         // Device Temperature
         .device_temp( /* Not Used */ )

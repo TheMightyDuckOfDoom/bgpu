@@ -23,6 +23,8 @@ synth_design -top $top -part $device -verbose -debug_log
 
 # Report helper function
 exec mkdir -p $ROOT/xilinx/out/reports/
+exec mkdir -p $ROOT/xilinx/out/checkpoints
+exec mkdir -p $ROOT/xilinx/out/netlists
 exec rm -rf $ROOT/xilinx/out/reports/$top
 exec mkdir -p $ROOT/xilinx/out/reports/$top
 proc make_reports {prefix} {
@@ -36,14 +38,14 @@ proc make_reports {prefix} {
 
 # Synthesis Reports
 make_reports 1_synth
-write_verilog -force -mode funcsim out/${top}_1_synth.v
-write_checkpoint -force out/checkpoint_1_synth.dcp
+write_verilog -force -mode funcsim out/netlists/${top}_1_synth.v
+write_checkpoint -force out/checkpoints/${top}_1_synth.dcp
 
 # Optimize Design (Integrating IPs)
 opt_design -verbose
 make_reports 2_opt
-write_verilog -force -mode funcsim out/${top}_2_opt.v
-write_checkpoint -force out/checkpoint_2_opt.dcp
+write_verilog -force -mode funcsim out/netlists/${top}_2_opt.v
+write_checkpoint -force out/checkpoints/${top}_2_opt.dcp
 
 # Optional Power Optimization
 if {$power_opt} {
@@ -55,12 +57,12 @@ if {$power_opt} {
 # Place the design
 place_design -verbose -directive Explore
 make_reports 4_place
-write_verilog -force -mode funcsim out/${top}_4_place.v
-write_checkpoint -force out/checkpoint_4_place.dcp
+write_verilog -force -mode funcsim out/netlists/${top}_4_place.v
+write_checkpoint -force out/checkpoints/${top}_4_place.dcp
 
 # Physical Optimization looping
 set_clock_uncertainty -setup 0.2 [get_clocks clk_pll_i]
-set opt_loops 5
+set opt_loops 3
 set loop_num 1
 while {1} {
     phys_opt_design -directive AggressiveExplore -verbose
@@ -89,8 +91,8 @@ while {1} {
 }
 set_clock_uncertainty -setup 0 [get_clocks clk_pll_i]
 make_reports 5_phys_opt
-write_verilog -force -mode funcsim out/${top}_5_phys_opt.v
-write_checkpoint -force out/checkpoint_5_phys_opt.dcp
+write_verilog -force -mode funcsim out/netlists/${top}_5_phys_opt.v
+write_checkpoint -force out/checkpoints/${top}_5_phys_opt.dcp
 
 # Another round of optional Power Optimizations
 if {$power_opt} {
@@ -102,17 +104,17 @@ if {$power_opt} {
 # Route the design
 route_design -directive AggressiveExplore
 make_reports 7_route
-write_verilog -force -mode funcsim out/${top}_7_route.v
-write_checkpoint -force out/checkpoint_7_route.dcp
+write_verilog -force -mode funcsim out/netlists/${top}_7_route.v
+write_checkpoint -force out/checkpoints/${top}_7_route.dcp
 
 # Final Physical Optimizations
 phys_opt_design -directive AggressiveExplore -verbose
 report_phys_opt -file $ROOT/xilinx/out/reports/$top/8_phys_opt_phys_opt.rpt
 make_reports 8_phys_opt
-write_verilog -force -mode funcsim out/${top}_8_phys_opt.v
+write_verilog -force -mode funcsim out/netlists/${top}_8_phys_opt.v
 
 # Write checkpoint
-write_checkpoint -force out/checkpoint_8_phys_opt.dcp
+write_checkpoint -force out/checkpoints/${top}_8_phys_opt.dcp
 
 # Write out bitfile
-write_bitstream -force out/bgpu.bit
+write_bitstream -force out/${top}.bit
