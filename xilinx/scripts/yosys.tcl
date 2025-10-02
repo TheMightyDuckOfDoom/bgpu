@@ -19,7 +19,7 @@ select -write xilinx/out/${top_design}_registers.rpt t:*dff*
 autoname t:*dff* %n
 clean -purge
 
-synth_xilinx -top $top_design -family xc7 -noclkbuf -noiopad -notlutram -abc9 -flatten -run coarse:
+synth_xilinx -top $top_design -family xc7 -noclkbuf -noiopad -nolutram -abc9 -flatten -run coarse:
 
 # Work around Verilator V3String bug when hashing long names
 yosys rename -scramble-name -seed 42

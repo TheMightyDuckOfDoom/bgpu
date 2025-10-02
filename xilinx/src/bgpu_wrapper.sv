@@ -43,7 +43,7 @@ module bgpu_wrapper (
     localparam bit UseMctrl = 1'b1;
 
     localparam int unsigned WarpWidth              = 4;
-    localparam int unsigned ComputeUnitsPerCluster = 1; //1, 2 and 4 fit, but do not all work
+    localparam int unsigned ComputeUnitsPerCluster = 4;
     localparam int unsigned OutstandingReqIdxWidth = 1;
     localparam int unsigned ComputeClusters        = 1;
     

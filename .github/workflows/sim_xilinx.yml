@@ -115,7 +115,7 @@ jobs:
   # Register Operand Collector Stage Testbenches
   xilinx_tb_register_opc_stage:
     runs-on: self-hosted
-    needs: [xilinx_tb_register_file_bank_singleport]
+    needs: [xilinx_tb_register_file_bank_singleport_1x1, xilinx_tb_register_file_bank_singleport_2x1, xilinx_tb_register_file_bank_singleport_1x2, xilinx_tb_register_file_bank_singleport_2x2]
     steps:
       - name: Checkout
         uses: actions/checkout@master

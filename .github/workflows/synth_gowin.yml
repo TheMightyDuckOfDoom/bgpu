@@ -160,7 +160,7 @@ jobs:
             - name: Copy netlist...
               run: cp gowin/out/bgpu_soc_yosys.v gowin/out/post_synth.v
             - name: Post Synthesis Simulation
-              run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth" VERILATOR_ARGS="-GBenchmark='add_2'"
+              run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t gowin_postsynth -t post_synth" VERILATOR_ARGS='-DBENCHMARK=\"add_2\"'
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
