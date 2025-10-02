@@ -33,7 +33,7 @@ jobs:
                 vendor
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
-        run: make PROCESSORS=8 tb_bgpu_soc
+        run: make PROCESSORS=8 tb_bgpu_soc VERILATOR_ARGS='-DBENCHMARK=\"add_2\"'
 
   # Thread Dispatcher Testbench
   tb_thread_dispatcher:
