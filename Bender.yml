@@ -167,8 +167,8 @@ sources:
 
     - target: any(xilinx, xilinx_yosys, xilinx_sim)
       files:
-          - xilinx/lib/tc_clk.sv
+          - xilinx/src/tc_clk.sv
 
     - target: all(any(xilinx, xilinx_yosys, xilinx_sim), tech_cells_generic_exclude_xilinx_xpm)
       files:
-          - xilinx/lib/tc_sram.sv
+          - xilinx/src/tc_sram.sv

@@ -107,17 +107,14 @@ module operand_collector import bgpu_pkg::*; #(
 
     // Operand Request Logic
     for (genvar i = 0; i < OperandsPerInst; i++) begin : gen_operand_request
+        assign opc_operand_data_o    [i] = operand_q[i].data;
+        assign opc_read_req_valid_o  [i] = !operand_q[i].requested && common_q.occupied;
+        assign opc_read_req_reg_idx_o[i] = operand_q[i].reg_idx;
+        assign opc_read_req_wid_o    [i] = common_q.tag[WidWidth-1:0];
+
         always_comb begin : operand_request_logic
             // Default Register Data
             operand_d[i] = operand_q[i];
-
-            // Operand Data
-            opc_operand_data_o[i] = operand_q[i].data;
-
-            // Default Outputs |-> make request
-            opc_read_req_valid_o  [i] = !operand_q[i].requested && common_q.occupied;
-            opc_read_req_reg_idx_o[i] =  operand_q[i].reg_idx;
-            opc_read_req_wid_o    [i] = common_q.tag[WidWidth-1:0];
 
             // Request handshake
             if (opc_read_req_valid_o[i] && opc_read_req_ready_i[i]) begin : request_handshake
@@ -203,9 +200,7 @@ module operand_collector import bgpu_pkg::*; #(
     `FF(common_q, common_d, '0, clk_i, rst_ni)
 
     // Operands
-    for (genvar i = 0; i < OperandsPerInst; i++) begin : gen_operand_ff
-        `FF(operand_q[i], operand_d[i], '0, clk_i, rst_ni)
-    end : gen_operand_ff
+    `FF(operand_q, operand_d, '0, clk_i, rst_ni)
 
     // ########################################################################################
     // # Assertions                                                                           #
@@ -219,9 +214,9 @@ module operand_collector import bgpu_pkg::*; #(
                 else $error("Operand %0d requested while not occupied", i);
 
             // Assert that we do not receive an operand if we are not occupied or have not requested it or are already ready
-            assert property (@(posedge clk_i) !common_q.occupied || !operand_q[i].requested
-                                            || operand_q[i].ready |-> !opc_read_rsp_valid_i[i])
-                else $error("Operand %0d received while not occupied or not requested or ready", i);
+            assert property (@(posedge clk_i) (opc_read_rsp_valid_i[i] |->
+                common_q.occupied && operand_q[i].requested && !operand_q[i].ready))
+                else $error("Operand %0d received but !occupied or !requested or already ready", i);
         end : gen_operand_assertions
 
         initial assert (OperandsPerInst * RegIdxWidth <= RegWidth)

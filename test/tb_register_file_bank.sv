@@ -15,9 +15,9 @@ module tb_register_file_bank #(
     parameter time         AcqDelay  = 9ns,
 
     // Register file configuration
-    parameter int unsigned NumRegisters  = 256,
-    parameter int unsigned WarpWidth     = 2,
-    parameter int unsigned RegisterWidth = 16,
+    parameter int unsigned NumRegisters  = 1024,
+    parameter int unsigned WarpWidth     = 4,
+    parameter int unsigned RegisterWidth = 32,
     parameter int unsigned TagWidth      = 8,
     parameter bit          DualPort      = 1'b0
 ) ();
@@ -167,7 +167,7 @@ module tb_register_file_bank #(
         write_valid_sub = write_valid_mst;
         write_ready_mst = write_ready_sub;
 
-        if (write_valid_mst && read_valid && (write_addr != read_addr)) begin
+        if (write_valid_mst && read_valid && (write_addr == read_addr)) begin
             write_valid_sub = 1'b0;
             write_ready_mst = 1'b0;
         end
@@ -251,20 +251,20 @@ module tb_register_file_bank #(
     // Check read valids
     assert property (@(posedge clk) disable iff (!rst_n)
         (read_out_valid || golden_read_valid) |-> (read_out_valid == golden_read_valid)
-    ) else $error("Read valid mismatch: DUT %b, Golden %b",
-            read_out_valid, golden_read_valid);
+    ) else $error("Read valid mismatch for address %d: DUT %b, Golden %b",
+            golden_read_addr, read_out_valid, golden_read_valid);
 
     // Check read tags
     assert property (@(posedge clk) disable iff (!rst_n)
         (read_out_valid || golden_read_valid) |-> (read_out_tag == golden_read_tag)
-    ) else $error("Read tag mismatch: DUT %b, Golden %b",
-            read_out_tag, golden_read_tag);
+    ) else $error("Read tag mismatch for address %d: DUT %b, Golden %b",
+            golden_read_addr, read_out_tag, golden_read_tag);
 
     // Check read data
     assert property (@(posedge clk) disable iff (!rst_n)
         (read_out_valid || golden_read_valid) |-> (read_out_data == golden_read_data)
-    ) else $error("Read data mismatch: DUT %h, Golden %h",
-            read_out_data, golden_read_data);
+    ) else $error("Read data mismatch for address %d: DUT %h, Golden %h",
+            golden_read_addr, read_out_data, golden_read_data);
 
     if (!DualPort) begin : gen_single_port_read_write_assertions
         assert property (@(posedge clk) disable iff (!rst_n)

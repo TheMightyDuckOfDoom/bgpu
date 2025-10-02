@@ -305,7 +305,7 @@ module RAMB36E1 (CASCADEOUTA, CASCADEOUTB, DBITERR, DOADO, DOBDO, DOPADOP, DOPBD
     input [3:0] WEA;
     input [7:0] WEBWE;
 
-    tri0 GSR = 1'b0; //glbl.GSR;
+    wire GSR = 1'b0; //glbl.GSR;
 
     wire [3:0] dangle_out4;
     wire [31:0] dangle_out32;
@@ -369,11 +369,6 @@ module RAMB36E1 (CASCADEOUTA, CASCADEOUTB, DBITERR, DOADO, DOBDO, DOPADOP, DOPBD
    assign rstramb_in = RSTRAMB ^ IS_RSTRAMB_INVERTED;
    assign rstregarstreg_in = RSTREGARSTREG ^ IS_RSTREGARSTREG_INVERTED;
    assign rstregb_in = RSTREGB ^ IS_RSTREGB_INVERTED;
-
-   initial assert(DOA_REG == 0)
-        else $error("Simulation model with DOA_REG set to 1 is not working correctly!");
-   initial assert(DOB_REG == 0)
-        else $error("Simulation model with DOB_REG set to 1 is not working correctly!");
 
    initial begin
 
@@ -4681,10 +4676,10 @@ endtask // task_col_rd_ram_b
       
       if (RSTRAMA === 1'b0 && (wr_mode_a != 2'b10 || (WRITE_WIDTH_A <= 9 && WEA[0] === 1'b0) || (WRITE_WIDTH_A == 18 && WEA[1:0] === 2'b00) || ((WRITE_WIDTH_A == 36 || WRITE_WIDTH_A == 72) && WEA[3:0] === 4'b0000))) begin
           
-          doa_out = doa_buf;
+          doa_out <= doa_buf;
 
           if (ra_width >= 8)
-         dopa_out = dopa_buf;
+         dopa_out <= dopa_buf;
           
       end
       
@@ -4696,10 +4691,10 @@ endtask // task_col_rd_ram_b
       
       if (RSTRAMB === 1'b0 && (wr_mode_b != 2'b10 || (WRITE_WIDTH_B <= 9 && WEB[0] === 1'b0) || (WRITE_WIDTH_B == 18 && WEB[1:0] === 2'b00) || (WRITE_WIDTH_B == 36 && WEB[3:0] === 4'b0000) || (WRITE_WIDTH_B == 72 && WEB[7:0] === 8'h00))) begin
           
-          dob_out = dob_buf;
+          dob_out <= dob_buf;
 
           if (rb_width >= 8)
-         dopb_out = dopb_buf;
+         dopb_out <= dopb_buf;
 
       end
       

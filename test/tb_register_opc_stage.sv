@@ -456,7 +456,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
                 $display("\tInstruction: %0h", eu_req.inst);
                 $display("\tDst reg: %0d", eu_req.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
-                    $display("\tSrc[%0d] data: %0d", i, eu_req.src_data[i]);
+                    $display("\tSrc[%0d] data: %0h", i, eu_req.src_data[i]);
                 end
             end
         end

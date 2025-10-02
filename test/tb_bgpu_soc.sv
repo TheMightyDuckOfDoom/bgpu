@@ -2,6 +2,10 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`ifndef BENCHMARK
+    `define BENCHMARK add_4
+`endif
+
 /// BGPU SoC top-level module testbench
 module tb_bgpu_soc #(
     parameter time ClkPeriodMgmt = 25ns,
@@ -13,7 +17,7 @@ module tb_bgpu_soc #(
 
     parameter int unsigned MaxCycles = 10000000,
 
-    parameter string Benchmark = "add_16"
+    parameter string Benchmark = `BENCHMARK
 ) ();
     // #######################################################################################
     // # Local Parameters                                                                    #
