@@ -16,9 +16,9 @@ module instruction_cache #(
     /// Encoded instruction width
     parameter int unsigned EncInstWidth = 32,
     /// Encoded instructions per cacheline -> Also determines the memory interface width
-    parameter int unsigned CachelineIdxBits = 1,
+    parameter int unsigned CachelineIdxBits = 2,
     /// Number of cachelines in the instruction cache
-    parameter int unsigned NumCachelines = 32,
+    parameter int unsigned NumCachelines = 8,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned SubwarpIdWidth     =        WarpWidth > 1 ? $clog2(WarpWidth) : 1,
@@ -361,7 +361,7 @@ module instruction_cache #(
     tc_sram #(
         .NumWords   ( NumCachelines      ),
         .DataWidth  ( $bits(cache_tag_t) ),
-        .ByteWidth  ( 1                  ),
+        .ByteWidth  ( $bits(cache_tag_t) ),
         .NumPorts   ( 1                  ),
         .Latency    ( 1                  ),
         .SimInit    ( "zeros"            ),
@@ -390,7 +390,7 @@ module instruction_cache #(
     tc_sram #(
         .NumWords   ( NumCachelines                          ),
         .DataWidth  ( (1 << CachelineIdxBits) * EncInstWidth ),
-        .ByteWidth  ( 1                                      ),
+        .ByteWidth  ( 8                                      ),
         .NumPorts   ( 1                                      ),
         .Latency    ( 1                                      ),
         .SimInit    ( "zeros"                                ),

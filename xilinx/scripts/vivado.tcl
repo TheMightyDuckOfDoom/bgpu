@@ -21,14 +21,14 @@ report_utilization -hierarchical -hierarchical_percentages
 # report_utilization -hierarchical -hierarchical_percentages
 # report_timing_summary
 # Place Design
-place_design -verbose 
+# place_design -verbose 
 
-phys_opt_design -directive AggressiveExplore
-# Route Design
-# route_design -verbose -timing_summary
-# report_timing_summary
-report_timing -nworst 1
-report_utilization -hierarchical -hierarchical_percentages
+# phys_opt_design -directive AggressiveExplore
+# # Route Design
+# # route_design -verbose -timing_summary
+# # report_timing_summary
+# report_timing -nworst 1
+# report_utilization -hierarchical -hierarchical_percentages
 
 #start_gui
 

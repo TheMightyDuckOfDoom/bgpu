@@ -111,7 +111,7 @@ xilinx/yosys.f: $(BENDER_DEPS) vendor/
 
 # Run Vivado synthesis
 xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado.sh
-	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP) vivado.tcl
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP) vivado.tcl $(XILINX_BOARD)
 
 # Process Vivado netlist for Verilator simulation
 xilinx-vivado-process-netlist: xilinx/scripts/rename_ports.py xilinx/scripts/process_vivado_netlist.tcl
