@@ -142,33 +142,7 @@ sources:
       files:
           - gowin/lib/blackbox.v
 
-    - target: xilinx_sim
-      files:
-          - xilinx/lib/cells_sim.v
-          - xilinx/lib/RAMB36E1.v
-          - test/tb_register_file_bank.sv
-          - test/tb_register_opc_stage.sv
-          - test/tb_instruction_cache.sv
-          - test/tb_compute_unit.sv
-          - test/tb_bgpu_soc.sv
-
-    - target: xilinx_yosys
-      files:
-          - xilinx/lib/blackbox.v
-    
-    - target: xilinx_postsynth
-      defines:
-          POST: ~
-      files:
-          - /usr/local/share/yosys/simlib.v
-          - xilinx/lib/cells_sim.v
-          - xilinx/lib/RAMB36E1.v
-          - xilinx/out/post_synth.v
-
-    - target: any(xilinx, xilinx_yosys, xilinx_sim)
+    - target: all(any(xilinx, xilinx_yosys), tech_cells_generic_exclude_xilinx_xpm)
       files:
           - xilinx/src/tc_clk.sv
-
-    - target: all(any(xilinx, xilinx_yosys, xilinx_sim), tech_cells_generic_exclude_xilinx_xpm)
-      files:
           - xilinx/src/tc_sram.sv

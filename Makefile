@@ -2,6 +2,11 @@
 # Solderpad Hardware License, Version 0.51, see LICENSE for details.
 # SPDX-License-Identifier: SHL-0.51
 
+# Xilinx Board
+# Possible values: ypcb, stlv, tester
+# See xilinx/scripts/boards.tcl for more
+XILINX_BOARD ?= stlv
+
 # Tools
 BENDER          ?= bender
 VERILATOR       ?= verilator
@@ -125,24 +130,30 @@ xilinx-yosys: xilinx/yosys.f $(SRCS) xilinx/scripts/yosys.tcl
 xilinx-yosys-report: xilinx/scripts/vivado_report.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado_report.sh
 	time ./xilinx/run_vivado_report.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP)
 
-xilinx/out/ip/memory_controller/memory_controller.xci: xilinx/src/ip/*
-	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP) vivado_ip.tcl
+####################################################################################################
+# Xilinx Implementation
+####################################################################################################
+
+xilinx/out/ip/memory_controller/memory_controller.xci: xilinx/src/ip/* xilinx/src/boards/*
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $(TOP) vivado_ip.tcl $(XILINX_BOARD)
 
 xilinx-vivado-ip: xilinx/out/ip/memory_controller/memory_controller.xci
 
-xilinx/out/bgpu.bit: xilinx/vivado_impl.f $(SRCS) xilinx/scripts/vivado_impl.tcl xilinx/src/constraints.xdc xilinx/run_vivado.sh xilinx/src/bgpu_wrapper.sv xilinx/out/ip/memory_controller/memory_controller.xci
-	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) bgpu_wrapper vivado_impl.tcl
+xilinx/out/bgpu_wrapper.bit: xilinx/vivado_impl.f $(SRCS) xilinx/scripts/vivado_impl.tcl xilinx/src/constraints.xdc xilinx/src/boards/* xilinx/run_vivado.sh xilinx/src/bgpu_wrapper.sv xilinx/out/ip/memory_controller/memory_controller.xci
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) bgpu_wrapper vivado_impl.tcl $(XILINX_BOARD)
 
-xilinx-vivado-impl: xilinx/out/bgpu.bit
+xilinx-vivado-impl: xilinx/out/bgpu_wrapper.bit
 
-xilinx-program-board: xilinx/out/bgpu.bit
-	openocd -c "source [find interface/ftdi/digilent_jtag_smt2.cfg]; source [find cpld/xilinx-xc7.cfg]; adapter speed 25000; init; pld load 0 xilinx/out/bgpu.bit; shutdown"
+xilinx-program-board: xilinx/out/bgpu_wrapper.bit
+	openocd -c "source [find interface/ftdi/digilent_jtag_smt2.cfg]; source [find cpld/xilinx-xc7.cfg]; adapter speed 25000; init; pld load 0 xilinx/out/bgpu_wrapper.bit; shutdown"
+
+####################################################################################################
+# Xilinx Simulation
+####################################################################################################
 
 xilinx-vivado-sim-%: xilinx/vivado_sim.f $(SRCS) $(TB_SRCS) xilinx/scripts/vivado_sim.tcl xilinx/run_vivado.sh
-	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $* vivado_sim.tcl
+	time ./xilinx/run_vivado.sh $(VIVADO_SETTINGS) $(VIVADO) $* vivado_sim.tcl $(XILINX_BOARD)
 	grep -C 5 -i error xilinx/out/$*/$*.sim/sim_1/behav/xsim/simulate.log
-
-vivado-sim-all: xilinx-vivado-sim-tb_wdata_assembler
 
 ####################################################################################################
 # ASIC Synthesis

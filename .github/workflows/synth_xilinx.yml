@@ -17,10 +17,6 @@ jobs:
               run: make xilinx-yosys TOP=compute_unit
             - name: Report Area
               run: tail -n 32 xilinx/yosys.log
-            - name: Copy netlist...
-              run: cp xilinx/out/compute_unit_yosys.v xilinx/out/post_synth.v
-            - name: Post Synthesis Simulation
-              run: make PROCESSORS=8 tb_compute_unit BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -49,10 +45,6 @@ jobs:
               run: make xilinx-yosys TOP=compute_cluster_synth_wrapper
             - name: Report Area
               run: tail -n 32 xilinx/yosys.log
-            - name: Copy netlist...
-              run: cp xilinx/out/compute_cluster_synth_wrapper_yosys.v xilinx/out/post_synth.v
-            - name: Post Synthesis Simulation
-              run: make PROCESSORS=8 tb_compute_cluster BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING"
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()
@@ -81,10 +73,6 @@ jobs:
               run: make xilinx-yosys TOP=bgpu_soc
             - name: Report Area
               run: tail -n 32 xilinx/yosys.log
-            - name: Copy netlist...
-              run: cp xilinx/out/bgpu_soc_yosys.v xilinx/out/post_synth.v
-            - name: Post Synthesis Simulation
-              run: make PROCESSORS=8 tb_bgpu_soc BENDER_TARGET_SIM="-t sim -t xilinx_postsynth -t post_synth" VERILATOR_ARGS="-Wno-PINMISSING" VERILATOR_ARGS='-DBENCHMARK=\"add_2\"'
             - name: Archive Results on Failure
               uses: actions/upload-artifact@v4
               if: failure()

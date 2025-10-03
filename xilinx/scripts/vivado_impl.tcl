@@ -3,17 +3,24 @@ set power_opt 0
 
 set_param general.maxThreads 8
 set_part $device
-
 # read all design files
 source vivado_impl.f
 add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/xilinx/src/bgpu_wrapper.sv \
 ]
 
+# Set Defines for board
+set upper_board [string toupper $board]
+set defines [get_property verilog_define [current_fileset]]
+lappend defines BOARD
+lappend defines BOARD_${upper_board}
+set_property verilog_define $defines [current_fileset]
+
 # read ip
 read_ip $ROOT/xilinx/out/ip/memory_controller/memory_controller.xci
 
 # read constraints
+read_xdc src/boards/${board}.xdc
 read_xdc src/constraints.xdc
 
 # Synthesize Design
@@ -62,7 +69,7 @@ write_checkpoint -force out/checkpoints/${top}_4_place.dcp
 
 # Physical Optimization looping
 set_clock_uncertainty -setup 0.2 [get_clocks clk_pll_i]
-set opt_loops 3
+set opt_loops 5
 set loop_num 1
 while {1} {
     phys_opt_design -directive AggressiveExplore -verbose

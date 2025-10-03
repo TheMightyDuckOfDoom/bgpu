@@ -4,7 +4,6 @@
 
 [![Lint RTL](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/lint.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/lint.yml)
 [![Simulation](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/sim.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/sim.yml)
-[![Xilinx Simulation](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/sim_xilinx.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/sim_xilinx.yml)
 [![Gowin Simulation](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/sim_gowin.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/sim_gowin.yml)
 [![ASIC Synthesis](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_asic.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_asic.yml)
 [![Xilinx Synthesis](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_xilinx.yml/badge.svg)](https://github.com/TheMightyDuckOfDoom/bgpu/actions/workflows/synth_xilinx.yml)

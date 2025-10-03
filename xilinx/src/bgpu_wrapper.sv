@@ -2,20 +2,25 @@
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
+`ifndef BOARD
+    `define BOARD_STLV
+`endif
+
 /// BGPU Wrapper for Xilinx FPGAs
 // Contains:
 // - BGPU SoC
-// - DDR3 Memory Controller
+// - Memory Controller
 module bgpu_wrapper (
     /// System Clock and Reset
     input logic sys_clk_200_pi, // Differential 200MHz Clock
     input logic sys_clk_200_ni, // Differential 200MHz Clock
 
-    input logic sys_clk_100_i, // 100MHz Clock
+    input logic mgmt_clk_i, // Additional Clock
 
     input logic sys_rst_ni, // System Reset
 
-    /// DDR3 Memory Interface
+    /// Memory Interface
+`ifdef BOARD_STLV
     output logic [13:0] ddr3_addr,
     output logic [ 2:0] ddr3_ba,
     output logic        ddr3_cas_n,
@@ -31,9 +36,42 @@ module bgpu_wrapper (
     output logic [ 0:0] ddr3_cs_n,
     output logic [ 7:0] ddr3_dm,
     output logic [ 0:0] ddr3_odt,
+`endif
+`ifdef BOARD_YPCB
+    output logic [14:0] ddr3_addr,
+    output logic [ 2:0] ddr3_ba,
+    output logic        ddr3_cas_n,
+    output logic [ 0:0] ddr3_ck_n,
+    output logic [ 0:0] ddr3_ck_p,
+    output logic        ddr3_cke,
+    output logic        ddr3_ras_n,
+    output logic        ddr3_reset_n,
+    output logic        ddr3_we_n,
+    inout  logic [71:0] ddr3_dq,
+    inout  logic [ 8:0] ddr3_dqs_n,
+    inout  logic [ 8:0] ddr3_dqs_p,
+    output logic [ 0:0] ddr3_cs_n,
+    output logic [ 0:0] ddr3_odt,
+`endif
+`ifdef BOARD_TESTER
+    output logic [13:0] ddr2_addr,
+    output logic [ 2:0] ddr2_ba,
+    output logic        ddr2_cas_n,
+    output logic [ 0:0] ddr2_ck_n,
+    output logic [ 0:0] ddr2_ck_p,
+    output logic        ddr2_cke,
+    output logic        ddr2_ras_n,
+    output logic        ddr2_we_n,
+    inout  logic [15:0] ddr2_dq,
+    inout  logic [ 1:0] ddr2_dqs_n,
+    inout  logic [ 1:0] ddr2_dqs_p,
+    output logic [ 0:0] ddr2_cs_n,
+    output logic [ 1:0] ddr2_dm,
+    output logic [ 0:0] ddr2_odt,
+`endif
 
     /// Status LEDs
-    output logic [7:0] led_o
+    output logic [2:0] led_o
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -42,14 +80,25 @@ module bgpu_wrapper (
     // Should BGPU use the DDR3 Memory Controller?
     localparam bit UseMctrl = 1'b1;
 
-    localparam int unsigned WarpWidth              = 4;
+`ifdef BOARD_STLV
     localparam int unsigned ComputeUnitsPerCluster = 4;
+    localparam int unsigned MctrlAddressWidth      = 30;  // 1GB DDR3
+    localparam int unsigned MctrlWidth             = 512;
+`endif
+`ifdef BOARD_YPCB
+    localparam int unsigned ComputeUnitsPerCluster = 6;
+    localparam int unsigned MctrlAddressWidth      = 31; // 2GB DDR3
+    localparam int unsigned MctrlWidth             = 512;
+`endif
+`ifdef BOARD_TESTER
+    localparam int unsigned ComputeUnitsPerCluster = 8;
+    localparam int unsigned MctrlAddressWidth      = 28;
+    localparam int unsigned MctrlWidth             = 128;
+`endif
+
+    localparam int unsigned WarpWidth              = 4;
     localparam int unsigned OutstandingReqIdxWidth = 1;
     localparam int unsigned ComputeClusters        = 1;
-    
-    // 1GB DDR3 Sodimm
-    localparam int unsigned MctrlAddressWidth = 30;  // 1GB DDR3
-    localparam int unsigned MctrlWidth        = 512; // 64 bytes DDR3 Burst
 
     // Width of the thread idx inside a warp
     localparam int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
@@ -86,7 +135,7 @@ module bgpu_wrapper (
 
     // Clocks
     logic sys_clk_200, sys_clk_200_unbuffered;
-    logic sys_clk_100, sys_clk_100_unbuffered;
+    logic mgmt_clk, mgmt_clk_unbuffered;
     
     /// Memory Controller Signals
     // Calibration Complete
@@ -116,14 +165,14 @@ module bgpu_wrapper (
         .O( sys_clk_200            )
     );
 
-    IBUFG i_sys_clk_100_ibuf (
-        .I ( sys_clk_100_i          ),
-        .O ( sys_clk_100_unbuffered )
+    IBUFG i_mgmt_clk_ibuf (
+        .I ( mgmt_clk_i          ),
+        .O ( mgmt_clk_unbuffered )
     );
 
-    BUFG i_sys_clk_100_buf (
-        .I( sys_clk_100_unbuffered ),
-        .O( sys_clk_100            )
+    BUFG i_mgmt_clk_buf (
+        .I( mgmt_clk_unbuffered ),
+        .O( mgmt_clk            )
     );
 
     // #######################################################################################
@@ -154,7 +203,7 @@ module bgpu_wrapper (
 
         .testmode_i( 1'b0 ),
 
-        .mgmt_cpu_clk_i( sys_clk_100 ),
+        .mgmt_cpu_clk_i( mgmt_clk ),
 
         // Using BSCANE2 internally
         .jtag_tck_i  ( 1'b0           ),
@@ -171,19 +220,33 @@ module bgpu_wrapper (
     // # Status LEDs                                                                         #
     // #######################################################################################
 
-    // LEDs are active low
-    assign led_o[0] = !mctrl_init_calib_complete; // Lit when memory controller is ready
-    assign led_o[1] = !soc_rst_n; // Lit when not in reset
-    assign led_o[2] = sys_rst_ni; // Lit when reset button is pressed
 
-    assign led_o[7:3] = '1; // Unused
+    `ifdef BOARD_STLV
+        // LEDs are active low
+        assign led_o[0] = !mctrl_init_calib_complete; // Lit when memory controller is ready
+        assign led_o[1] = !soc_rst_n; // Lit when not in reset
+        assign led_o[2] = sys_rst_ni; // Lit when reset button is pressed
+    `endif
+    `ifdef BOARD_STLV
+        // LEDs are active high
+        assign led_o[0] = mctrl_init_calib_complete; // Lit when memory controller is ready
+        assign led_o[1] = soc_rst_n; // Lit when not in reset
+        assign led_o[2] = !sys_rst_ni; // Lit when reset button is pressed
+    `endif
+    `ifdef BOARD_TESTER
+        // LEDs are active low
+        assign led_o[0] = !mctrl_init_calib_complete; // Lit when memory controller is ready
+        assign led_o[1] = !soc_rst_n; // Lit when not in reset
+        assign led_o[2] = sys_rst_ni; // Lit when reset button is pressed
+    `endif
 
     // #######################################################################################
-    // # DDR3 Memory Controller                                                              #
+    // # DDR Memory Controller                                                               #
     // #######################################################################################
 
-    memory_controller i_ddr3_mctrl (
+    memory_controller i_ddr_mctrl (
         // Memory interface ports
+    `ifdef BOARD_STLV
         .ddr3_addr   ( ddr3_addr    ),
         .ddr3_ba     ( ddr3_ba      ),
         .ddr3_cas_n  ( ddr3_cas_n   ),
@@ -196,9 +259,48 @@ module bgpu_wrapper (
         .ddr3_dq     ( ddr3_dq      ),
         .ddr3_dqs_n  ( ddr3_dqs_n   ),
         .ddr3_dqs_p  ( ddr3_dqs_p   ),
-	    .ddr3_cs_n   ( ddr3_cs_n    ),
-        .ddr3_dm     ( ddr3_dm      ),
+        .ddr3_cs_n   ( ddr3_cs_n    ),
         .ddr3_odt    ( ddr3_odt     ),
+        .ddr3_dm     ( ddr3_dm      ),
+
+        // Device Temperature
+        .device_temp( /* Not Used */ ),
+    `endif
+    `ifdef BOARD_YPCB
+        .ddr3_addr   ( ddr3_addr    ),
+        .ddr3_ba     ( ddr3_ba      ),
+        .ddr3_cas_n  ( ddr3_cas_n   ),
+        .ddr3_ck_n   ( ddr3_ck_n    ),
+        .ddr3_ck_p   ( ddr3_ck_p    ),
+        .ddr3_cke    ( ddr3_cke     ),
+        .ddr3_ras_n  ( ddr3_ras_n   ),
+        .ddr3_reset_n( ddr3_reset_n ),
+        .ddr3_we_n   ( ddr3_we_n    ),
+        .ddr3_dq     ( ddr3_dq      ),
+        .ddr3_dqs_n  ( ddr3_dqs_n   ),
+        .ddr3_dqs_p  ( ddr3_dqs_p   ),
+        .ddr3_cs_n   ( ddr3_cs_n    ),
+        .ddr3_odt    ( ddr3_odt     ),
+
+        // Device Temperature
+        .device_temp( /* Not Used */ ),
+    `endif
+    `ifdef BOARD_TESTER
+        .ddr2_addr ( ddr2_addr  ),
+        .ddr2_ba   ( ddr2_ba    ),
+        .ddr2_cas_n( ddr2_cas_n ),
+        .ddr2_ck_n ( ddr2_ck_n  ),
+        .ddr2_ck_p ( ddr2_ck_p  ),
+        .ddr2_cke  ( ddr2_cke   ),
+        .ddr2_ras_n( ddr2_ras_n ),
+        .ddr2_we_n ( ddr2_we_n  ),
+        .ddr2_dq   ( ddr2_dq    ),
+        .ddr2_dqs_n( ddr2_dqs_n ),
+        .ddr2_dqs_p( ddr2_dqs_p ),
+        .ddr2_cs_n ( ddr2_cs_n  ),
+        .ddr2_odt  ( ddr2_odt   ),
+        .ddr2_dm   ( ddr2_dm    ),
+    `endif
 
         .init_calib_complete( mctrl_init_calib_complete ),
       
@@ -217,6 +319,7 @@ module bgpu_wrapper (
         // AXI4 Reset
         .aresetn( soc_rst_n ),
 
+        // AXI4 Interface
         .s_axi_awid   ( mctrl_axi_req.aw.id    ),
         .s_axi_awaddr ( mctrl_axi_req.aw.addr  ),
         .s_axi_awlen  ( mctrl_axi_req.aw.len   ),
@@ -259,12 +362,37 @@ module bgpu_wrapper (
         .s_axi_rlast ( mctrl_axi_rsp.r.last   ),
         .s_axi_rvalid( mctrl_axi_rsp.r_valid  ),
 
+    `ifdef BOARD_YPCB
+        // AXI4 Lite ECC Control Interface
+        .s_axi_ctrl_awvalid( 1'b0           ),
+        .s_axi_ctrl_awready( /* Not Used */ ),
+        .s_axi_ctrl_awaddr ( 32'b0          ),
+
+        .s_axi_ctrl_wvalid( 1'b0           ),
+        .s_axi_ctrl_wready( /* Not Used */ ),
+        .s_axi_ctrl_wdata ( 32'b0          ),
+
+        .s_axi_ctrl_bvalid( /* Not Used */ ),
+        .s_axi_ctrl_bready( 1'b0           ),
+        .s_axi_ctrl_bresp ( /* Not Used */ ),
+
+        .s_axi_ctrl_arvalid( 1'b0           ),
+        .s_axi_ctrl_arready( /* Not Used */ ),
+        .s_axi_ctrl_araddr ( 32'b0          ),
+
+        .s_axi_ctrl_rvalid( /* Not Used */ ),
+        .s_axi_ctrl_rready( 1'b0           ),
+        .s_axi_ctrl_rdata ( /* Not Used */ ),
+        .s_axi_ctrl_rresp ( /* Not Used */ ),
+
+        .interrupt           ( /* Not Used */ ),
+        .app_ecc_multiple_err( /* Not Used */ ),
+        .app_ecc_single_err  ( /* Not Used */ ),
+    `endif
+
         // System Clock Ports
         .sys_clk_i( sys_clk_200 ),
-        .sys_rst  ( sys_rst_ni  ),
-
-        // Device Temperature
-        .device_temp( /* Not Used */ )
+        .sys_rst  ( sys_rst_ni  )
     ); 
 
 endmodule : bgpu_wrapper
