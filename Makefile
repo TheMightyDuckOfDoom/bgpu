@@ -253,7 +253,6 @@ clean: asic-clean gowin-clean xilinx-clean verilator-clean formal-clean
 	rm -f *.vcd
 	rm -f *.out
 	rm -f *.log
-	rm -rf vendor
 
 formal-clean:
 	rm -rf formal/work
@@ -278,3 +277,7 @@ gowin-clean:
 	rm -f  gowin/*.rpt
 	rm -f  gowin/run*.tcl
 	rm -rf gowin/out
+
+deep-clean: clean
+	rm -rf vendor/
+	rm -rf .bender/
