@@ -7,6 +7,8 @@
 /// Instruction Cache
 // Simple direct mapped cache
 module instruction_cache #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 2,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 8,
     /// Number of warps per compute unit
@@ -56,13 +58,13 @@ module instruction_cache #(
     input  subwarp_id_t fe_subwarp_id_i,
 
     // To Decode
-    input  logic        dec_ready_i,
-    output logic        ic_valid_o,
-    output pc_t         ic_pc_o,
-    output act_mask_t   ic_act_mask_o,
-    output wid_t        ic_warp_id_o,
-    output enc_inst_t   ic_inst_o,
-    output subwarp_id_t ic_subwarp_id_o
+    input  logic                       dec_ready_i,
+    output logic      [FetchWidth-1:0] ic_valid_o,
+    output pc_t                        ic_pc_o,
+    output act_mask_t                  ic_act_mask_o,
+    output wid_t                       ic_warp_id_o,
+    output enc_inst_t [FetchWidth-1:0] ic_inst_o,
+    output subwarp_id_t                ic_subwarp_id_o
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -151,7 +153,7 @@ module instruction_cache #(
         ic_ready_o = 1'b0;
 
         // Output to decoder
-        ic_valid_o      = 1'b0;
+        ic_valid_o      = '0;
         ic_pc_o         = '0;
         ic_act_mask_o   = '0;
         ic_warp_id_o    = '0;
@@ -213,14 +215,26 @@ module instruction_cache #(
                 // -> Hit, send to decoder, check if we have a new request
 
                 // Send to decoder
-                ic_valid_o      = 1'b1;
                 ic_pc_o         = active_req_q.pc;
                 ic_act_mask_o   = active_req_q.act_mask;
                 ic_warp_id_o    = active_req_q.warp_id;
                 ic_subwarp_id_o = active_req_q.subwarp_id;
-                ic_inst_o       = cache_data[
+                
+                // First pc is always included in cacheline
+                ic_valid_o[0] = 1'b1;
+                ic_inst_o [0] = cache_data[
                     active_req_q.pc[CachelineIdxBits-1:0]
                 ];
+
+                // Check if other pcs in fetch width are also possible
+                for (int fidx = 1; fidx < FetchWidth; fidx++) begin
+                    if ((int'(active_req_q.pc[CachelineIdxBits-1:0]) + fidx) < (1 << CachelineIdxBits)) begin
+                        ic_valid_o[fidx] = 1'b1;
+                        ic_inst_o [fidx] = cache_data[
+                            active_req_q.pc[CachelineIdxBits-1:0] + 'd1
+                        ];
+                    end
+                end
 
                 // Handshake with decoder
                 if (dec_ready_i) begin
@@ -295,14 +309,26 @@ module instruction_cache #(
 
         // Wait for decoder state
         else if (state_q == WAIT_FOR_DECODER) begin : wait_for_decoder_state
-            ic_valid_o      = 1'b1;
             ic_pc_o         = active_req_q.pc;
             ic_act_mask_o   = active_req_q.act_mask;
             ic_warp_id_o    = active_req_q.warp_id;
             ic_subwarp_id_o = active_req_q.subwarp_id;
-            ic_inst_o       = mem_data_q[
+
+            // First pc is always included in cacheline
+            ic_valid_o[0] = 1'b1;
+            ic_inst_o [0] = mem_data_q[
                 active_req_q.pc[CachelineIdxBits-1:0]
             ];
+
+            // Check if other pcs in fetch width are also possible
+            for (int fidx = 1; fidx < FetchWidth; fidx++) begin
+                if ((int'(active_req_q.pc[CachelineIdxBits-1:0]) + fidx) < (1 << CachelineIdxBits)) begin
+                    ic_valid_o[fidx] = 1'b1;
+                    ic_inst_o [fidx] = mem_data_q[
+                        active_req_q.pc[CachelineIdxBits-1:0] + 'd1
+                    ];
+                end
+            end
 
             // Wait for decoder to be ready
             if (dec_ready_i) begin

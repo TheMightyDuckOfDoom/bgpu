@@ -4,13 +4,15 @@
 
 /// Testbench for Instruction Cache
 module tb_instruction_cache import bgpu_pkg::*; #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 2,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 9,
     /// Number of warps
     parameter int unsigned NumWarps = 16,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 4,
-    // Memory Block size in bytes -> Memory request width
+    /// Encoded instructions per cacheline -> Also determines the memory interface width
     parameter int unsigned CachelineIdxBits = 2,
     /// Number of cachelines in the instruction cache
     parameter int unsigned NumCachelines = 16,
@@ -58,11 +60,12 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
     // Response to Decoder
     typedef struct packed {
+        logic [FetchWidth-1:0] valid;
         pc_t         pc;
         act_mask_t   act_mask;
         wid_t        wid;
         subwarp_id_t subwarp_id;
-        enc_inst_t   enc_inst;
+        enc_inst_t [FetchWidth-1:0] enc_inst;
     } ic_rsp_t;
 
     // Memory response
@@ -86,7 +89,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     fetch_req_t fetch_req_q[$];
 
     // Response to decoder
-    logic    ic_valid, dec_ready;
+    logic [FetchWidth-1:0] ic_valid;
+    logic dec_ready;
     ic_rsp_t ic_rsp;
 
     // Memory interface
@@ -154,7 +158,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         .clk_i  ( clk       ),
         .rst_ni ( rst_n     ),
         .data_i ( ic_rsp    ),
-        .valid_i( ic_valid  ),
+        .valid_i( |ic_valid ),
         .ready_o( dec_ready )
     );
 
@@ -210,10 +214,26 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 grsp.act_mask   = fetch_req.act_mask;
                 grsp.wid        = fetch_req.wid;
                 grsp.subwarp_id = fetch_req.subwarp_id;
-                grsp.enc_inst   = mem_data[fetch_req.pc];
+                
+                grsp.valid    = '0;
+                grsp.enc_inst = '0;
 
-                $display("Golden Model - PC: %0h, Warp ID: %0d, Active Mask: %0b, Instruction: %0h",
-                         grsp.pc, grsp.wid, grsp.act_mask, grsp.enc_inst);
+                // First pc is always in cacheline
+                grsp.valid   [0] = 1'b1;
+                grsp.enc_inst[0] = mem_data[fetch_req.pc];
+
+                // Others are valid as long as pc + fidx is within a cacheline
+                for (int fidx = 1; fidx < FetchWidth; fidx++) begin
+                    if ((int'(fetch_req.pc[CachelineIdxBits-1:0]) + fidx) < (1 << CachelineIdxBits)) begin
+                        grsp.valid   [fidx] = 1'b1;
+                        grsp.enc_inst[fidx] = mem_data[fetch_req.pc + 'd1];
+                    end
+                end
+
+                $display("Golden Model - Valid: %b, PC: %0h, Warp ID: %0d, Active Mask: %0b, Instruction: ",
+                         grsp.valid, grsp.pc, grsp.wid, grsp.act_mask);
+                for(int fidx = 0; fidx < FetchWidth; fidx++)
+                    $display("[%d]: %0h", fidx, grsp.enc_inst[fidx]);
 
                 // Push to golden response queue
                 golden_rsp.push_back(grsp);
@@ -239,7 +259,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     ) i_decoder_watchdog (
         .clk_i  ( clk       ),
         .rst_ni ( rst_n     ),
-        .valid_i( ic_valid  ),
+        .valid_i( |ic_valid ),
         .ready_i( dec_ready )
     );
 
@@ -266,6 +286,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     // #######################################################################################
 
     instruction_cache #(
+        .FetchWidth      ( FetchWidth       ),
         .PcWidth         ( PcWidth          ),
         .NumWarps        ( NumWarps         ),
         .WarpWidth       ( WarpWidth        ),
@@ -301,12 +322,14 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         .ic_inst_o      ( ic_rsp.enc_inst   )
     );
 
+    assign ic_rsp.valid = ic_valid;
+
     // ########################################################################################
     // # Simulation Logic                                                                     #
     // ########################################################################################
 
     initial begin : simulation_logic
-        int unsigned cycles, fetch_req_count, mem_req_count, dec_rsp_count;
+        int unsigned cycles, fetch_req_count, mem_req_count, dec_rsp_count, dec_inst_count;
         ic_rsp_t grsp, queued_rsp;
         logic match;
 
@@ -314,6 +337,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         fetch_req_count = 0;
         mem_req_count = 0;
         dec_rsp_count = 0;
+        dec_inst_count = 0;
 
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
@@ -326,7 +350,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
             // Process fetch request
             if (fetch_req_valid && ic_ready) begin
-                $display("Cycle %0d: Fetch Request - PC: %0h, Warp ID: %0d, Active Mask: %0b",
+                $display("Cycle %0d: Fetch Request - PC: %0h, Warp ID: %0d, Active Mask: %b",
                          cycles, fetch_req.pc, fetch_req.wid, fetch_req.act_mask);
                 fetch_req_q.push_back(fetch_req);
                 fetch_req_count++;
@@ -345,11 +369,16 @@ module tb_instruction_cache import bgpu_pkg::*; #(
             end
 
             // Process decoder response
-            if (ic_valid && dec_ready) begin
-                $display("Cycle %0d: Decoder Response - PC: %0h, Warp ID: %0d",
-                            cycles, ic_rsp.pc, ic_rsp.wid);
-                $display("Active Mask: %0b, Instruction: %0h",
-                            ic_rsp.act_mask, ic_rsp.enc_inst);
+            if ((|ic_valid) && dec_ready) begin
+                $display("Cycle %0d: Decoder Response - Valid: %b, PC: %0h, Warp ID: %0d",
+                            cycles, ic_valid, ic_rsp.pc, ic_rsp.wid);
+                $display("Active Mask: %b, Instruction: ",
+                            ic_rsp.act_mask);
+                for(int fidx = 0; fidx < FetchWidth; fidx++) begin
+                    $display("[%d]: %0h", fidx, ic_rsp.enc_inst[fidx]);
+                    if (ic_valid[fidx])
+                        dec_inst_count++;
+                end
                 dec_rsp_count++;
             end
 
@@ -358,7 +387,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 grsp = golden_rsp.pop_front();
                 queued_rsp = i_ic_rsp_to_decoder.gen_queue.queue.pop_front();
 
-                match = (grsp.pc == queued_rsp.pc) &&
+                match = (grsp.valid == queued_rsp.valid) &&
+                        (grsp.pc == queued_rsp.pc) &&
                         (grsp.wid == queued_rsp.wid) &&
                         (grsp.act_mask == queued_rsp.act_mask) &&
                         (grsp.enc_inst == queued_rsp.enc_inst) &&
@@ -366,14 +396,17 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
                 assert(match) else begin
                     $display("Cycle %0d: Mismatch in decoder response", cycles);
+                    $display("Expected: Valid: %b actual: %b", grsp.valid, queued_rsp.valid);
                     $display("Expected: PC: %0h actual: %0h", grsp.pc, queued_rsp.pc);
                     $display("Expected: Warp ID: %0d actual: %0d", grsp.wid, queued_rsp.wid);
                     $display("Expected: Subwarp ID: %0d actual: %0d",
                         grsp.subwarp_id, queued_rsp.subwarp_id);
-                    $display("Expected: Active Mask: %0b actual: %0b",
+                    $display("Expected: Active Mask: %b actual: %b",
                         grsp.act_mask, queued_rsp.act_mask);
-                    $display("Expected: Instruction: %0h actual: %0h",
-                        grsp.enc_inst, queued_rsp.enc_inst);
+                    for (int fidx = 0; fidx < FetchWidth; fidx++) begin
+                        $display("Expected: Instruction [%0d]: %0h actual: %0h",
+                            fidx, grsp.enc_inst[fidx], queued_rsp.enc_inst[fidx]);
+                    end
                     $error("Decoder response does not match golden model");
                 end
             end
@@ -397,6 +430,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 fetch_req_count, NumInsts);
 
         $display("Simulation completed successfully after %0d cycles", cycles);
+        $display("Sent %d responses to decoder, %d valid instructions", dec_rsp_count, dec_inst_count);
+        $display("Average inst per response: %f", real'(dec_inst_count) / real'(dec_rsp_count));
         $finish;
     end : simulation_logic
 
