@@ -397,7 +397,7 @@ module wait_buffer import bgpu_pkg::*; #(
                 dec_valid_i && wb_ready_o && insert_mask[i] |-> !wait_buffer_valid_q[i])
             else $error("Insert index is already valid in the wait buffer");
 
-            for(genvar j = 0; j < WaitBufferSizePerWarp; j++) begin : gen_cross_entry_asserts
+            for (genvar j = 0; j < WaitBufferSizePerWarp; j++) begin : gen_cross_entry_asserts
                 // Assert that the dependency mask is only set for valid instructions
                 assert property (@(posedge clk_i) disable iff(!rst_ni)
                     wait_buffer_valid_q[i] && wait_buffer_q[i].dep_mask[j]

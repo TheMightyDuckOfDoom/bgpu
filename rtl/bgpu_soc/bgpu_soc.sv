@@ -325,7 +325,7 @@ module bgpu_soc #(
     // Allocate a warp in the first free cluster
     always_comb begin : select_cc_for_allocation
         cc_allocate_warp = '0;
-        for(int unsigned i = 0; i < ComputeClusters; i++) begin : loop_cc
+        for (int unsigned i = 0; i < ComputeClusters; i++) begin : loop_cc
             if (cc_warp_free[i]) begin : free_cc
                 cc_allocate_warp[i] = allocate_warp;
                 break; // Only allocate in the first free cluster
@@ -352,7 +352,7 @@ module bgpu_soc #(
     );
 
     // Generate Compute Clusters
-    for(genvar i = 0; i < ComputeClusters; i++) begin : gen_compute_clusters
+    for (genvar i = 0; i < ComputeClusters; i++) begin : gen_compute_clusters
         compute_cluster #(
             .ComputeUnits          ( ComputeUnitsPerCluster ),
             .PcWidth               ( PcWidth                ),

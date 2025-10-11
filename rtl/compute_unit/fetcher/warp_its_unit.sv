@@ -290,7 +290,7 @@ module warp_its_unit #(
             else $error("ITS: Instruction decoded but no valid PC for subwarp %0d!",
                         decoded_subwarp_id_i);
 
-        for(genvar i = 0; i < WarpWidth; i++) begin : gen_assertions
+        for (genvar i = 0; i < WarpWidth; i++) begin : gen_assertions
             // If a PC is valid, then it must have a active mask with at least one active thread
             assert property (@(posedge clk_i) disable iff (!rst_ni) valid_pc_q[i]
                 |-> pc_act_mask_q[i].active_mask != '0)

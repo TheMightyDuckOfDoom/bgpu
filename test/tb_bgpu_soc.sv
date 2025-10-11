@@ -504,14 +504,14 @@ module tb_bgpu_soc #(
 
         // Write program to memory
         offset = 0;
-        for(int i = 0; i < prog.size(); i++) begin
+        for (int i = 0; i < prog.size(); i++) begin
             jtag_write_reg32(offset, prog[i], 1'b1);
             offset += 4;
         end
 
         // Write Data to memory
-        for(int j = 0; j < 3; j++) begin
-            for(int i = 0; i < DataPerMatrix; i++) begin
+        for (int j = 0; j < 3; j++) begin
+            for (int i = 0; i < DataPerMatrix; i++) begin
                 jtag_write_reg32(offset, i + 1, 1'b1);
                 offset += 4;
             end
@@ -538,9 +538,9 @@ module tb_bgpu_soc #(
 
         // Read back results
         offset = prog.size() * 4;
-        for(int j = 0; j < 3; j++) begin
+        for (int j = 0; j < 3; j++) begin
             $display("@%t | [RESULTS] Reading back results for matrix %0d", $time, j);
-            for(int i = 0; i < DataPerMatrix; i++) begin
+            for (int i = 0; i < DataPerMatrix; i++) begin
                 jtag_read_reg32(offset, data);
                 $display("@%t | [RESULTS] Result %0d: 0x%h", $time, i, data);
                 offset += 4;

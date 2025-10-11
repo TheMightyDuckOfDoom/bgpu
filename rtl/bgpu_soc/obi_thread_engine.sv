@@ -164,7 +164,7 @@ module obi_thread_engine #(
                             finished_tblocks_d = '0;
 
                             // If first bit is set, we execute in-order
-                            if(obi_req_i.a.be[0])
+                            if (obi_req_i.a.be[0])
                                 inorder_execution_d = obi_req_i.a.wdata[0];
                         end
                     end else begin

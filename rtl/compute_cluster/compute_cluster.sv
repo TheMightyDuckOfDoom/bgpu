@@ -389,7 +389,7 @@ module compute_cluster #(
         tgroup_id : allocate_tgroup_id_i
     };
 
-    for(genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_allocate_reg
+    for (genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_allocate_reg
         spill_register #(
             .T     ( allocate_data_t ),
             .Bypass( 1'b0            )

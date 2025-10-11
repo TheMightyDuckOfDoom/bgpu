@@ -232,7 +232,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
                 $display("Golden Model - Valid: %b, PC: %0h, Warp ID: %0d, Active Mask: %0b, Instruction: ",
                          grsp.valid, grsp.pc, grsp.wid, grsp.act_mask);
-                for(int fidx = 0; fidx < FetchWidth; fidx++)
+                for (int fidx = 0; fidx < FetchWidth; fidx++)
                     $display("[%d]: %0h", fidx, grsp.enc_inst[fidx]);
 
                 // Push to golden response queue
@@ -374,7 +374,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                             cycles, ic_valid, ic_rsp.pc, ic_rsp.wid);
                 $display("Active Mask: %b, Instruction: ",
                             ic_rsp.act_mask);
-                for(int fidx = 0; fidx < FetchWidth; fidx++) begin
+                for (int fidx = 0; fidx < FetchWidth; fidx++) begin
                     $display("[%d]: %0h", fidx, ic_rsp.enc_inst[fidx]);
                     if (ic_valid[fidx])
                         dec_inst_count++;

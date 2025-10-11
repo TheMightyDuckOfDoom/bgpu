@@ -182,7 +182,7 @@ module tb_thread_dispatcher #(
                 golden_req.dp_addr    = req.dp_addr;
                 golden_req.tgroup_id  = req.tgroup_id;
 
-                for(int i = 0; i < req.number_of_tblocks; i++) begin : tblock_loop
+                for (int i = 0; i < req.number_of_tblocks; i++) begin : tblock_loop
                     golden_req.tblock_idx = tblock_idx_t'(i);
 
                     // Store the request

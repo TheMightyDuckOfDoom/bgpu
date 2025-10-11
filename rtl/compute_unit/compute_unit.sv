@@ -796,7 +796,7 @@ module compute_unit import bgpu_pkg::*; #(
 
                 data = {data, $sformatf(" OpReq: %0b", disp_to_opc_data.operands_required)};
 
-                for(int i = 0; i < OperandsPerInst; i++) begin
+                for (int i = 0; i < OperandsPerInst; i++) begin
                     data = {data, $sformatf(", Operand%0d: %0d", i, disp_to_opc_data.operands[i])};
                 end
                 $fwrite(f, "%s\n", data);
@@ -820,9 +820,9 @@ module compute_unit import bgpu_pkg::*; #(
                     opc_to_eu_data_q.tag[WidWidth-1:0], opc_to_eu_data_q.act_mask,
                     opc_to_eu_data_q.dst);
 
-                for(int i = 0; i < OperandsPerInst; i++) begin
+                for (int i = 0; i < OperandsPerInst; i++) begin
                     data = {data, $sformatf(", Operand%0d:", i)};
-                    for(int thread = 0; thread < WarpWidth; thread++) begin
+                    for (int thread = 0; thread < WarpWidth; thread++) begin
                         data = {data, $sformatf(" (t%0d: 0x%h)", thread,
                             opc_to_eu_data_q.operands[i][thread * RegWidth +: RegWidth])};
                     end
@@ -848,9 +848,9 @@ module compute_unit import bgpu_pkg::*; #(
                     opc_to_eu_data_q.tag[WidWidth-1:0], opc_to_eu_data_q.act_mask,
                     opc_to_eu_data_q.dst);
 
-                for(int i = 0; i < OperandsPerInst; i++) begin
+                for (int i = 0; i < OperandsPerInst; i++) begin
                     data = {data, $sformatf(", Operand%0d:", i)};
-                    for(int thread = 0; thread < WarpWidth; thread++) begin
+                    for (int thread = 0; thread < WarpWidth; thread++) begin
                         data = {data, $sformatf(" (t%0d: 0x%h)", thread,
                             opc_to_eu_data_q.operands[i][thread * RegWidth +: RegWidth])};
                     end
@@ -876,9 +876,9 @@ module compute_unit import bgpu_pkg::*; #(
                     opc_to_eu_data_q.tag[WidWidth-1:0], opc_to_eu_data_q.act_mask,
                     opc_to_eu_data_q.dst);
 
-                for(int i = 0; i < OperandsPerInst; i++) begin
+                for (int i = 0; i < OperandsPerInst; i++) begin
                     data = {data, $sformatf(", Operand%0d:", i)};
-                    for(int thread = 0; thread < WarpWidth; thread++) begin
+                    for (int thread = 0; thread < WarpWidth; thread++) begin
                         data = {data, $sformatf(" (t%0d: 0x%h)", thread,
                             opc_to_eu_data_q.operands[i][thread * RegWidth +: RegWidth])};
                     end
@@ -903,7 +903,7 @@ module compute_unit import bgpu_pkg::*; #(
                     eu_to_opc_data_q.tag, eu_to_opc_data_q.tag[WidWidth-1:0],
                     eu_to_opc_data_q.act_mask, eu_to_opc_data_q.dst);
 
-                for(int thread = 0; thread < WarpWidth; thread++) begin
+                for (int thread = 0; thread < WarpWidth; thread++) begin
                     data = {data, $sformatf(" (t%0d: 0x%h)", thread,
                         eu_to_opc_data_q.data[thread * RegWidth +: RegWidth])};
                 end
