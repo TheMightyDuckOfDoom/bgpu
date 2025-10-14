@@ -5,6 +5,8 @@
 /// Multi Warp Dispatcher
 /// Contains a dispatcher per warp
 module multi_warp_dispatcher import bgpu_pkg::*; #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -24,13 +26,15 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     parameter int unsigned TagWidth       = $clog2(NumTags),
     parameter int unsigned WidWidth       =  NumWarps > 1 ? $clog2(NumWarps)  : 1,
     parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
-    parameter type         wid_t          = logic [         WidWidth-1:0],
-    parameter type         reg_idx_t      = logic [      RegIdxWidth-1:0],
-    parameter type         pc_t           = logic [          PcWidth-1:0],
-    parameter type         act_mask_t     = logic [        WarpWidth-1:0],
-    parameter type         tag_t          = logic [         TagWidth-1:0],
-    parameter type         iid_t          = logic [TagWidth+WidWidth-1:0],
-    parameter type         subwarp_id_t   = logic [   SubwarpIdWidth-1:0]
+    parameter type         wid_t          = logic     [         WidWidth-1:0],
+    parameter type         reg_idx_t      = logic     [      RegIdxWidth-1:0],
+    parameter type         pc_t           = logic     [          PcWidth-1:0],
+    parameter type         act_mask_t     = logic     [        WarpWidth-1:0],
+    parameter type         tag_t          = logic     [         TagWidth-1:0],
+    parameter type         iid_t          = logic     [TagWidth+WidWidth-1:0],
+    parameter type         subwarp_id_t   = logic     [   SubwarpIdWidth-1:0],
+    parameter type         op_is_reg_t    = logic     [  OperandsPerInst-1:0],
+    parameter type         op_reg_idx_t   = reg_idx_t [  OperandsPerInst-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,
@@ -54,27 +58,28 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     input  wid_t dec_control_decoded_warp_id_i,
 
     /// From decoder -> new instruction
-    output logic        ib_ready_o,
-    input  logic        dec_valid_i,
-    input  pc_t         dec_pc_i,
-    input  act_mask_t   dec_act_mask_i,
-    input  wid_t        dec_warp_id_i,
-    input  subwarp_id_t dec_subwarp_id_i,
-    input  inst_t       dec_inst_i,
-    input  reg_idx_t    dec_dst_i,
-    input  logic        [OperandsPerInst-1:0] dec_operands_required_i,
-    input  reg_idx_t    [OperandsPerInst-1:0] dec_operands_i,
+    output logic                         ib_ready_o,
+    input  logic                         dec_valid_i,
+    input  pc_t                          dec_pc_i,
+    input  act_mask_t                    dec_act_mask_i,
+    input  wid_t                         dec_warp_id_i,
+    input  subwarp_id_t                  dec_subwarp_id_i,
+    input  logic        [FetchWidth-1:0] dec_valid_insts_i,
+    input  inst_t       [FetchWidth-1:0] dec_inst_i,
+    input  reg_idx_t    [FetchWidth-1:0] dec_dst_i,
+    input  op_is_reg_t  [FetchWidth-1:0] dec_operands_is_reg_i,
+    input  op_reg_idx_t [FetchWidth-1:0] dec_operands_i,
 
     /// To Operand Collector
-    input  logic      opc_ready_i,
-    output logic      disp_valid_o,
-    output iid_t      disp_tag_o,
-    output pc_t       disp_pc_o,
-    output act_mask_t disp_act_mask_o,
-    output inst_t     disp_inst_o,
-    output reg_idx_t  disp_dst_o,
-    output logic      [OperandsPerInst-1:0] disp_operands_required_o,
-    output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
+    input  logic        opc_ready_i,
+    output logic        disp_valid_o,
+    output iid_t        disp_tag_o,
+    output pc_t         disp_pc_o,
+    output act_mask_t   disp_act_mask_o,
+    output inst_t       disp_inst_o,
+    output reg_idx_t    disp_dst_o,
+    output op_is_reg_t  disp_operands_is_reg_o,
+    output op_reg_idx_t disp_operands_o,
 
     /// From Operand Collector -> instruction has read its operands
     input logic opc_eu_handshake_i,
@@ -91,13 +96,13 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     typedef logic [NumWarps-1:0] warp_mask_t;
 
     typedef struct packed {
-        tag_t       tag;
-        pc_t        pc;
-        act_mask_t  act_mask;
-        inst_t      inst;
-        reg_idx_t   dst_reg;
-        logic       [OperandsPerInst-1:0] operands_required;
-        reg_idx_t   [OperandsPerInst-1:0] operands;
+        tag_t      tag;
+        pc_t       pc;
+        act_mask_t act_mask;
+        inst_t     inst;
+        reg_idx_t  dst_reg;
+        logic      [OperandsPerInst-1:0] operands_is_reg;
+        reg_idx_t  [OperandsPerInst-1:0] operands;
     } disp_data_t;
 
     // #######################################################################################
@@ -166,6 +171,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // Dispatcher per Warp
     for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
         dispatcher #(
+            .FetchWidth           ( FetchWidth            ),
             .NumTags              ( NumTags               ),
             .PcWidth              ( PcWidth               ),
             .WarpWidth            ( WarpWidth             ),
@@ -184,25 +190,26 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
 
             .dec_control_decoded_i( dec_control_decoded_warp[warp] ),
 
-            .disp_ready_o           ( ib_ready_warp [warp]    ),
-            .dec_valid_i            ( dec_valid_warp[warp]    ),
-            .dec_subwarp_id_i       ( dec_subwarp_id_i        ),
-            .dec_pc_i               ( dec_pc_i                ),
-            .dec_act_mask_i         ( dec_act_mask_i          ),
-            .dec_inst_i             ( dec_inst_i              ),
-            .dec_dst_i              ( dec_dst_i               ),
-            .dec_operands_required_i( dec_operands_required_i ),
-            .dec_operands_i         ( dec_operands_i          ),
+            .disp_ready_o         ( ib_ready_warp [warp]  ),
+            .dec_valid_i          ( dec_valid_warp[warp]  ),
+            .dec_subwarp_id_i     ( dec_subwarp_id_i      ),
+            .dec_pc_i             ( dec_pc_i              ),
+            .dec_act_mask_i       ( dec_act_mask_i        ),
+            .dec_valid_insts_i    ( dec_valid_insts_i     ),
+            .dec_inst_i           ( dec_inst_i            ),
+            .dec_dst_i            ( dec_dst_i             ),
+            .dec_operands_is_reg_i( dec_operands_is_reg_i ),
+            .dec_operands_i       ( dec_operands_i        ),
 
-            .opc_ready_i             ( arb_gnt      [warp]                   ),
-            .disp_valid_o            ( rr_inst_ready[warp]                   ),
-            .disp_pc_o               ( arb_in_data  [warp].pc                ),
-            .disp_act_mask_o         ( arb_in_data  [warp].act_mask          ),
-            .disp_tag_o              ( arb_in_data  [warp].tag               ),
-            .disp_inst_o             ( arb_in_data  [warp].inst              ),
-            .disp_dst_o              ( arb_in_data  [warp].dst_reg           ),
-            .disp_operands_required_o( arb_in_data  [warp].operands_required ),
-            .disp_operands_o         ( arb_in_data  [warp].operands          ),
+            .opc_ready_i           ( arb_gnt      [warp]                 ),
+            .disp_valid_o          ( rr_inst_ready[warp]                 ),
+            .disp_pc_o             ( arb_in_data  [warp].pc              ),
+            .disp_act_mask_o       ( arb_in_data  [warp].act_mask        ),
+            .disp_tag_o            ( arb_in_data  [warp].tag             ),
+            .disp_inst_o           ( arb_in_data  [warp].inst            ),
+            .disp_dst_o            ( arb_in_data  [warp].dst_reg         ),
+            .disp_operands_is_reg_o( arb_in_data  [warp].operands_is_reg ),
+            .disp_operands_o       ( arb_in_data  [warp].operands        ),
 
             .opc_eu_handshake_i( opc_eu_handshake_warp[warp]      ),
             .opc_eu_tag_i      ( opc_eu_tag_i[WidWidth+:TagWidth] ),
@@ -242,12 +249,12 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         .rr_i   ( '0   )
     );
 
-    assign disp_tag_o               = {arb_sel_data.tag, arb_sel_wid};
-    assign disp_pc_o                = arb_sel_data.pc;
-    assign disp_act_mask_o          = arb_sel_data.act_mask;
-    assign disp_inst_o              = arb_sel_data.inst;
-    assign disp_dst_o               = arb_sel_data.dst_reg;
-    assign disp_operands_required_o = arb_sel_data.operands_required;
-    assign disp_operands_o          = arb_sel_data.operands;
+    assign disp_tag_o             = {arb_sel_data.tag, arb_sel_wid};
+    assign disp_pc_o              = arb_sel_data.pc;
+    assign disp_act_mask_o        = arb_sel_data.act_mask;
+    assign disp_inst_o            = arb_sel_data.inst;
+    assign disp_dst_o             = arb_sel_data.dst_reg;
+    assign disp_operands_is_reg_o = arb_sel_data.operands_is_reg;
+    assign disp_operands_o        = arb_sel_data.operands;
 
 endmodule : multi_warp_dispatcher

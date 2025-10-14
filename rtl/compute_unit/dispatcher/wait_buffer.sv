@@ -19,11 +19,14 @@ module wait_buffer import bgpu_pkg::*; #(
     parameter int unsigned OperandsPerInst = 2,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned TagWidth   = $clog2(NumTags),
-    parameter type         tag_t      = logic [   TagWidth-1:0],
-    parameter type         pc_t       = logic [    PcWidth-1:0],
-    parameter type         act_mask_t = logic [  WarpWidth-1:0],
-    parameter type         reg_idx_t  = logic [RegIdxWidth-1:0]
+    parameter int unsigned TagWidth     = $clog2(NumTags),
+    parameter type         tag_t        = logic     [       TagWidth-1:0],
+    parameter type         pc_t         = logic     [        PcWidth-1:0],
+    parameter type         act_mask_t   = logic     [      WarpWidth-1:0],
+    parameter type         reg_idx_t    = logic     [    RegIdxWidth-1:0],
+    parameter type         op_mask_t    = logic     [OperandsPerInst-1:0],
+    parameter type         op_reg_idx_t = reg_idx_t [OperandsPerInst-1:0],
+    parameter type         op_tag_t     = tag_t     [OperandsPerInst-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,
@@ -42,28 +45,28 @@ module wait_buffer import bgpu_pkg::*; #(
     input  logic      dec_control_decoded_i,
 
     /// From decoder -> new instruction
-    output logic      wb_ready_o,
-    input  logic      dec_valid_i,
-    input  pc_t       dec_pc_i,
-    input  act_mask_t dec_act_mask_i,
-    input  tag_t      dec_tag_i,
-    input  reg_idx_t  dec_dst_reg_i,
-    input  inst_t     dec_inst_i,
-    input  logic      [OperandsPerInst-1:0] dec_operands_required_i,
-    input  logic      [OperandsPerInst-1:0] dec_operands_ready_i,
-    input  tag_t      [OperandsPerInst-1:0] dec_operand_tags_i,
-    input  reg_idx_t  [OperandsPerInst-1:0] dec_operands_i,
+    output logic        wb_ready_o,
+    input  logic        dec_valid_i,
+    input  pc_t         dec_pc_i,
+    input  act_mask_t   dec_act_mask_i,
+    input  tag_t        dec_tag_i,
+    input  reg_idx_t    dec_dst_reg_i,
+    input  inst_t       dec_inst_i,
+    input  op_mask_t    dec_operands_is_reg_i,
+    input  op_mask_t    dec_operands_ready_i,
+    input  op_tag_t     dec_operand_tags_i,
+    input  op_reg_idx_t dec_operands_i,
 
     /// To Operand Collector
-    input  logic      opc_ready_i,
-    output logic      disp_valid_o,
-    output tag_t      disp_tag_o,
-    output pc_t       disp_pc_o,
-    output act_mask_t disp_act_mask_o,
-    output inst_t     disp_inst_o,
-    output reg_idx_t  disp_dst_o,
-    output logic      [OperandsPerInst-1:0] disp_operands_required_o,
-    output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
+    input  logic        opc_ready_i,
+    output logic        disp_valid_o,
+    output tag_t        disp_tag_o,
+    output pc_t         disp_pc_o,
+    output act_mask_t   disp_act_mask_o,
+    output inst_t       disp_inst_o,
+    output reg_idx_t    disp_dst_o,
+    output op_mask_t    disp_operands_is_reg_o,
+    output op_reg_idx_t disp_operands_o,
 
     /// From Operand Collector -> instruction has read its operands
     input logic opc_eu_handshake_i,
@@ -91,20 +94,20 @@ module wait_buffer import bgpu_pkg::*; #(
         // Other instruction that we have to wait for -> allows ordering of instructions
         entry_mask_t dep_mask;
 
-        logic     [OperandsPerInst-1:0] operands_required;
-        logic     [OperandsPerInst-1:0] operands_ready;
-        tag_t     [OperandsPerInst-1:0] operand_tags;
-        reg_idx_t [OperandsPerInst-1:0] operands;
+        op_mask_t    operands_is_reg;
+        op_mask_t    operands_ready;
+        op_tag_t     operand_tags;
+        op_reg_idx_t operands;
     } wait_buffer_entry_t;
 
     typedef struct packed {
-        pc_t       pc;
-        act_mask_t act_mask;
-        tag_t      tag;
-        inst_t     inst;
-        reg_idx_t  dst_reg;
-        logic      [OperandsPerInst-1:0] operands_required;
-        reg_idx_t  [OperandsPerInst-1:0] operands_reg;
+        pc_t         pc;
+        act_mask_t   act_mask;
+        tag_t        tag;
+        inst_t       inst;
+        reg_idx_t    dst_reg;
+        op_mask_t    operands_is_reg;
+        op_reg_idx_t operands_reg;
     } disp_data_t;
 
     // #######################################################################################
@@ -201,7 +204,7 @@ module wait_buffer import bgpu_pkg::*; #(
                 // Check if the destination register is used as operand in the wait buffer
                 for (int operand = 0; operand < OperandsPerInst; operand++)
                 begin : gen_operand_check
-                    if (wait_buffer_q[i].operands_required[operand]
+                    if (wait_buffer_q[i].operands_is_reg[operand]
                       && wait_buffer_q[i].operands[operand] == dec_dst_reg_i) begin
                         dep_mask[i] = 1'b1;
                     end
@@ -268,22 +271,22 @@ module wait_buffer import bgpu_pkg::*; #(
 
             // Insert instruction into buffer
             if (dec_valid_i && wb_ready_o && insert_mask[entry]) begin : insert_entry
-                wait_buffer_valid_d     [entry]        = 1'b1;
-                wait_buffer_dispatched_d[entry]        = 1'b0;
+                wait_buffer_valid_d     [entry] = 1'b1;
+                wait_buffer_dispatched_d[entry] = 1'b0;
 
-                wait_buffer_d[entry].pc                = dec_pc_i;
-                wait_buffer_d[entry].act_mask          = dec_act_mask_i;
-                wait_buffer_d[entry].inst              = dec_inst_i;
-                wait_buffer_d[entry].dst_reg           = dec_dst_reg_i;
-                wait_buffer_d[entry].tag               = dec_tag_i;
+                wait_buffer_d[entry].pc       = dec_pc_i;
+                wait_buffer_d[entry].act_mask = dec_act_mask_i;
+                wait_buffer_d[entry].inst     = dec_inst_i;
+                wait_buffer_d[entry].dst_reg  = dec_dst_reg_i;
+                wait_buffer_d[entry].tag      = dec_tag_i;
 
-                wait_buffer_d[entry].dep_mask          = dep_mask & (~remove_mask);
+                wait_buffer_d[entry].dep_mask = dep_mask & (~remove_mask);
 
-                wait_buffer_d[entry].operands_required = dec_operands_required_i;
-                wait_buffer_d[entry].operands_ready    = dec_operands_ready_i
-                                                         | (~dec_operands_required_i);
-                wait_buffer_d[entry].operands          = dec_operands_i;
-                wait_buffer_d[entry].operand_tags      = dec_operand_tags_i;
+                wait_buffer_d[entry].operands_is_reg = dec_operands_is_reg_i;
+                wait_buffer_d[entry].operands_ready  = dec_operands_ready_i
+                                                       | (~dec_operands_is_reg_i);
+                wait_buffer_d[entry].operands        = dec_operands_i;
+                wait_buffer_d[entry].operand_tags    = dec_operand_tags_i;
             end : insert_entry
         end
     end : gen_insert_logic
@@ -294,14 +297,13 @@ module wait_buffer import bgpu_pkg::*; #(
                                                     && &wait_buffer_q[entry].operands_ready
                                                     && !wait_buffer_dispatched_q[entry]
                                                     && (wait_buffer_q[entry].dep_mask == '0);
-        assign arb_in_data[entry].pc           = wait_buffer_q[entry].pc;
-        assign arb_in_data[entry].act_mask     = wait_buffer_q[entry].act_mask;
-        assign arb_in_data[entry].tag          = wait_buffer_q[entry].tag;
-        assign arb_in_data[entry].inst         = wait_buffer_q[entry].inst;
-        assign arb_in_data[entry].dst_reg      = wait_buffer_q[entry].dst_reg;
-        assign arb_in_data[entry].operands_required
-                                               = wait_buffer_q[entry].operands_required;
-        assign arb_in_data[entry].operands_reg = wait_buffer_q[entry].operands;
+        assign arb_in_data[entry].pc              = wait_buffer_q[entry].pc;
+        assign arb_in_data[entry].act_mask        = wait_buffer_q[entry].act_mask;
+        assign arb_in_data[entry].tag             = wait_buffer_q[entry].tag;
+        assign arb_in_data[entry].inst            = wait_buffer_q[entry].inst;
+        assign arb_in_data[entry].dst_reg         = wait_buffer_q[entry].dst_reg;
+        assign arb_in_data[entry].operands_is_reg = wait_buffer_q[entry].operands_is_reg;
+        assign arb_in_data[entry].operands_reg    = wait_buffer_q[entry].operands;
     end : gen_rr_inst_ready
 
     // Round robin arbiter
@@ -331,13 +333,13 @@ module wait_buffer import bgpu_pkg::*; #(
         .rr_i   ( '0   )
     );
 
-    assign disp_pc_o                = arb_sel_data.pc;
-    assign disp_act_mask_o          = arb_sel_data.act_mask;
-    assign disp_tag_o               = arb_sel_data.tag;
-    assign disp_inst_o              = arb_sel_data.inst;
-    assign disp_dst_o               = arb_sel_data.dst_reg;
-    assign disp_operands_required_o = arb_sel_data.operands_required;
-    assign disp_operands_o          = arb_sel_data.operands_reg;
+    assign disp_pc_o              = arb_sel_data.pc;
+    assign disp_act_mask_o        = arb_sel_data.act_mask;
+    assign disp_tag_o             = arb_sel_data.tag;
+    assign disp_inst_o            = arb_sel_data.inst;
+    assign disp_dst_o             = arb_sel_data.dst_reg;
+    assign disp_operands_is_reg_o = arb_sel_data.operands_is_reg;
+    assign disp_operands_o        = arb_sel_data.operands_reg;
 
     // #######################################################################################
     // # Sequential Logic                                                                    #

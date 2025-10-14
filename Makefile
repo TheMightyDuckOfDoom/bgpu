@@ -37,7 +37,7 @@ TBS = $(basename $(notdir $(wildcard test/tb_*.sv)))
 .PHONY: lint asic xilinx gowin-yosys clean tb_% tb-all
 
 vendor/: $(BENDER_DEPS)
-	$(BENDER) vendor init
+#$(BENDER) vendor init
 
 bgpu-gowin: TOP := bgpu_soc
 bgpu-gowin: gowin-eda-bgpu-wrapper gowin-eda-report gowin-eda-pnr gowin-eda-pnr-report

@@ -16,6 +16,8 @@
 // 1. Check wait buffer if any instruction is waiting on this result |-> tag matches, mark as ready
 // 2. Update Register Table, clear tag for dst register
 module dispatcher import bgpu_pkg::*; #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
     /// Number of inflight instructions
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -32,11 +34,13 @@ module dispatcher import bgpu_pkg::*; #(
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth       = $clog2(NumTags),
     parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
-    parameter type         tag_t          = logic [      TagWidth-1:0],
-    parameter type         reg_idx_t      = logic [   RegIdxWidth-1:0],
-    parameter type         pc_t           = logic [       PcWidth-1:0],
-    parameter type         act_mask_t     = logic [     WarpWidth-1:0],
-    parameter type         subwarp_id_t   = logic [SubwarpIdWidth-1:0]
+    parameter type         tag_t          = logic     [       TagWidth-1:0],
+    parameter type         reg_idx_t      = logic     [    RegIdxWidth-1:0],
+    parameter type         pc_t           = logic     [        PcWidth-1:0],
+    parameter type         act_mask_t     = logic     [      WarpWidth-1:0],
+    parameter type         subwarp_id_t   = logic     [ SubwarpIdWidth-1:0],
+    parameter type         op_mask_t      = logic     [OperandsPerInst-1:0],
+    parameter type         op_reg_idx_t   = reg_idx_t [OperandsPerInst-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,
@@ -56,29 +60,30 @@ module dispatcher import bgpu_pkg::*; #(
     output logic ib_all_instr_finished_o,
 
     /// From decoder -> control decoded
-    input  logic      dec_control_decoded_i,
+    input  logic dec_control_decoded_i,
 
     /// From decoder -> new instruction
-    output logic        disp_ready_o,
-    input  logic        dec_valid_i,
-    input  subwarp_id_t dec_subwarp_id_i,
-    input  pc_t         dec_pc_i,
-    input  act_mask_t   dec_act_mask_i,
-    input  inst_t       dec_inst_i,
-    input  reg_idx_t    dec_dst_i,
-    input  logic        [OperandsPerInst-1:0] dec_operands_required_i,
-    input  reg_idx_t    [OperandsPerInst-1:0] dec_operands_i,
+    output logic                         disp_ready_o,
+    input  logic                         dec_valid_i,
+    input  subwarp_id_t                  dec_subwarp_id_i,
+    input  pc_t                          dec_pc_i,
+    input  act_mask_t                    dec_act_mask_i,
+    input  logic        [FetchWidth-1:0] dec_valid_insts_i,
+    input  inst_t       [FetchWidth-1:0] dec_inst_i,
+    input  reg_idx_t    [FetchWidth-1:0] dec_dst_i,
+    input  op_mask_t    [FetchWidth-1:0] dec_operands_is_reg_i,
+    input  op_reg_idx_t [FetchWidth-1:0] dec_operands_i,
 
     /// To Operand Collector
-    input  logic      opc_ready_i,
-    output logic      disp_valid_o,
-    output tag_t      disp_tag_o,
-    output pc_t       disp_pc_o,
-    output act_mask_t disp_act_mask_o,
-    output inst_t     disp_inst_o,
-    output reg_idx_t  disp_dst_o,
-    output logic      [OperandsPerInst-1:0] disp_operands_required_o,
-    output reg_idx_t  [OperandsPerInst-1:0] disp_operands_o,
+    input  logic        opc_ready_i,
+    output logic        disp_valid_o,
+    output tag_t        disp_tag_o,
+    output pc_t         disp_pc_o,
+    output act_mask_t   disp_act_mask_o,
+    output inst_t       disp_inst_o,
+    output reg_idx_t    disp_dst_o,
+    output op_mask_t    disp_operands_is_reg_o,
+    output op_reg_idx_t disp_operands_o,
 
     /// From Operand Collector -> instruction has read its operands
     input logic opc_eu_handshake_i,
@@ -88,6 +93,12 @@ module dispatcher import bgpu_pkg::*; #(
     input  logic eu_valid_i,
     input  tag_t eu_tag_i
 );
+    // #######################################################################################
+    // # Typedefs                                                                            #
+    // #######################################################################################
+
+    // Operand Tags
+    typedef tag_t [OperandsPerInst-1:0] op_tag_t;
 
     // #######################################################################################
     // # Signals                                                                             #
@@ -104,8 +115,8 @@ module dispatcher import bgpu_pkg::*; #(
     // Register Table
     logic reg_table_space_available;
 
-    logic [OperandsPerInst-1:0] operands_ready;
-    tag_t [OperandsPerInst-1:0] operands_tag;
+    op_mask_t operands_ready;
+    op_tag_t  operands_tag;
 
     // Wait Buffer
     logic wb_ready;
@@ -129,7 +140,8 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     tag_queue #(
-        .NumTags( NumTags )
+        .NumTagOut( FetchWidth ),
+        .NumTags  ( NumTags    )
     ) i_tag_queue (
         .clk_i  ( clk_i  ),
         .rst_ni ( rst_ni ),
@@ -193,27 +205,27 @@ module dispatcher import bgpu_pkg::*; #(
 
         .dec_control_decoded_i( dec_control_decoded_i ),
 
-        .wb_ready_o             ( wb_ready                ),
-        .dec_valid_i            ( insert                  ),
-        .dec_pc_i               ( dec_pc_i                ),
-        .dec_act_mask_i         ( dec_act_mask_i          ),
-        .dec_tag_i              ( dst_tag                 ),
-        .dec_inst_i             ( dec_inst_i              ),
-        .dec_dst_reg_i          ( dec_dst_i               ),
-        .dec_operands_required_i( dec_operands_required_i ),
-        .dec_operands_ready_i   ( operands_ready          ),
-        .dec_operand_tags_i     ( operands_tag            ),
-        .dec_operands_i         ( dec_operands_i          ),
+        .wb_ready_o           ( wb_ready              ),
+        .dec_valid_i          ( insert                ),
+        .dec_pc_i             ( dec_pc_i              ),
+        .dec_act_mask_i       ( dec_act_mask_i        ),
+        .dec_tag_i            ( dst_tag               ),
+        .dec_inst_i           ( dec_inst_i            ),
+        .dec_dst_reg_i        ( dec_dst_i             ),
+        .dec_operands_is_reg_i( dec_operands_is_reg_i ),
+        .dec_operands_ready_i ( operands_ready        ),
+        .dec_operand_tags_i   ( operands_tag          ),
+        .dec_operands_i       ( dec_operands_i        ),
 
-        .opc_ready_i             ( opc_ready_i              ),
-        .disp_valid_o            ( disp_valid_o             ),
-        .disp_tag_o              ( disp_tag_o               ),
-        .disp_pc_o               ( disp_pc_o                ),
-        .disp_act_mask_o         ( disp_act_mask_o          ),
-        .disp_inst_o             ( disp_inst_o              ),
-        .disp_dst_o              ( disp_dst_o               ),
-        .disp_operands_required_o( disp_operands_required_o ),
-        .disp_operands_o         ( disp_operands_o          ),
+        .opc_ready_i           ( opc_ready_i            ),
+        .disp_valid_o          ( disp_valid_o           ),
+        .disp_tag_o            ( disp_tag_o             ),
+        .disp_pc_o             ( disp_pc_o              ),
+        .disp_act_mask_o       ( disp_act_mask_o        ),
+        .disp_inst_o           ( disp_inst_o            ),
+        .disp_dst_o            ( disp_dst_o             ),
+        .disp_operands_is_reg_o( disp_operands_is_reg_o ),
+        .disp_operands_o       ( disp_operands_o        ),
 
         .opc_eu_handshake_i( opc_eu_handshake_i ),
         .opc_eu_tag_i      ( opc_eu_tag_i       ),

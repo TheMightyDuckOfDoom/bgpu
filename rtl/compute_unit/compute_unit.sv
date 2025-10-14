@@ -163,6 +163,7 @@ module compute_unit import bgpu_pkg::*; #(
         act_mask_t   act_mask;
         wid_t        warp_id;
         subwarp_id_t subwarp_id;
+        logic        [FetchWidth-1:0] valid_insts;
         inst_t       [FetchWidth-1:0] inst;
         reg_idx_t    [FetchWidth-1:0] dst;
         op_is_reg_t  [FetchWidth-1:0] operands_is_reg;
@@ -176,7 +177,7 @@ module compute_unit import bgpu_pkg::*; #(
         act_mask_t act_mask;
         inst_t     inst;
         reg_idx_t  dst;
-        logic      [OperandsPerInst-1:0] operands_required;
+        logic      [OperandsPerInst-1:0] operands_is_reg;
         reg_idx_t  [OperandsPerInst-1:0] operands;
     } disp_to_opc_data_t;
 
@@ -409,7 +410,7 @@ module compute_unit import bgpu_pkg::*; #(
         .ic_inst_i      ( ic_to_dec_data.inst       ),
 
         .disp_ready_i         ( ib_to_dec_ready_q                ),
-        .dec_valid_o          ( dec_to_ib_valid_d                ),
+        .dec_valid_o          ( dec_to_ib_data_d.valid_insts     ),
         .dec_pc_o             ( dec_to_ib_data_d.pc              ),
         .dec_act_mask_o       ( dec_to_ib_data_d.act_mask        ),
         .dec_warp_id_o        ( dec_to_ib_data_d.warp_id         ),
@@ -433,6 +434,8 @@ module compute_unit import bgpu_pkg::*; #(
     // # Decoder to Instruction Buffer - Register                                            #
     // #######################################################################################
 
+    assign dec_to_ib_valid_d = |dec_to_ib_data_d.valid_insts;
+
     stream_register #(
         .T( dec_to_ib_data_t )
     ) i_dec_to_ib_reg (
@@ -455,13 +458,14 @@ module compute_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     multi_warp_dispatcher #(
-        .NumTags              ( NumTags               ),
-        .PcWidth              ( PcWidth               ),
-        .NumWarps             ( NumWarps              ),
-        .WarpWidth            ( WarpWidth             ),
-        .WaitBufferSizePerWarp( InflightInstrPerWarp  ),
-        .RegIdxWidth          ( RegIdxWidth           ),
-        .OperandsPerInst      ( OperandsPerInst       )
+        .FetchWidth           ( FetchWidth           ),
+        .NumTags              ( NumTags              ),
+        .PcWidth              ( PcWidth              ),
+        .NumWarps             ( NumWarps             ),
+        .WarpWidth            ( WarpWidth            ),
+        .WaitBufferSizePerWarp( InflightInstrPerWarp ),
+        .RegIdxWidth          ( RegIdxWidth          ),
+        .OperandsPerInst      ( OperandsPerInst      )
     ) i_warp_dispatcher (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
@@ -477,26 +481,27 @@ module compute_unit import bgpu_pkg::*; #(
         .dec_control_decoded_i        ( dec_to_fetch_decoded && dec_to_fetch_control ),
         .dec_control_decoded_warp_id_i( dec_to_fetch_decoded_warp_id                 ),
 
-        .ib_ready_o             ( ib_to_dec_ready_d                ),
-        .dec_valid_i            ( dec_to_ib_valid_q                ),
-        .dec_pc_i               ( dec_to_ib_data_q.pc              ),
-        .dec_act_mask_i         ( dec_to_ib_data_q.act_mask        ),
-        .dec_warp_id_i          ( dec_to_ib_data_q.warp_id         ),
-        .dec_subwarp_id_i       ( dec_to_ib_data_q.subwarp_id      ),
-        .dec_inst_i             ( dec_to_ib_data_q.inst            ),
-        .dec_dst_i              ( dec_to_ib_data_q.dst             ),
-        .dec_operands_required_i( dec_to_ib_data_q.operands_is_reg ),
-        .dec_operands_i         ( dec_to_ib_data_q.operands        ),
+        .ib_ready_o            ( ib_to_dec_ready_d                ),
+        .dec_valid_i           ( dec_to_ib_valid_q                ),
+        .dec_pc_i              ( dec_to_ib_data_q.pc              ),
+        .dec_act_mask_i        ( dec_to_ib_data_q.act_mask        ),
+        .dec_warp_id_i         ( dec_to_ib_data_q.warp_id         ),
+        .dec_subwarp_id_i      ( dec_to_ib_data_q.subwarp_id      ),
+        .dec_valid_insts_i     ( dec_to_ib_data_q.valid_insts     ),
+        .dec_inst_i            ( dec_to_ib_data_q.inst            ),
+        .dec_dst_i             ( dec_to_ib_data_q.dst             ),
+        .dec_operands_is_reg_i ( dec_to_ib_data_q.operands_is_reg ),
+        .dec_operands_i        ( dec_to_ib_data_q.operands        ),
 
-        .opc_ready_i             ( opc_to_disp_ready                  ),
-        .disp_valid_o            ( disp_to_opc_valid                  ),
-        .disp_tag_o              ( disp_to_opc_data.tag               ),
-        .disp_pc_o               ( disp_to_opc_data.pc                ),
-        .disp_act_mask_o         ( disp_to_opc_data.act_mask          ),
-        .disp_inst_o             ( disp_to_opc_data.inst              ),
-        .disp_dst_o              ( disp_to_opc_data.dst               ),
-        .disp_operands_required_o( disp_to_opc_data.operands_required ),
-        .disp_operands_o         ( disp_to_opc_data.operands          ),
+        .opc_ready_i           ( opc_to_disp_ready                ),
+        .disp_valid_o          ( disp_to_opc_valid                ),
+        .disp_tag_o            ( disp_to_opc_data.tag             ),
+        .disp_pc_o             ( disp_to_opc_data.pc              ),
+        .disp_act_mask_o       ( disp_to_opc_data.act_mask        ),
+        .disp_inst_o           ( disp_to_opc_data.inst            ),
+        .disp_dst_o            ( disp_to_opc_data.dst             ),
+        .disp_operands_is_reg_o( disp_to_opc_data.operands_is_reg ),
+        .disp_operands_o       ( disp_to_opc_data.operands        ),
 
         .opc_eu_handshake_i( opc_to_eu_valid_d && eu_to_opc_ready_q ),
         .opc_eu_tag_i      ( opc_to_eu_data_d.tag                   ),
@@ -524,15 +529,15 @@ module compute_unit import bgpu_pkg::*; #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .opc_ready_o        ( opc_to_disp_ready                  ),
-        .disp_valid_i       ( disp_to_opc_valid                  ),
-        .disp_tag_i         ( disp_to_opc_data.tag               ),
-        .disp_pc_i          ( disp_to_opc_data.pc                ),
-        .disp_act_mask_i    ( disp_to_opc_data.act_mask          ),
-        .disp_inst_i        ( disp_to_opc_data.inst              ),
-        .disp_dst_i         ( disp_to_opc_data.dst               ),
-        .disp_src_required_i( disp_to_opc_data.operands_required ),
-        .disp_src_i         ( disp_to_opc_data.operands          ),
+        .opc_ready_o        ( opc_to_disp_ready                ),
+        .disp_valid_i       ( disp_to_opc_valid                ),
+        .disp_tag_i         ( disp_to_opc_data.tag             ),
+        .disp_pc_i          ( disp_to_opc_data.pc              ),
+        .disp_act_mask_i    ( disp_to_opc_data.act_mask        ),
+        .disp_inst_i        ( disp_to_opc_data.inst            ),
+        .disp_dst_i         ( disp_to_opc_data.dst             ),
+        .disp_src_required_i( disp_to_opc_data.operands_is_reg ),
+        .disp_src_i         ( disp_to_opc_data.operands        ),
 
         .eu_ready_i        ( eu_to_opc_ready_q         ),
         .opc_valid_o       ( opc_to_eu_valid_d         ),
@@ -794,7 +799,7 @@ module compute_unit import bgpu_pkg::*; #(
                     disp_to_opc_data.tag[WidWidth-1:0], disp_to_opc_data.act_mask,
                     disp_to_opc_data.dst);
 
-                data = {data, $sformatf(" OpReq: %0b", disp_to_opc_data.operands_required)};
+                data = {data, $sformatf(" OpIsReg: %b", disp_to_opc_data.operands_is_reg)};
 
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     data = {data, $sformatf(", Operand%0d: %0d", i, disp_to_opc_data.operands[i])};
