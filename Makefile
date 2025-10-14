@@ -97,17 +97,17 @@ tb-all: $(TBS)
 
 # Generate filelist for Vivado synthesis
 xilinx/vivado.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -D SYNTHESIS -D PRIM_ASSERT_SV > $@
+	$(BENDER) script vivado -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -D SYNTHESIS -D PRIM_ASSERT_SV -D HPDCACHE_ASSERT_OFF > $@
 
 xilinx/vivado_impl.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script vivado -t xilinx -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -D SYNTHESIS -D PRIM_ASSERT_SV > $@
+	$(BENDER) script vivado -t xilinx -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -D SYNTHESIS -D PRIM_ASSERT_SV -D HPDCACHE_ASSERT_OFF > $@
 
 xilinx/vivado_sim.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script vivado -t sim -t simulation -t xilinx -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -D PRIM_ASSERT_SV -D XSIM > $@
 
 # Generate filelist for Yosys synthesis
 xilinx/yosys.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script flist-plus -t xilinx_yosys -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS > $@
+	$(BENDER) script flist-plus -t xilinx_yosys -t bscane -t tech_cells_generic_exclude_tc_sram -t tech_cells_generic_exclude_tc_clk -t tech_cells_generic_exclude_xilinx_xpm -D SYNTHESIS -D HPDCACHE_ASSERT_OFF > $@
 
 # Run Vivado synthesis
 xilinx-vivado: xilinx/vivado.f $(SRCS) xilinx/scripts/vivado.tcl xilinx/src/dummy_constraints.xdc xilinx/run_vivado.sh
@@ -161,7 +161,7 @@ xilinx-vivado-sim-%: xilinx/vivado_sim.f $(SRCS) $(TB_SRCS) xilinx/scripts/vivad
 
 # Generate filelist for Yosys synthesis
 asic/yosys.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script flist-plus -t asic -D SYNTHESIS > $@
+	$(BENDER) script flist-plus -t asic -D SYNTHESIS -D HPDCACHE_ASSERT_OFF > $@
 
 # Yosys Makefile
 include asic/asic.mk
@@ -171,7 +171,7 @@ include asic/asic.mk
 ####################################################################################################
 
 gowin/gowin-yosys.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script flist-plus -t gowin_yosys -D SYNTHESIS -t tech_cells_generic_exclude_tc_sram > $@
+	$(BENDER) script flist-plus -t gowin_yosys -D SYNTHESIS -D HPDCACHE_ASSERT_OFF -t tech_cells_generic_exclude_tc_sram > $@
 
 gowin/gowin-eda.f: $(BENDER_DEPS) vendor/
 	$(BENDER) sources -f -t gowin_eda -t tech_cells_generic_exclude_tc_sram > $@
@@ -185,13 +185,13 @@ gowin-eda: gowin/gowin-eda.f $(SRCS) gowin/scripts/eda.tcl
 	echo "set top_design $(TOP)"  >  gowin/run_eda.tcl
 	echo "source gowin/scripts/eda.tcl" >> gowin/run_eda.tcl
 	mkdir -p gowin/out
-	morty -f gowin/gowin-eda.f -D SYNTHESIS --top $(TOP) > gowin/out/pickled.sv
+	morty -f gowin/gowin-eda.f -D SYNTHESIS -D HPDCACHE_ASSERT_OFF --top $(TOP) > gowin/out/pickled.sv
 	gowin/run_eda.sh ${GOWIN_EDA} gowin/run_eda.tcl
 
 gowin-eda-bgpu-wrapper: TOP := bgpu_soc
 gowin-eda-bgpu-wrapper: gowin/gowin-eda.f $(SRCS) gowin/scripts/eda_bgpu_wrapper.tcl
 	mkdir -p gowin/out
-	morty -f gowin/gowin-eda.f -D SYNTHESIS > gowin/out/pickled.sv
+	morty -f gowin/gowin-eda.f -D SYNTHESIS -D HPDCACHE_ASSERT_OFF > gowin/out/pickled.sv
 	gowin/run_eda.sh ${GOWIN_EDA} gowin/scripts/eda_bgpu_wrapper.tcl
 
 gowin-eda-report:

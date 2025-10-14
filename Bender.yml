@@ -8,14 +8,14 @@ package:
         - "Tobias Senti <git@tsenti.li>"
 
 dependencies:
-    axi:                { git: "https://github.com/pulp-platform/axi",                  version: 0.39.8           }
-    common_cells:       { git: "https://github.com/pulp-platform/common_cells",         version: 1.38.0           }
-    flopoco-sv-lib:     { git: "https://github.com/TheMightyDuckOfDoom/flopoco-sv-lib", rev: "main"               }
-    obi:                { git: "https://github.com/pulp-platform/obi",                  version: 0.1.7            }
-    register_interface: { git: "https://github.com/pulp-platform/register_interface",   version: 0.4.6            }
-    riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",        rev: "verilator-phsauter" }
-    tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic",   version: 0.2.13           }
-    # hpdcache:     { git: "https://github.com/openhwgroup/cv-hpdcache",    rev: 724dcede54123f69bfac64842d8ee52833d4fd77 }
+    axi:                { git: "https://github.com/pulp-platform/axi",                  version: 0.39.8                               }
+    common_cells:       { git: "https://github.com/pulp-platform/common_cells",         version: 1.38.0                               }
+    flopoco-sv-lib:     { git: "https://github.com/TheMightyDuckOfDoom/flopoco-sv-lib", rev: "main"                                   }
+    obi:                { git: "https://github.com/pulp-platform/obi",                  version: 0.1.7                                }
+    register_interface: { git: "https://github.com/pulp-platform/register_interface",   version: 0.4.6                                }
+    riscv-dbg:          { git: "https://github.com/pulp-platform/riscv-dbg.git",        rev: "verilator-phsauter"                     }
+    tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic",   version: 0.2.13                               }
+    hpdcache:           { git: "https://github.com/openhwgroup/cv-hpdcache",            rev: 2300bf301c76f0a8791a474dddbca9a9e6f2bd81 }
 
     cve2:               { path: "vendor/cve2" }
 
@@ -71,6 +71,7 @@ sources:
 
           - rtl/compute_cluster/imem_to_axi.sv
           - rtl/compute_cluster/mem_to_axi.sv
+          # - rtl/compute_cluster/cluster_cache.sv
           - rtl/compute_cluster/compute_cluster.sv
           - rtl/compute_cluster/compute_cluster_synth_wrapper.sv
 

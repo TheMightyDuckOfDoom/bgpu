@@ -12,7 +12,7 @@ puts $top
 puts $device
 synth_design -top $top -part $device -verbose -debug_log -mode out_of_context
 #-flatten_hierarchy none
-report_power
+# report_power
 report_timing -nworst 1
 report_utilization -hierarchical -hierarchical_percentages
 # report_timing_summary

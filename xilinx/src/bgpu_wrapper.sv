@@ -81,24 +81,31 @@ module bgpu_wrapper (
     localparam bit UseMctrl = 1'b1;
 
 `ifdef BOARD_STLV
+    localparam int unsigned ComputeClusters        = 1;
     localparam int unsigned ComputeUnitsPerCluster = 4;
-    localparam int unsigned MctrlAddressWidth      = 30;  // 1GB DDR3
+    localparam int unsigned MctrlAddressWidth      = 30; // 1GB DDR3
     localparam int unsigned MctrlWidth             = 512;
 `endif
 `ifdef BOARD_YPCB
+    localparam int unsigned ComputeClusters        = 1;
     localparam int unsigned ComputeUnitsPerCluster = 6;
     localparam int unsigned MctrlAddressWidth      = 31; // 2GB DDR3
     localparam int unsigned MctrlWidth             = 512;
 `endif
 `ifdef BOARD_TESTER
-    localparam int unsigned ComputeUnitsPerCluster = 8;
+    // 1cc with 8cu works
+    // 4cc with 4cu works
+    // 4cc with 6cu fails when assigning SLRs -2ns slack
+    // 4cc with 6cu fails with -1.4ns slack 64.70% LUT
+    // 4cc with 8cu fails with -2.1ns slack 85.79% LUT
+    localparam int unsigned ComputeClusters        = 4;
+    localparam int unsigned ComputeUnitsPerCluster = 4;
     localparam int unsigned MctrlAddressWidth      = 28;
     localparam int unsigned MctrlWidth             = 128;
 `endif
 
     localparam int unsigned WarpWidth              = 4;
     localparam int unsigned OutstandingReqIdxWidth = 1;
-    localparam int unsigned ComputeClusters        = 1;
 
     // Width of the thread idx inside a warp
     localparam int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
@@ -152,7 +159,7 @@ module bgpu_wrapper (
     // # Clock                                                                               #
     // #######################################################################################
 
-    IBUFGDS #(
+    IBUFDS #(
         .DIFF_TERM( "TRUE" )
     ) i_sys_clk_200_diff_ibuf (
         .I ( sys_clk_200_pi         ),
@@ -165,7 +172,7 @@ module bgpu_wrapper (
         .O( sys_clk_200            )
     );
 
-    IBUFG i_mgmt_clk_ibuf (
+    IBUF i_mgmt_clk_ibuf (
         .I ( mgmt_clk_i          ),
         .O ( mgmt_clk_unbuffered )
     );

@@ -36,10 +36,16 @@ packages:
       Path: vendor/cve2
     dependencies: []
   flopoco-sv-lib:
-    revision: 12bb967f8b552d3e7bd632cb3905f193077fd8aa
+    revision: f4275cdf64bf78b2af1ed5b071bf2e9d18b72a2d
     version: null
     source:
       Git: https://github.com/TheMightyDuckOfDoom/flopoco-sv-lib
+    dependencies: []
+  hpdcache:
+    revision: 2300bf301c76f0a8791a474dddbca9a9e6f2bd81
+    version: null
+    source:
+      Git: https://github.com/openhwgroup/cv-hpdcache
     dependencies: []
   obi:
     revision: 0155fc34e900c7c884e081c0a1114a247937ff69

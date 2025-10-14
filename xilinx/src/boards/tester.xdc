@@ -29,3 +29,16 @@ set_property -dict { PACKAGE_PIN R28 IOSTANDARD LVCMOS18 } [get_ports {sys_rst_n
 set_property -dict { PACKAGE_PIN P30 IOSTANDARD LVCMOS18 } [get_ports {led_o[0]}]
 set_property -dict { PACKAGE_PIN M30 IOSTANDARD LVCMOS18 } [get_ports {led_o[1]}]
 set_property -dict { PACKAGE_PIN N30 IOSTANDARD LVCMOS18 } [get_ports {led_o[2]}]
+
+# SLRs: Distribute Compute Clusters across SLRs
+# set_property USER_SLR_ASSIGNMENT SLR0 [get_cells {i_bgpu/gen_compute_clusters[0].i_cc}]
+# set_property USER_SLR_ASSIGNMENT SLR0 [get_cells {i_bgpu/gen_compute_clusters[4].i_cc}]
+
+# set_property USER_SLR_ASSIGNMENT SLR1 [get_cells {i_bgpu/gen_compute_clusters[1].i_cc}]
+# set_property USER_SLR_ASSIGNMENT SLR1 [get_cells {i_bgpu/gen_compute_clusters[5].i_cc}]
+
+# set_property USER_SLR_ASSIGNMENT SLR2 [get_cells {i_bgpu/gen_compute_clusters[2].i_cc}]
+# set_property USER_SLR_ASSIGNMENT SLR2 [get_cells {i_bgpu/gen_compute_clusters[6].i_cc}]
+
+# set_property USER_SLR_ASSIGNMENT SLR3 [get_cells {i_bgpu/gen_compute_clusters[3].i_cc}]
+# set_property USER_SLR_ASSIGNMENT SLR3 [get_cells {i_bgpu/gen_compute_clusters[7].i_cc}]

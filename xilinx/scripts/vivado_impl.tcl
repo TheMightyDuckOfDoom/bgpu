@@ -45,13 +45,13 @@ proc make_reports {prefix} {
 
 # Synthesis Reports
 make_reports 1_synth
-write_verilog -force -mode funcsim out/netlists/${top}_1_synth.v
+# write_verilog -force -mode funcsim out/netlists/${top}_1_synth.v
 write_checkpoint -force out/checkpoints/${top}_1_synth.dcp
 
 # Optimize Design (Integrating IPs)
 opt_design -verbose
 make_reports 2_opt
-write_verilog -force -mode funcsim out/netlists/${top}_2_opt.v
+# write_verilog -force -mode funcsim out/netlists/${top}_2_opt.v
 write_checkpoint -force out/checkpoints/${top}_2_opt.dcp
 
 # Optional Power Optimization
@@ -64,7 +64,7 @@ if {$power_opt} {
 # Place the design
 place_design -verbose -directive Explore
 make_reports 4_place
-write_verilog -force -mode funcsim out/netlists/${top}_4_place.v
+# write_verilog -force -mode funcsim out/netlists/${top}_4_place.v
 write_checkpoint -force out/checkpoints/${top}_4_place.dcp
 
 # Physical Optimization looping
@@ -98,7 +98,7 @@ while {1} {
 }
 set_clock_uncertainty -setup 0 [get_clocks clk_pll_i]
 make_reports 5_phys_opt
-write_verilog -force -mode funcsim out/netlists/${top}_5_phys_opt.v
+# write_verilog -force -mode funcsim out/netlists/${top}_5_phys_opt.v
 write_checkpoint -force out/checkpoints/${top}_5_phys_opt.dcp
 
 # Another round of optional Power Optimizations
@@ -111,14 +111,14 @@ if {$power_opt} {
 # Route the design
 route_design -directive AggressiveExplore
 make_reports 7_route
-write_verilog -force -mode funcsim out/netlists/${top}_7_route.v
+# write_verilog -force -mode funcsim out/netlists/${top}_7_route.v
 write_checkpoint -force out/checkpoints/${top}_7_route.dcp
 
 # Final Physical Optimizations
 phys_opt_design -directive AggressiveExplore -verbose
 report_phys_opt -file $ROOT/xilinx/out/reports/$top/8_phys_opt_phys_opt.rpt
 make_reports 8_phys_opt
-write_verilog -force -mode funcsim out/netlists/${top}_8_phys_opt.v
+# write_verilog -force -mode funcsim out/netlists/${top}_8_phys_opt.v
 
 # Write checkpoint
 write_checkpoint -force out/checkpoints/${top}_8_phys_opt.dcp
