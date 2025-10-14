@@ -214,7 +214,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 grsp.act_mask   = fetch_req.act_mask;
                 grsp.wid        = fetch_req.wid;
                 grsp.subwarp_id = fetch_req.subwarp_id;
-                
+
                 grsp.valid    = '0;
                 grsp.enc_inst = '0;
 
@@ -224,13 +224,14 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
                 // Others are valid as long as pc + fidx is within a cacheline
                 for (int fidx = 1; fidx < FetchWidth; fidx++) begin
-                    if ((int'(fetch_req.pc[CachelineIdxBits-1:0]) + fidx) < (1 << CachelineIdxBits)) begin
+                    if ((int'(fetch_req.pc[CachelineIdxBits-1:0]) + fidx)
+                            < (1 << CachelineIdxBits)) begin
                         grsp.valid   [fidx] = 1'b1;
                         grsp.enc_inst[fidx] = mem_data[fetch_req.pc + 'd1];
                     end
                 end
 
-                $display("Golden Model - Valid: %b, PC: %0h, Warp ID: %0d, Active Mask: %0b, Instruction: ",
+                $display("Gold Model - Valid: %b, PC: %0h, Warp ID: %0d, Active Mask: %0b, Inst: ",
                          grsp.valid, grsp.pc, grsp.wid, grsp.act_mask);
                 for (int fidx = 0; fidx < FetchWidth; fidx++)
                     $display("[%d]: %0h", fidx, grsp.enc_inst[fidx]);
@@ -430,7 +431,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 fetch_req_count, NumInsts);
 
         $display("Simulation completed successfully after %0d cycles", cycles);
-        $display("Sent %d responses to decoder, %d valid instructions", dec_rsp_count, dec_inst_count);
+        $display("Sent %d responses to decoder, %d valid instructions", dec_rsp_count,
+            dec_inst_count);
         $display("Average inst per response: %f", real'(dec_inst_count) / real'(dec_rsp_count));
         $finish;
     end : simulation_logic

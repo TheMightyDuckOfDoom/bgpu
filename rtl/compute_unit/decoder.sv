@@ -145,7 +145,7 @@ module decoder import bgpu_pkg::*; #(
                     // LSU instructions always have two operands register operands
                     // Operand 1 is the address
                     // Operand 0 is the data to store
-                    dec_operands_is_reg_o[fidx][0] = dec_inst_o[fidx].subtype inside `INST_STORE; // Data
+                    dec_operands_is_reg_o[fidx][0] = dec_inst_o[fidx].subtype inside `INST_STORE;
                     dec_operands_is_reg_o[fidx][1] = 1'b1; // Address
                 end : decode_lsu
 
@@ -157,9 +157,11 @@ module decoder import bgpu_pkg::*; #(
                         // Sign extend the offset and add it to the PC
                         if (PcWidth > 16)
                             dec_decoded_next_pc_o = dec_pc_o + fidx[PcWidth-1:0]
-                                + {{(PcWidth-16){ic_inst_i[fidx][15]}}, ic_inst_i[fidx][15:0]} + 'd1;
+                                + {{(PcWidth-16){ic_inst_i[fidx][15]}}, ic_inst_i[fidx][15:0]}
+                                + 'd1;
                         else
-                            dec_decoded_next_pc_o = dec_pc_o + fidx[PcWidth-1:0] + ic_inst_i[fidx][PcWidth-1:0] + 'd1;
+                            dec_decoded_next_pc_o = dec_pc_o + fidx[PcWidth-1:0]
+                                + ic_inst_i[fidx][PcWidth-1:0] + 'd1;
 
                         // Is a control instruction
                         dec_decoded_control_o = 1'b1;

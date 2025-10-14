@@ -219,7 +219,7 @@ module instruction_cache #(
                 ic_act_mask_o   = active_req_q.act_mask;
                 ic_warp_id_o    = active_req_q.warp_id;
                 ic_subwarp_id_o = active_req_q.subwarp_id;
-                
+
                 // First pc is always included in cacheline
                 ic_valid_o[0] = 1'b1;
                 ic_inst_o [0] = cache_data[
@@ -228,7 +228,8 @@ module instruction_cache #(
 
                 // Check if other pcs in fetch width are also possible
                 for (int fidx = 1; fidx < FetchWidth; fidx++) begin
-                    if ((int'(active_req_q.pc[CachelineIdxBits-1:0]) + fidx) < (1 << CachelineIdxBits)) begin
+                    if ((int'(active_req_q.pc[CachelineIdxBits-1:0]) + fidx)
+                            < (1 << CachelineIdxBits)) begin
                         ic_valid_o[fidx] = 1'b1;
                         ic_inst_o [fidx] = cache_data[
                             active_req_q.pc[CachelineIdxBits-1:0] + 'd1
@@ -322,7 +323,8 @@ module instruction_cache #(
 
             // Check if other pcs in fetch width are also possible
             for (int fidx = 1; fidx < FetchWidth; fidx++) begin
-                if ((int'(active_req_q.pc[CachelineIdxBits-1:0]) + fidx) < (1 << CachelineIdxBits)) begin
+                if ((int'(active_req_q.pc[CachelineIdxBits-1:0]) + fidx)
+                        < (1 << CachelineIdxBits)) begin
                     ic_valid_o[fidx] = 1'b1;
                     ic_inst_o [fidx] = mem_data_q[
                         active_req_q.pc[CachelineIdxBits-1:0] + 'd1
