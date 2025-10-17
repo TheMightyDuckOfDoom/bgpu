@@ -6,8 +6,8 @@
 module tb_tag_queue #(
     // Simulation parameters
     parameter int unsigned MaxWaitCycles = 1,
-    parameter int unsigned MaxSimCycles  = 2000,
-    parameter int unsigned TagsToFree    = 100,
+    parameter int unsigned MaxSimCycles  = 10000,
+    parameter int unsigned TagsToFree    = 1000,
 
     // Simulation time parameters
     parameter time ClkPeriod = 10ns,
@@ -15,7 +15,9 @@ module tb_tag_queue #(
     parameter time AcqDelay  = 8ns,
 
     /// Number of inflight instructions per warp
-    parameter int unsigned NumTags = 16
+    parameter int unsigned NumTags = 16,
+    /// Number of tags to get at the same time
+    parameter int unsigned NumTagOut = 2
 ) ();
 
     // #######################################################################################
@@ -42,8 +44,10 @@ module tb_tag_queue #(
     tag_t free_tag;
 
     // Get signals
-    logic get, valid;
-    tag_t tag_out;
+    logic [NumTagOut-1:0] get, valid;
+    tag_t [NumTagOut-1:0] tag_out;
+
+    tag_t tag_out_queue[$];
 
     // #######################################################################################
     // # Clock generation                                                                    #
@@ -62,21 +66,33 @@ module tb_tag_queue #(
     // #######################################################################################
 
     // Random subordinate to get a tag
-    rand_stream_slv #(
-        .data_t       ( tag_t         ),
-        .ApplDelay    ( ApplDelay     ),
-        .AcqDelay     ( AcqDelay      ),
-        .MinWaitCycles( 1             ),
-        .MaxWaitCycles( MaxWaitCycles ),
-        .Enqueue      ( 1'b1          )
-    ) i_get_sub (
-        .clk_i ( clk   ),
-        .rst_ni( rst_n ),
+    for (genvar i = 0; i < NumTagOut; i++) begin : gen_get_sub
+        rand_stream_slv #(
+            .data_t       ( tag_t         ),
+            .ApplDelay    ( ApplDelay     ),
+            .AcqDelay     ( AcqDelay      ),
+            .MinWaitCycles( 1             ),
+            .MaxWaitCycles( MaxWaitCycles ),
+            .Enqueue      ( 1'b0          )
+        ) i_get_sub (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
 
-        .data_i ( tag_out ),
-        .valid_i( valid   ),
-        .ready_o( get     )
-    );
+            .data_i ( tag_out[i] ),
+            .valid_i( valid  [i] ),
+            .ready_o( get    [i] )
+        );
+
+        initial begin
+            while(1) begin
+                @(posedge clk);
+                #AcqDelay;
+                if (get[i] && valid[i]) begin
+                    tag_out_queue.push_back(tag_out[i]);
+                end
+            end
+        end
+    end
 
     initial begin
         int unsigned wait_cycles, index, random_free;
@@ -97,20 +113,18 @@ module tb_tag_queue #(
             end
 
             // Randomly choose to free a tag if there are any in the queue
-            if (i_get_sub.gen_queue.queue.size() > 0) begin
+            if (tag_out_queue.size() > 0) begin
                 random_free = $urandom_range(0, 1);
                 free = random_free[0];
                 if (free) begin
                     // Get random tag from queue
-                    index    = $urandom_range(1, i_get_sub.gen_queue.queue.size());
+                    index    = $urandom_range(1, tag_out_queue.size());
                     while (index > 0) begin
-                        i_get_sub.gen_queue.queue.push_back(i_get_sub.gen_queue.queue.pop_front());
+                        tag_out_queue.push_back(tag_out_queue.pop_front());
                         index--;
                     end
 
-                    free_tag = i_get_sub.gen_queue.queue.pop_front();
-                    if (free_tag == tag_out)
-                        free = 1'b0;
+                    free_tag = tag_out_queue.pop_front();
                 end
             end
         end
@@ -121,7 +135,8 @@ module tb_tag_queue #(
     // #######################################################################################
 
     tag_queue #(
-        .NumTags(NumTags)
+        .NumTags  ( NumTags   ),
+        .NumTagOut( NumTagOut )
     ) i_tag_queue (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
@@ -152,27 +167,39 @@ module tb_tag_queue #(
         while(cycles < MaxSimCycles && freed_tags < TagsToFree) begin
             @(posedge clk);
             cycles++;
+            $display("Cycle: %0d", cycles);
 
-            #ApplDelay;
-            #1ns;
+            #AcqDelay;
 
-            if (get && valid) begin
-                got_tags++;
-                $display("Got tag: %0d at cycle %0d", tag_out, cycles);
-                assert (i_get_sub.gen_queue.queue.size() < NumTags)
-                    else $error("Queue size exceeded: %0d >= %0d", i_get_sub.gen_queue.queue.size(),
-                        NumTags);
+            for (int unsigned i = 0; i < NumTagOut; i++) begin : loop_tag_outs
+                if (get[i] && valid[i]) begin : got_tag
+                    got_tags++;
+                    $display("[%0d] Got tag: %0d at cycle %0d", i, tag_out[i], cycles);
+                    
+                    assert (tag_out_queue.size() < NumTags)
+                        else $error("Queue size exceeded: %0d >= %0d", tag_out_queue.size(),
+                            NumTags);
 
-                occurances = 0;
-                for (int unsigned i = 0; i < i_get_sub.gen_queue.queue.size(); i++) begin
-                    if (i_get_sub.gen_queue.queue[i] == tag_out) begin
-                        occurances++;
+                    // Check that no other output got the same tag
+                    for (int unsigned j = 0; j < NumTagOut; j++) begin
+                        if ((j != i) && get[j] && valid[j]) begin
+                            assert (tag_out[i] != tag_out[j])
+                                else $error("Tag %0d found on multiple outputs (%0d and %0d)",
+                                    tag_out[i], i, j);
+                        end
                     end
-                end
-                assert (occurances == 0)
-                    else $error("Tag %0d found %0d times in queue, expected 0", tag_out,
-                        occurances);
-            end
+
+                    occurances = 0;
+                    for (int unsigned tidx = 0; tidx < tag_out_queue.size(); tidx++) begin
+                        if (tag_out_queue[tidx] == tag_out[i]) begin
+                            occurances++;
+                        end
+                    end
+                    assert (occurances == 0)
+                        else $error("Tag %0d found %0d times in queue, expected 0", tag_out[i],
+                            occurances);
+                end : got_tag
+            end : loop_tag_outs
 
             // Check if we freed a tag
             if (free) begin
@@ -194,6 +221,9 @@ module tb_tag_queue #(
         assert (got_tags >= freed_tags)
             else $error("Got tags (%0d) should be greater than or equal to freed tags (%0d)",
             got_tags, freed_tags);
+        
+        assert (freed_tags == TagsToFree)
+            else $error("Did not free enough tags: %0d != %0d", freed_tags, TagsToFree);
 
         $finish;
     end
