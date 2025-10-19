@@ -389,7 +389,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         repeat (5) @(posedge clk);
         wait(rst_n);
 
-        while(tblocks_launched < TblocksToLaunch) begin
+        while (tblocks_launched < TblocksToLaunch) begin
             @(posedge clk);
             #ApplDelay;
             // Flush IC if it is the first threadblock
@@ -419,7 +419,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         int unsigned tblocks_done;
         tblocks_done = 0;
 
-        while(tblocks_done < TblocksToLaunch) begin
+        while (tblocks_done < TblocksToLaunch) begin
             @(posedge clk);
             #AcqDelay;
             if (tblock_done) begin
@@ -443,7 +443,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         imem_data_t rsp;
         imem_ready = 1'b1;
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
             if (imem_req_valid && imem_ready) begin
@@ -462,7 +462,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     end
 
     initial begin
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #ApplDelay;
             imem_rsp_valid = 1'b0;
@@ -496,7 +496,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
 
         mem_ready = 1'b1;
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
             mem_rsp_valid_d = 1'b0;
@@ -546,7 +546,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         $dumpfile("cu.vcd");
         $dumpvars();
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
             $display("Cycle %4d Time %8d", cycles, $time);
@@ -585,7 +585,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     `ifndef POST
     for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_display_dispatcher
         initial begin
-            while(1) begin
+            while (1) begin
                 @(posedge clk);
                 #AcqDelay;
                 $display("Warp %2d", warp);
@@ -674,7 +674,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
         // Start time
         $fwrite(fd, "C=\t0\n");
 
-        while(!stop) begin
+        while (!stop) begin
             @(posedge clk);
             #AcqDelay;
             // Cycle
@@ -790,7 +790,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Retire
-            for(int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
+            for (int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
                 if (i_cu.eu_to_opc_valid_q[wb] && i_cu.opc_to_eu_ready_d[wb]) begin
                     insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data_q[wb].tag];
 

@@ -528,7 +528,7 @@ module tb_bgpu_soc #(
         // Dispatch some threads
         dispatch_threads('h0, (prog.size() + DataPerMatrix * 3) * 4, TblocksToLaunch, 'h2);
 
-        while(1) begin
+        while (1) begin
             dispatch_status(finished);
             if (finished) begin
                 $display("@%t | [DISPATCH] All threads finished", $time);

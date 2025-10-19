@@ -86,7 +86,7 @@ module tb_tag_queue #(
         );
 
         initial begin
-            while(1) begin
+            while (1) begin
                 @(posedge clk);
                 #AcqDelay;
                 if (get[i] && valid[i]) begin
@@ -101,9 +101,9 @@ module tb_tag_queue #(
 
         // Wait for reset
         @(posedge clk);
-        while(!rst_n) @(posedge clk);
+        while (!rst_n) @(posedge clk);
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #ApplDelay;
             free = '0;
@@ -114,7 +114,7 @@ module tb_tag_queue #(
                 #ApplDelay;
             end
 
-            for(int i = 0; i < NumTagIn; i++) begin : loop_free_tags
+            for (int i = 0; i < NumTagIn; i++) begin : loop_free_tags
                 // Randomly choose to free a tag if there are any in the queue
                 if (tag_out_queue.size() > 0) begin
                     random_free = $urandom_range(0, 1);
@@ -169,7 +169,7 @@ module tb_tag_queue #(
         @(posedge clk);
         wait(!rst_n);
 
-        while(cycles < MaxSimCycles && freed_tags < TagsToFree) begin
+        while (cycles < MaxSimCycles && freed_tags < TagsToFree) begin
             @(posedge clk);
             cycles++;
             $display("Cycle: %0d", cycles);

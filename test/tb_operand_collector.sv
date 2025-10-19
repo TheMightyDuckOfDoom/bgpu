@@ -254,7 +254,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
 
         $display("Simulation started, running for %0d cycles", MaxSimCycles);
 
-        while(cycles < MaxSimCycles && completed_insts < InstsToComplete) begin
+        while (cycles < MaxSimCycles && completed_insts < InstsToComplete) begin
             @(posedge clk);
             #AcqDelay;
             cycles++;

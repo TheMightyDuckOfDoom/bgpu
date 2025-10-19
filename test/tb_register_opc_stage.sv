@@ -373,7 +373,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
         eu_rsp   = '{default: 0};
         @(posedge clk);
         @(posedge clk);
-        while(!rst_n) begin
+        while (!rst_n) begin
             @(posedge clk);
         end
 
@@ -388,7 +388,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
                 reg_file[wid][reg_idx]   = randomize_ram_data();
                 eu_rsp.data              = reg_file[wid][reg_idx];
                 @(posedge clk);
-                while(!opc_to_eu_ready) begin
+                while (!opc_to_eu_ready) begin
                     @(posedge clk);
                 end
             end
@@ -399,7 +399,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
 
         $display("Starting simulation!");
 
-        while(cycles < MaxSimCycles && insts_sent_to_eu < InstsToComplete) begin
+        while (cycles < MaxSimCycles && insts_sent_to_eu < InstsToComplete) begin
             // Wait for clock edge
             @(posedge clk);
             #ApplDelay;

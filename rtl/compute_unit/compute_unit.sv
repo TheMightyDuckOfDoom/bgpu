@@ -200,6 +200,9 @@ module compute_unit import bgpu_pkg::*; #(
         reg_idx_t   dst;
         warp_data_t data;
     } eu_to_opc_data_t;
+    
+    // Result Collector mask type
+    typedef logic [3:0] rc_mask_t;
 
     // #######################################################################################
     // # Signals                                                                             #
@@ -272,6 +275,11 @@ module compute_unit import bgpu_pkg::*; #(
     wid_t      bru_branch_wid;
     act_mask_t bru_branching_mask;
     pc_t       bru_branch_pc;
+
+    // Result Collector
+    rc_mask_t [WritebackWidth-1:0] eu_to_rc_valid;
+    rc_mask_t [WritebackWidth-1:0] rc_to_eu_ready;
+    rc_mask_t rc_to_eu_ready_comb;
 
     // #######################################################################################
     // # Fetcher                                                                             #
@@ -759,26 +767,27 @@ module compute_unit import bgpu_pkg::*; #(
     // # Execution Unit Result Collector                                                     #
     // #######################################################################################
 
-    typedef logic [3:0] rc_mask_t;
-    rc_mask_t [WritebackWidth-1:0] eu_to_rc_valid;
-    rc_mask_t [WritebackWidth-1:0] rc_to_eu_ready;
-    rc_mask_t rc_to_eu_ready_comb;
-
-    always_comb begin
+    // Combine ready signals from all writeback ports
+    always_comb begin : combine_rc_ready_signals
         rc_to_eu_ready_comb = '0;
         for (int wb = 0; wb < WritebackWidth; wb++) begin
             rc_to_eu_ready_comb = rc_to_eu_ready_comb | rc_to_eu_ready[wb];
         end
-    end
+    end : combine_rc_ready_signals
 
+    // Extract ready signals for each execution unit
     assign rc_to_bru_ready = rc_to_eu_ready_comb[0];
     assign rc_to_lsu_ready = rc_to_eu_ready_comb[1];
     assign rc_to_iu_ready  = rc_to_eu_ready_comb[2];
     assign rc_to_fpu_ready = rc_to_eu_ready_comb[3];
 
-    for(genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_writeback
-        if(wb == 0)
-            assign eu_to_rc_valid[wb] = {fpu_to_rc_valid,  iu_to_rc_valid,  lsu_to_rc_valid,  bru_to_rc_valid  };
+    // Generate writeback ports
+    for (genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_writeback
+        // Valid signals
+        // Port 0: take directly from EUs
+        // Port N: only valid if previous port was not ready
+        if (wb == 0)
+            assign eu_to_rc_valid[wb] = {fpu_to_rc_valid, iu_to_rc_valid, lsu_to_rc_valid, bru_to_rc_valid};
         else
             assign eu_to_rc_valid[wb] = eu_to_rc_valid[wb-1] & (~rc_to_eu_ready[wb-1]);
 
@@ -830,7 +839,7 @@ module compute_unit import bgpu_pkg::*; #(
         filename = $sformatf("disp_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
         f = $fopen(filename, "w");
 
-        while(1) begin
+        while (1) begin
             @(posedge clk_i);
             if (disp_to_opc_valid && opc_to_disp_ready) begin
                 data = $sformatf("%t: Tag: %0d, Pc: %0x, Inst: %0d, Warp: %0d, AM: %b, Dst: r%0d,",
@@ -856,7 +865,7 @@ module compute_unit import bgpu_pkg::*; #(
         filename = $sformatf("iu_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
         f = $fopen(filename, "w");
 
-        while(1) begin
+        while (1) begin
             @(posedge clk_i);
             if (opc_to_iu_valid && iu_to_opc_ready) begin
                 data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
@@ -884,7 +893,7 @@ module compute_unit import bgpu_pkg::*; #(
         filename = $sformatf("fpu_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
         f = $fopen(filename, "w");
 
-        while(1) begin
+        while (1) begin
             @(posedge clk_i);
             if (opc_to_fpu_valid && fpu_to_opc_ready) begin
                 data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
@@ -912,7 +921,7 @@ module compute_unit import bgpu_pkg::*; #(
         filename = $sformatf("lsu_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
         f = $fopen(filename, "w");
 
-        while(1) begin
+        while (1) begin
             @(posedge clk_i);
             if (opc_to_lsu_valid && lsu_to_opc_ready) begin
                 data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
@@ -940,9 +949,9 @@ module compute_unit import bgpu_pkg::*; #(
         filename = $sformatf("results_cc%0d_cu%0d.log", ClusterId, ComputeUnitId);
         f = $fopen(filename, "w");
 
-        while(1) begin
+        while (1) begin
             @(posedge clk_i);
-            for(int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
+            for (int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
                 if (eu_to_opc_valid_q[wb] && opc_to_eu_ready_d[wb]) begin
                     data = $sformatf("%t: Tag: %0d, Warp: %0d, ActMask: %b, Dst: r%0d, Data: ", $time(),
                         eu_to_opc_data_q[wb].tag, eu_to_opc_data_q[wb].tag[WidWidth-1:0],

@@ -54,7 +54,7 @@ module axi_dumper #(
         string  b_string;
         string  r_string;
 
-        while(1) begin
+        while (1) begin
             @(posedge clk_i);
 
             if (rst_ni) begin

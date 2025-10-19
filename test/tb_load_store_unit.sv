@@ -230,7 +230,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
             mem_data[i] = i[7:0];
         end
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
 
@@ -275,7 +275,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
     initial begin : sim_mem_response
         int unsigned random_shuffle;
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #ApplDelay;
             mem_rsp_valid = 1'b0;
@@ -285,7 +285,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
             if (mem_responses.size() > 0) begin
                 // Shuffle the queue to simulate an out-of-order memory access
                 random_shuffle = $urandom_range(0, mem_responses.size());
-                while(random_shuffle > 0) begin
+                while (random_shuffle > 0) begin
                     mem_responses.push_back(mem_responses.pop_front());
                     random_shuffle--;
                 end
@@ -371,7 +371,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
             end
         end
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
 
@@ -510,7 +510,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
         logic found;
         eu_rsp_t golden_rsp, dut_rsp;
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
 
             if (i_result_sub.gen_queue.queue.size() == 0) begin

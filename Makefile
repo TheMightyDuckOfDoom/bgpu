@@ -37,7 +37,7 @@ TBS = $(basename $(notdir $(wildcard test/tb_*.sv)))
 .PHONY: lint asic xilinx gowin-yosys clean tb_% tb-all
 
 vendor/: $(BENDER_DEPS)
-#$(BENDER) vendor init
+	$(BENDER) vendor init
 
 bgpu-gowin: TOP := bgpu_soc
 bgpu-gowin: gowin-eda-bgpu-wrapper gowin-eda-report gowin-eda-pnr gowin-eda-pnr-report
@@ -47,7 +47,7 @@ bgpu-gowin: gowin-eda-bgpu-wrapper gowin-eda-report gowin-eda-pnr gowin-eda-pnr-
 ####################################################################################################
 
 # Lint using Verilator and Verible
-lint: lint-verilator lint-verible
+lint: lint-yosys lint-verilator lint-verible
 
 # Generate filelist for Verilator linting
 verilator/verilator_lint.f: $(BENDER_DEPS) vendor/
@@ -57,7 +57,17 @@ verilator/verilator_lint.f: $(BENDER_DEPS) vendor/
 lint-verilator: verilator/verilator_lint.f verilator/config.vlt $(SRCS) $(TB_SRCS)
 	$(VERILATOR) -lint-only $(VERILATOR_FLAGS) $(VERILATOR_ARGS) -DPRIM_ASSERT_SV -f $< --timing --top $(TOP)
 
-# Generate filelist for Verilator linting
+# Generate filelist for Yosys linting
+verilator/yosys_lint.f: $(BENDER_DEPS) vendor/
+	$(BENDER) script flist-plus -t synthesis -D SYNTHESIS > $@
+
+# Lint using Yosys-Slang
+lint-yosys: verilator/yosys_lint.f $(SRCS) $(TB_SRCS)
+	yosys -p "plugin -i slang.so; read_slang --top $(TOP) -F verilator/yosys_lint.f \
+        --compat-mode --keep-hierarchy --lint-only \
+        --allow-use-before-declare --ignore-unknown-modules"
+
+# Generate filelist for Verible linting
 verilator/verible_lint.f: $(BENDER_DEPS) vendor/
 	$(BENDER) script flist -n $(BENDER_TARGET_LINT) -t verible > $@
 	tr "\n" " " < $@ > $@.tmp

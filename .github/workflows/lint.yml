@@ -32,6 +32,19 @@ jobs:
       - name: Verilator Lint
         run: make lint-verilator
 
+  yosys-lint:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: .bender
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
+      - name: Verilator Lint
+        run: make lint-yosys
+
   lint-license:
     name: Lint License Headers
     runs-on: ubuntu-latest

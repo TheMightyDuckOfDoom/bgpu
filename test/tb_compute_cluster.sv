@@ -364,7 +364,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         repeat (5) @(posedge clk);
         wait(rst_n);
 
-        while(tblocks_launched < TblocksToLaunch) begin
+        while (tblocks_launched < TblocksToLaunch) begin
             @(posedge clk);
             #ApplDelay;
             // Flush IC if it is the first threadblock
@@ -396,7 +396,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         int unsigned tblocks_done;
         tblocks_done = 0;
 
-        while(tblocks_done < TblocksToLaunch) begin
+        while (tblocks_done < TblocksToLaunch) begin
             @(posedge clk);
             #AcqDelay;
             if (tblock_done) begin
@@ -561,7 +561,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         $dumpfile("cc.vcd");
         $dumpvars();
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
             $display("Cycle %4d Time %8d", cycles, $time);

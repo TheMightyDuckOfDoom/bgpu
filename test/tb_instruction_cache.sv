@@ -124,7 +124,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
     // Flush logic
     initial begin : flush_logic
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #ApplDelay;
             flush = $urandom_range(0, 64) == 0; // Randomly flush the cache
@@ -187,7 +187,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
             mem_data[i] = $urandom;
         end
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #ApplDelay;
             mem_rsp_valid = 1'b0;
@@ -206,7 +206,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     initial begin : golden_model
         ic_rsp_t grsp;
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
             if (fetch_req_valid && ic_ready) begin

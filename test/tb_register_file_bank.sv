@@ -299,7 +299,7 @@ module tb_register_file_bank #(
         $dumpvars();
         $display("Simulation started, running for %0d cycles", MaxSimCycles);
 
-        while(cycles < MaxSimCycles) begin
+        while (cycles < MaxSimCycles) begin
             @(posedge clk);
             cycles++;
             if (read_valid && read_ready) begin

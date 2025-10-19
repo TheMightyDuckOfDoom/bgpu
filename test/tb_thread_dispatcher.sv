@@ -200,7 +200,7 @@ module tb_thread_dispatcher #(
         warp_req_t dut_warp_req;
         warp_req_t golden_warp_req;
 
-        while(1) begin : compare_loop
+        while (1) begin : compare_loop
             @(posedge clk);
 
             if (golden_requests.size() == 0) continue;
@@ -236,7 +236,7 @@ module tb_thread_dispatcher #(
 
         $display("Starting simulation...");
 
-        while(dispatched_requests < RequestsToDispatch) begin : dispatch_loop
+        while (dispatched_requests < RequestsToDispatch) begin : dispatch_loop
             @(posedge clk);
             #AcqDelay;
 

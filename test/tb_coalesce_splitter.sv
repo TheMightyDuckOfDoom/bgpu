@@ -206,7 +206,7 @@ module tb_coalesce_splitter #(
 
     initial begin : capture_dut
         per_thread_rsp_t thread_rsp;
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
             if (rsp_ready && (|rsp_valid)) begin
@@ -238,7 +238,7 @@ module tb_coalesce_splitter #(
         per_thread_rsp_t thread_rsp;
         valid_mask_t valid;
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
 
@@ -293,7 +293,7 @@ module tb_coalesce_splitter #(
     initial begin : compare_results
         per_thread_rsp_t dut_rsp_item, golden_rsp_item;
 
-        while(1) begin
+        while (1) begin
             @(posedge clk);
             #AcqDelay;
 
