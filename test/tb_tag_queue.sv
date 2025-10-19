@@ -17,7 +17,9 @@ module tb_tag_queue #(
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 16,
     /// Number of tags to get at the same time
-    parameter int unsigned NumTagOut = 2
+    parameter int unsigned NumTagOut = 2,
+    /// Number of tags to free at the same time
+    parameter int unsigned NumTagIn = 2
 ) ();
 
     // #######################################################################################
@@ -40,8 +42,8 @@ module tb_tag_queue #(
     logic clk, rst_n;
 
     // Free signals
-    logic free;
-    tag_t free_tag;
+    logic [NumTagIn-1:0] free;
+    tag_t [NumTagIn-1:0] free_tag;
 
     // Get signals
     logic [NumTagOut-1:0] get, valid;
@@ -104,7 +106,7 @@ module tb_tag_queue #(
         while(1) begin
             @(posedge clk);
             #ApplDelay;
-            free = 1'b0;
+            free = '0;
 
             wait_cycles = $urandom_range(0, MaxWaitCycles);
             if (wait_cycles > 0) begin
@@ -112,21 +114,23 @@ module tb_tag_queue #(
                 #ApplDelay;
             end
 
-            // Randomly choose to free a tag if there are any in the queue
-            if (tag_out_queue.size() > 0) begin
-                random_free = $urandom_range(0, 1);
-                free = random_free[0];
-                if (free) begin
-                    // Get random tag from queue
-                    index    = $urandom_range(1, tag_out_queue.size());
-                    while (index > 0) begin
-                        tag_out_queue.push_back(tag_out_queue.pop_front());
-                        index--;
-                    end
+            for(int i = 0; i < NumTagIn; i++) begin : loop_free_tags
+                // Randomly choose to free a tag if there are any in the queue
+                if (tag_out_queue.size() > 0) begin
+                    random_free = $urandom_range(0, 1);
+                    free[i] = random_free[0];
+                    if (free[i]) begin
+                        // Get random tag from queue
+                        index    = $urandom_range(1, tag_out_queue.size());
+                        while (index > 0) begin
+                            tag_out_queue.push_back(tag_out_queue.pop_front());
+                            index--;
+                        end
 
-                    free_tag = tag_out_queue.pop_front();
+                        free_tag[i] = tag_out_queue.pop_front();
+                    end
                 end
-            end
+            end : loop_free_tags
         end
     end
 
@@ -136,7 +140,8 @@ module tb_tag_queue #(
 
     tag_queue #(
         .NumTags  ( NumTags   ),
-        .NumTagOut( NumTagOut )
+        .NumTagOut( NumTagOut ),
+        .NumTagIn ( NumTagIn  )
     ) i_tag_queue (
         .clk_i ( clk   ),
         .rst_ni( rst_n ),
@@ -202,10 +207,12 @@ module tb_tag_queue #(
             end : loop_tag_outs
 
             // Check if we freed a tag
-            if (free) begin
-                freed_tags++;
-                $display("Freed tag: %0d at cycle %0d", free_tag, cycles);
-            end
+            for (int unsigned i = 0; i < NumTagIn; i++) begin : loop_free_tags_check
+                if (free[i]) begin
+                    freed_tags++;
+                    $display("[%0d] Freed tag: %0d at cycle %0d", i, free_tag[i], cycles);
+                end
+            end : loop_free_tags_check
 
         end
 

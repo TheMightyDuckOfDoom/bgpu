@@ -6,6 +6,9 @@
 
 /// Wait Buffer
 module wait_buffer import bgpu_pkg::*; #(
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
+    /// Number of inflight instructions
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 32,
@@ -73,8 +76,8 @@ module wait_buffer import bgpu_pkg::*; #(
     input tag_t opc_eu_tag_i,
 
     /// From Execution Units
-    input  logic eu_valid_i,
-    input  tag_t eu_tag_i
+    input logic [WritebackWidth-1:0] eu_valid_i,
+    input tag_t [WritebackWidth-1:0] eu_tag_i
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -257,17 +260,19 @@ module wait_buffer import bgpu_pkg::*; #(
             end : clear_dep_mask
 
             // From Execution Units
-            if (eu_valid_i) begin : check_operands
-                if (wait_buffer_valid_q[entry]) begin
-                    // Check if the instruction produced an operand
-                    for (int operand = 0; operand < OperandsPerInst; operand++) begin
-                        if (!wait_buffer_q[entry].operands_ready[operand]
-                          && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i) begin
-                            wait_buffer_d[entry].operands_ready[operand] = 1'b1;
+            for (int wb = 0; wb < WritebackWidth; wb++) begin : check_wb_operands
+                if (eu_valid_i[wb]) begin : check_operands
+                    if (wait_buffer_valid_q[entry]) begin
+                        // Check if the instruction produced an operand
+                        for (int operand = 0; operand < OperandsPerInst; operand++) begin
+                            if (!wait_buffer_q[entry].operands_ready[operand]
+                            && wait_buffer_q[entry].operand_tags[operand] == eu_tag_i[wb]) begin
+                                wait_buffer_d[entry].operands_ready[operand] = 1'b1;
+                            end
                         end
                     end
-                end
-            end : check_operands
+                end : check_operands
+            end : check_wb_operands
 
             // Insert instruction into buffer
             if (dec_valid_i && wb_ready_o && insert_mask[entry]) begin : insert_entry

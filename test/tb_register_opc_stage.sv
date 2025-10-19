@@ -7,7 +7,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     // Simulation parameters
     parameter int unsigned MaxSimCycles     = 100000,
     parameter int unsigned WatchdogTimeout  = 1000,
-    parameter int unsigned InstsToComplete  = 1000,
+    parameter int unsigned InstsToComplete  = 10000,
     parameter int unsigned MaxMstWaitCycles = 0,
     parameter int unsigned MaxSubWaitCycles = 1,
 
@@ -16,6 +16,8 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     parameter time ApplDelay = 1ns,
     parameter time AcqDelay  = 8ns,
 
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -179,6 +181,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     // #######################################################################################
 
     register_opc_stage #(
+        .WritebackWidth       ( WritebackWidth        ),
         .NumTags              ( NumTags               ),
         .PcWidth              ( PcWidth               ),
         .NumWarps             ( NumWarps              ),

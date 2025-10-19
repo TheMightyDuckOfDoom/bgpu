@@ -18,6 +18,8 @@
 module dispatcher import bgpu_pkg::*; #(
     /// Number of instructions to fetch for the warp
     parameter int unsigned FetchWidth = 1,
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -90,8 +92,8 @@ module dispatcher import bgpu_pkg::*; #(
     input tag_t opc_eu_tag_i,
 
     /// From Execution Units
-    input  logic eu_valid_i,
-    input  tag_t eu_tag_i
+    input  logic [WritebackWidth-1:0] eu_valid_i,
+    input  tag_t [WritebackWidth-1:0] eu_tag_i
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -105,11 +107,11 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Insert handshake
-    logic insert;
+    logic [FetchWidth-1:0] insert;
 
     // Tag Queue
-    logic tag_available;
-    tag_t dst_tag;
+    logic [FetchWidth-1:0] tag_available;
+    tag_t [FetchWidth-1:0] dst_tag;
     logic tag_queue_ready;
 
     // Register Table
@@ -126,22 +128,23 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Disp ready if:
-    // 1. Tag queue has a tag available
+    // 1. Tag queue has a tag available -> free tags for full FetchWidth
     // 2. Wait buffer has space
     // 3. Register table has space
 
-    assign disp_ready_o = tag_available && wb_ready && reg_table_space_available;
+    assign disp_ready_o = (&tag_available) && wb_ready && reg_table_space_available;
 
     // Insert new element |-> if handshake happens
-    assign insert = dec_valid_i && disp_ready_o;
+    assign insert = dec_valid_i && disp_ready_o ? dec_valid_insts_i : '0;
 
     // #######################################################################################
     // # Tag Queue                                                                           #
     // #######################################################################################
 
     tag_queue #(
-        .NumTagOut( FetchWidth ),
-        .NumTags  ( NumTags    )
+        .NumTagIn ( WritebackWidth ),
+        .NumTagOut( FetchWidth     ),
+        .NumTags  ( NumTags        )
     ) i_tag_queue (
         .clk_i  ( clk_i  ),
         .rst_ni ( rst_ni ),
@@ -159,6 +162,7 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     reg_table #(
+        .WritebackWidth ( WritebackWidth  ),
         .WarpWidth      ( WarpWidth       ),
         .NumTags        ( NumTags         ),
         .RegIdxWidth    ( RegIdxWidth     ),
@@ -188,6 +192,7 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     wait_buffer #(
+        .WritebackWidth       ( WritebackWidth        ),
         .NumTags              ( NumTags               ),
         .PcWidth              ( PcWidth               ),
         .WarpWidth            ( WarpWidth             ),
@@ -241,9 +246,6 @@ module dispatcher import bgpu_pkg::*; #(
     `ifndef SYNTHESIS
         initial assert(NumTags >= WaitBufferSizePerWarp)
         else $error(1, "NumTags must be >= WaitBufferSizePerWarp");
-
-        assert property(@(posedge clk_i) disable iff(rst_ni) eu_valid_i |-> tag_queue_ready)
-        else $error(1, "Tag queue must be ready to receive execution unit tags");
     `endif
 
 endmodule : dispatcher

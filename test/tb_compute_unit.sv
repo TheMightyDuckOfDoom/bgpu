@@ -4,6 +4,8 @@
 
 /// Testbench for Compute Unit
 module tb_compute_unit import bgpu_pkg::*; #(
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -227,6 +229,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // Instantiate Compute Unit
     compute_unit #(
     `ifndef TARGET_POST_SYNTH
+        .WritebackWidth        ( WritebackWidth         ),
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),
         .WarpWidth             ( WarpWidth              ),
@@ -724,7 +727,8 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Decoder
-            if (i_cu.ic_to_dec_valid && i_cu.dec_to_ic_ready) begin
+            // TODO: Multiple instructions
+            if ((|i_cu.ic_to_dec_valid) && i_cu.dec_to_ic_ready) begin
                 // Get the instruction ID from the hashmap
                 insn_id_in_sim[PcWidth-1:0] = i_cu.ic_to_dec_data.pc;
                 insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.ic_to_dec_data.act_mask;
@@ -786,14 +790,16 @@ module tb_compute_unit import bgpu_pkg::*; #(
             end
 
             // Retire
-            if (i_cu.eu_to_opc_valid_q && i_cu.opc_to_eu_ready_d) begin
-                insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data_q.tag];
+            for(int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
+                if (i_cu.eu_to_opc_valid_q[wb] && i_cu.opc_to_eu_ready_d[wb]) begin
+                    insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data_q[wb].tag];
 
-                // Retire
-                $fwrite(fd, "R\t%0d\t%0d\t0\n",
-                    insn_id_in_file, retire_id);
-                retire_id++;
-            end
+                    // Retire
+                    $fwrite(fd, "R\t%0d\t%0d\t0\n",
+                        insn_id_in_file, retire_id);
+                    retire_id++;
+                end
+            end : loop_writeback_ports
         end
 
         // Close file

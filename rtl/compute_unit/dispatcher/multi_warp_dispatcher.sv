@@ -7,6 +7,8 @@
 module multi_warp_dispatcher import bgpu_pkg::*; #(
     /// Number of instructions to fetch for the warp
     parameter int unsigned FetchWidth = 1,
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -86,8 +88,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     input iid_t opc_eu_tag_i,
 
     /// From Execution Units
-    input  logic eu_valid_i,
-    input  iid_t eu_tag_i
+    input  logic [WritebackWidth-1:0] eu_valid_i,
+    input  iid_t [WritebackWidth-1:0] eu_tag_i
 );
     // #######################################################################################
     // # Typedefs                                                                            #
@@ -105,6 +107,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         reg_idx_t  [OperandsPerInst-1:0] operands;
     } disp_data_t;
 
+    typedef logic [WritebackWidth-1:0] eu_valid_vec_t;
+
     // #######################################################################################
     // # Signals                                                                             #
     // #######################################################################################
@@ -112,7 +116,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // Dispatcher per warp
     warp_mask_t dec_valid_warp, ib_ready_warp, fe_handshake_warp;
 
-    warp_mask_t eu_valid;
+    eu_valid_vec_t [NumWarps-1:0] eu_valid;
+    tag_t [WritebackWidth-1:0] eu_tag;
 
     // Round Robin Arbiter
     warp_mask_t arb_gnt;
@@ -153,7 +158,9 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // Execution Unit Valid Demultiplexer
     always_comb begin
         eu_valid = '0;
-        eu_valid[eu_tag_i[WidWidth-1:0]] = eu_valid_i;
+        for(int warp = 0; warp < NumWarps; warp++) 
+            for(int wb = 0; wb < WritebackWidth; wb++) 
+                eu_valid[warp][wb] = eu_valid_i[wb] && (eu_tag_i[wb][WidWidth-1:0] == warp[WidWidth-1:0]);
     end
 
     // Control Decoded Demultiplexer
@@ -168,10 +175,16 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         opc_eu_handshake_warp[opc_eu_tag_i[WidWidth-1:0]] = opc_eu_handshake_i;
     end
 
+    // Extract EU Tags
+    for (genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_eu_tags
+        assign eu_tag[wb] = eu_tag_i[wb][WidWidth+:TagWidth];
+    end : gen_eu_tags
+
     // Dispatcher per Warp
     for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
         dispatcher #(
             .FetchWidth           ( FetchWidth            ),
+            .WritebackWidth       ( WritebackWidth        ),
             .NumTags              ( NumTags               ),
             .PcWidth              ( PcWidth               ),
             .WarpWidth            ( WarpWidth             ),
@@ -214,8 +227,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .opc_eu_handshake_i( opc_eu_handshake_warp[warp]      ),
             .opc_eu_tag_i      ( opc_eu_tag_i[WidWidth+:TagWidth] ),
 
-            .eu_valid_i( eu_valid[warp]         ),
-            .eu_tag_i  ( eu_tag_i[WidWidth+:TagWidth] )
+            .eu_valid_i( eu_valid[warp] ),
+            .eu_tag_i  ( eu_tag         )
         );
     end : gen_dispatcher
 

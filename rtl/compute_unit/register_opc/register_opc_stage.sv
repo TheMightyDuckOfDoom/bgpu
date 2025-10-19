@@ -4,6 +4,8 @@
 
 /// Register and Operand Collector Stage
 module register_opc_stage import bgpu_pkg::*; #(
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
@@ -61,12 +63,12 @@ module register_opc_stage import bgpu_pkg::*; #(
     output warp_data_t [OperandsPerInst-1:0] opc_operand_data_o,
 
     /// From Execution Units
-    output logic       opc_to_eu_ready_o,
-    input  logic       eu_valid_i,
-    input  act_mask_t  eu_act_mask_i,
-    input  iid_t       eu_tag_i,
-    input  reg_idx_t   eu_dst_i,
-    input  warp_data_t eu_data_i
+    output logic       [WritebackWidth-1:0] opc_to_eu_ready_o,
+    input  logic       [WritebackWidth-1:0] eu_valid_i,
+    input  act_mask_t  [WritebackWidth-1:0] eu_act_mask_i,
+    input  iid_t       [WritebackWidth-1:0] eu_tag_i,
+    input  reg_idx_t   [WritebackWidth-1:0] eu_dst_i,
+    input  warp_data_t [WritebackWidth-1:0] eu_data_i
 );
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -124,8 +126,8 @@ module register_opc_stage import bgpu_pkg::*; #(
     bank_reg_addr_t [NumOPCRequestPorts-1:0] opc_read_req_addr;
 
     // Write WID+REG_IDX to Bank Selection and Register Address
-    bank_sel_t       eu_write_req_bank_sel;
-    bank_write_req_t eu_write_req;
+    bank_sel_t       [WritebackWidth-1:0] eu_write_req_bank_sel;
+    bank_write_req_t [WritebackWidth-1:0] eu_write_req;
 
     // Read Response
     logic       [NumOPCRequestPorts-1:0] opc_read_rsp_valid;
@@ -244,26 +246,28 @@ module register_opc_stage import bgpu_pkg::*; #(
     // # Write Request Interconnect between Execution Units and Register Banks               #
     // #######################################################################################
 
-    register_indexer #(
-        .NumWarps        ( NumWarps         ),
-        .RegIdxWidth     ( RegIdxWidth      ),
-        .NumBanks        ( NumBanks         ),
-        .RegistersPerBank( RegistersPerBank )
-    ) i_write_request_indexer (
-        // Inputs
-        .wid_i     ( eu_tag_i[WidWidth-1:0] ),
-        .reg_idx_i ( eu_dst_i               ),
+    for (genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_writeback_indexer_request
+        register_indexer #(
+            .NumWarps        ( NumWarps         ),
+            .RegIdxWidth     ( RegIdxWidth      ),
+            .NumBanks        ( NumBanks         ),
+            .RegistersPerBank( RegistersPerBank )
+        ) i_write_request_indexer (
+            // Inputs
+            .wid_i    ( eu_tag_i[wb][WidWidth-1:0] ),
+            .reg_idx_i( eu_dst_i[wb]               ),
 
-        // Outputs
-        .bank_sel_o     ( eu_write_req_bank_sel  ),
-        .bank_reg_addr_o( eu_write_req.addr      )
-    );
+            // Outputs
+            .bank_sel_o     ( eu_write_req_bank_sel[wb] ),
+            .bank_reg_addr_o( eu_write_req[wb].addr     )
+        );
 
-    assign eu_write_req.data     = eu_data_i;
-    assign eu_write_req.act_mask = eu_act_mask_i;
+        assign eu_write_req[wb].data     = eu_data_i    [wb];
+        assign eu_write_req[wb].act_mask = eu_act_mask_i[wb];
+    end : gen_writeback_indexer_request
 
     stream_xbar #(
-        .NumInp     ( 1                ),
+        .NumInp     ( WritebackWidth   ),
         .NumOut     ( NumBanks         ),
         .payload_t  ( bank_write_req_t ),
         .OutSpillReg( 1'b0             ),
@@ -272,8 +276,8 @@ module register_opc_stage import bgpu_pkg::*; #(
         .LockIn     ( 1'b0             ),
         .AxiVldMask ( '1               )
     ) i_write_request_interconnect (
-        .clk_i  ( clk_i  ),
-        .rst_ni ( rst_ni ),
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
 
         // Request ports |-> from Execution Units
         .data_i ( eu_write_req          ),

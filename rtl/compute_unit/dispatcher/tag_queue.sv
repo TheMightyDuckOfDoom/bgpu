@@ -12,6 +12,8 @@ module tag_queue #(
     parameter int unsigned NumTags   = 8,
     /// Number of tags that can be given out at once
     parameter int unsigned NumTagOut = 2,
+    /// Number of tags that can be freed at once
+    parameter int unsigned NumTagIn = 2,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth = $clog2(NumTags),
@@ -21,9 +23,8 @@ module tag_queue #(
     input  logic clk_i,
     input  logic rst_ni,
 
-    /// Freeing
-    input  logic free_i,
-    input  tag_t tag_i,
+    input  logic [NumTagIn-1:0] free_i,
+    input  tag_t [NumTagIn-1:0] tag_i,
 
     input  logic [NumTagOut-1:0] get_i,
     output logic [NumTagOut-1:0] valid_o,
@@ -64,9 +65,11 @@ module tag_queue #(
         tags_used_d = tags_used_q;
 
         // Free
-        if (free_i) begin : free_tag
-            tags_used_d[tag_i] = 1'b0;
-        end : free_tag
+        for (int j = 0; j < NumTagIn; j++) begin : loop_in_width
+            if (free_i[j]) begin : free_tag
+                tags_used_d[tag_i[j]] = 1'b0;
+            end : free_tag
+        end : loop_in_width
 
         // Give out multiple tags
         for (int out_idx = 0; out_idx < NumTagOut; out_idx++) begin : loop_out_width
@@ -91,6 +94,7 @@ module tag_queue #(
         // Parameter sanity check
         initial assert (NumTags > 1) else $error("NumTags must be greater than 1");
         initial assert (NumTagOut >= 1) else $error("NumTagOut must be at least 1");
+        initial assert (NumTagIn  >= 1) else $error("NumTagIn must be at least 1");
 
         // Output assertions
         for (genvar out_idx = 0; out_idx < NumTagOut; out_idx++) begin : loop_out_asserts
@@ -127,16 +131,18 @@ module tag_queue #(
         end : loop_out_asserts
 
         // We can only free used tags
-        assert_only_free_unused_tags:
-            assert property (@(posedge clk_i) disable iff (!rst_ni) !free_i
-                || tags_used_q[tag_i])
-            else $error("Trying to free an unused tag: %0d", tag_i);
+        for (genvar in_idx = 0; in_idx < NumTagIn; in_idx++) begin : loop_in_asserts
+            assert_only_free_unused_tags:
+                assert property (@(posedge clk_i) disable iff (!rst_ni) !free_i[in_idx]
+                    || tags_used_q[tag_i[in_idx]])
+                else $error("%d: Trying to free an unused tag: %0d", in_idx, tag_i[in_idx]);
 
-        // After a tag is freed, it must be marked as unused
-        assert_mark_as_unused:
-            assert property (@(posedge clk_i) disable iff (!rst_ni) !free_i
-                || !tags_used_d[tag_i])
-            else $error("Tag %0d is freed but not marked as unused!", tag_i);
+            // After a tag is freed, it must be marked as unused
+            assert_mark_as_unused:
+                assert property (@(posedge clk_i) disable iff (!rst_ni) !free_i[in_idx]
+                    || !tags_used_d[tag_i[in_idx]])
+                else $error("%d: Tag %0d is freed but not marked as unused!", in_idx, tag_i[in_idx]);
+        end : loop_in_asserts
     `endif
 
     // #######################################################################################
@@ -153,12 +159,18 @@ module tag_queue #(
             cover property (@(posedge clk_i) disable iff (!rst_ni) tags_used_q == '1);
 
         // Try to get a tag when all are used
-        cover_get_when_all_used:
-            cover property (@(posedge clk_i) disable iff (!rst_ni) get_i && (tags_used_q == '1));
+        for (genvar out_idx = 0; out_idx < NumTagOut; out_idx++) begin : loop_out_cover_get_when_all_used
+            cover_get_when_all_used_idx:
+                cover property (@(posedge clk_i) disable iff (!rst_ni) get_i[out_idx] && (tags_used_q == '1));
+        end : loop_out_cover_get_when_all_used
 
         // Try to get and free a tag at the same time
-        cover_get_and_free:
-            cover property (@(posedge clk_i) disable iff (!rst_ni) get_i && free_i);
+        for (genvar out_idx = 0; out_idx < NumTagOut; out_idx++) begin : loop_out_cover_get_and_free
+            for (genvar in_idx = 0; in_idx < NumTagIn; in_idx++) begin : loop_in_width
+                cover_get_and_free_idx:
+                    cover property (@(posedge clk_i) disable iff (!rst_ni) get_i[out_idx] && free_i[in_idx]);
+            end : loop_in_width
+        end : loop_out_cover_get_and_free
 
         // Cover that we actually get a tag
         cover_get_handshake:
@@ -177,8 +189,10 @@ module tag_queue #(
             cover property (@(posedge clk_i) disable iff (!rst_ni) !valid_o);
 
         // Can only free used tags
-        assume_only_free_unused_tags:
-            assume property (@(posedge clk_i) disable iff (!rst_ni) free_i == tags_used_q[tag_i]);
+        for (genvar in_idx = 0; in_idx < NumTagIn; in_idx++) begin : loop_in_formal_free
+            assume_only_free_unused_tags:
+                assume property (@(posedge clk_i) disable iff (!rst_ni) free_i[in_idx] == tags_used_q[tag_i[in_idx]]);
+        end : loop_in_formal_free
     `endif
 
 endmodule : tag_queue

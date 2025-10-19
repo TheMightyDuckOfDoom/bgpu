@@ -7,6 +7,7 @@
 /// Register Table
 // Maps a register to a tag that produces the most recent value
 module reg_table #(
+    parameter int unsigned WritebackWidth  = 2,
     parameter int unsigned WarpWidth       = 2,
     parameter int unsigned NumTags         = 4,
     parameter int unsigned RegIdxWidth     = 2,
@@ -38,9 +39,9 @@ module reg_table #(
     output logic [OperandsPerInst-1:0] operands_ready_o,
     output tag_t [OperandsPerInst-1:0] operands_tag_o,
 
-    /// From Execution Unit
-    input logic eu_valid_i,
-    input tag_t eu_tag_i
+    // From Execution Unit
+    input logic [WritebackWidth-1:0] eu_valid_i,
+    input tag_t [WritebackWidth-1:0] eu_tag_i
 );
 
     // #######################################################################################
@@ -98,9 +99,11 @@ module reg_table #(
             end : check_entry
 
             // Check if operand is produced by the EUs in the same cycle |-> then it is ready
-            if (eu_valid_i && eu_tag_i == operands_tag_o[op]) begin
-                operands_ready_o[op] = 1'b1;
-            end
+            for (int wb = 0; wb < WritebackWidth; wb++) begin : check_eu
+                if (eu_valid_i[wb] && eu_tag_i[wb] == operands_tag_o[op]) begin
+                    operands_ready_o[op] = 1'b1;
+                end
+            end : check_eu
         end : check_operand
     end : operand_check_logic
 
@@ -114,13 +117,15 @@ module reg_table #(
 
         // Clear logic
         // |-> if the EU is valid, clear all entries with the same producer tag, as result is in register file
-        if (eu_valid_i) begin : clear_entry
-            for (int entry = 0; entry < NumTags; entry++) begin
-                if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
-                    table_valid_d[entry] = 1'b0;
+        for (int wb = 0; wb < WritebackWidth; wb++) begin : wb_loop
+            if (eu_valid_i[wb]) begin : clear_entry
+                for (int entry = 0; entry < NumTags; entry++) begin
+                    if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i[wb]) begin
+                        table_valid_d[entry] = 1'b0;
+                    end
                 end
-            end
-        end : clear_entry
+            end : clear_entry
+        end : wb_loop
 
         // Insert logic
         if (insert_i && space_available_o) begin : insert_logic
@@ -181,24 +186,29 @@ module reg_table #(
 
         /// Check EU responses
         // Check if eu tag is in the table
-        logic [$clog2(NumTags)-1:0] eu_match_index;
-        logic eu_tag_in_table;
+        typedef logic [$clog2(NumTags)-1:0] tag_index_t;
+        tag_index_t [WritebackWidth-1:0] eu_match_index;
+        logic       [WritebackWidth-1:0] eu_tag_in_table;
         always_comb begin : check_eu_tag_in_table
             eu_match_index  = '0;
-            eu_tag_in_table = 1'b0;
-            for (int entry = 0; entry < NumTags; entry++) begin
-                if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
-                    eu_tag_in_table = 1'b1;
-                    eu_match_index  = entry[$clog2(NumTags)-1:0];
+            eu_tag_in_table = '0;
+            for (int wb = 0; wb < WritebackWidth; wb++) begin : wb_loop
+                for (int entry = 0; entry < NumTags; entry++) begin
+                    if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i[wb]) begin
+                        eu_tag_in_table[wb] = 1'b1;
+                        eu_match_index [wb] = entry[$clog2(NumTags)-1:0];
+                    end
                 end
-            end
+            end : wb_loop
         end : check_eu_tag_in_table
 
         // If EU valid and is in the table, then it mus be freed if it is not reused
-        assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(eu_valid_i && eu_tag_in_table && !reuse_existing_entry)
-            || (!table_valid_d[eu_match_index]))
-            else $error("EU tag %d is not being freed from the register table", eu_tag_i);
+        for (genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_assert_eu_responses
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                !(eu_valid_i[wb] && eu_tag_in_table[wb] && !reuse_existing_entry)
+                || (!table_valid_d[eu_match_index[wb]]))
+                else $error("EU %d tag %d is not being freed from the register table", wb, eu_tag_i[wb]);
+        end : gen_assert_eu_responses
 
         /// Check Insert Logic
         logic [$clog2(NumTags)-1:0] insert_index;
@@ -263,7 +273,14 @@ module reg_table #(
         /// Operand Checks
         for (genvar op = 0; op < OperandsPerInst; op++) begin : gen_assert_operands
             logic operand_from_eu;
-            assign operand_from_eu = (eu_valid_i && operands_tag_o[op] == eu_tag_i);
+            always_comb begin : check_operand_from_eu
+                operand_from_eu = 1'b0;
+                for (int wb = 0; wb < WritebackWidth; wb++) begin
+                    if (eu_valid_i[wb] && operands_tag_o[op] == eu_tag_i[wb]) begin
+                        operand_from_eu = 1'b1;
+                    end
+                end
+            end : check_operand_from_eu
 
             // If operand has the same tag as EU and EU is valid, then it must be ready
             assert property (@(posedge clk_i) disable iff(!rst_ni)
@@ -343,7 +360,10 @@ module reg_table #(
         cover property (@(posedge clk_i) disable iff (!rst_ni) !all_dst_written_o);
 
         // Responses from Execution Unit
-        cover property (@(posedge clk_i) disable iff (!rst_ni) eu_valid_i);
+        for (genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_cover_eu_responses
+            cover property (@(posedge clk_i) disable iff (!rst_ni) eu_valid_i[wb]);
+            cover property (@(posedge clk_i) disable iff (!rst_ni) !eu_valid_i[wb]);
+        end : gen_cover_eu_responses
 
         // Reusing existing entry
         cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && reuse_existing_entry);
