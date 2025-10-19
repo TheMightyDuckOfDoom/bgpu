@@ -42,7 +42,7 @@ jobs:
         with:
             path: .bender
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
-      - name: Verilator Lint
+      - name: Yosys Lint
         run: make lint-yosys
 
   lint-license:
