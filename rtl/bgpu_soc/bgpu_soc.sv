@@ -17,10 +17,15 @@ module bgpu_soc #(
     /// Width of the addressable physical memory by the memory controller
     parameter int unsigned MctrlAddressWidth = 30,
 
-    parameter bit  ExtMctrl = 1'b0,
+    /// External Memory Controller enable and types
+    parameter bit  ExtMctrl            = 1'b0,
     parameter type ext_mctrl_axi_req_t = logic,
     parameter type ext_mctrl_axi_rsp_t = logic,
 
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Number of Compute Clusters
     parameter int unsigned ComputeClusters = 1,
     /// Number of Compute Units per Cluster
@@ -354,6 +359,8 @@ module bgpu_soc #(
     // Generate Compute Clusters
     for (genvar i = 0; i < ComputeClusters; i++) begin : gen_compute_clusters
         compute_cluster #(
+            .FetchWidth            ( FetchWidth             ),
+            .WritebackWidth        ( WritebackWidth         ),
             .ComputeUnits          ( ComputeUnitsPerCluster ),
             .PcWidth               ( PcWidth                ),
             .NumWarps              ( NumWarps               ),

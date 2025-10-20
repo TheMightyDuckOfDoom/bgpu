@@ -9,6 +9,10 @@
 // - Multiple Compute Units
 // - Compute Unit to AXI adapters
 module compute_cluster #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Number of Compute Units in the cluster
     parameter int unsigned ComputeUnits = 1,
     /// Width of the Program Counter
@@ -448,6 +452,8 @@ module compute_cluster #(
 
     for (genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_compute_units
         compute_unit #(
+            .FetchWidth            ( FetchWidth             ),
+            .WritebackWidth        ( WritebackWidth         ),
             .PcWidth               ( PcWidth                ),
             .NumWarps              ( NumWarps               ),
             .WarpWidth             ( WarpWidth              ),

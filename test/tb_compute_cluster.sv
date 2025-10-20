@@ -4,6 +4,10 @@
 
 /// Testbench for Compute Cluster
 module tb_compute_cluster import bgpu_pkg::*; #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Number of Compute Units in the cluster
     parameter int unsigned ComputeUnits = 2,
     /// Width of the Program Counter
@@ -176,6 +180,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     // Instantiate Compute Cluster
 `ifndef TARGET_POST_SYNTH
     compute_cluster #(
+        .FetchWidth            ( FetchWidth             ),
+        .WritebackWidth        ( WritebackWidth         ),
         .ComputeUnits          ( ComputeUnits           ),
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),

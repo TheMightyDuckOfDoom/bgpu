@@ -7,17 +7,27 @@
 /// Register Table
 // Maps a register to a tag that produces the most recent value
 module reg_table #(
-    parameter int unsigned WritebackWidth  = 2,
-    parameter int unsigned WarpWidth       = 2,
-    parameter int unsigned NumTags         = 4,
-    parameter int unsigned RegIdxWidth     = 2,
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 2,
+    /// Number of inflight instructions
+    parameter int unsigned NumTags = 2,
+    /// Number of threads per warp
+    parameter int unsigned WarpWidth = 2,
+    /// How many registers can each warp access as operand or destination
+    parameter int unsigned RegIdxWidth = 4,
+    /// How many operands each instruction can have
     parameter int unsigned OperandsPerInst = 2,
 
     parameter int unsigned TagWidth       = $clog2(NumTags),
     parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
-    parameter type         tag_t          = logic [      TagWidth-1:0],
-    parameter type         reg_idx_t      = logic [   RegIdxWidth-1:0],
-    parameter type         subwarp_id_t   = logic [SubwarpIdWidth-1:0]
+    parameter type         tag_t          = logic     [       TagWidth-1:0],
+    parameter type         reg_idx_t      = logic     [    RegIdxWidth-1:0],
+    parameter type         subwarp_id_t   = logic     [ SubwarpIdWidth-1:0],
+    parameter type         op_mask_t      = logic     [OperandsPerInst-1:0],
+    parameter type         op_reg_idx_t   = reg_idx_t [OperandsPerInst-1:0],
+    parameter type         op_tag_t       = tag_t     [OperandsPerInst-1:0]
 ) (
     /// Clock and Reset
     input logic clk_i,
@@ -27,17 +37,16 @@ module reg_table #(
     // -> no pending instruction
     output logic all_dst_written_o,
 
-    /// From Decoder
-    output logic        space_available_o,
-    input  logic        insert_i,
-    input  tag_t        tag_i,
+    // From Decoder
     input  subwarp_id_t subwarp_id_i,
-    input  reg_idx_t    dst_reg_i,
-    input  reg_idx_t [OperandsPerInst-1:0] operands_reg_i,
+    input  logic        [FetchWidth-1:0] insert_i,
+    input  tag_t        [FetchWidth-1:0] tag_i,
+    input  reg_idx_t    [FetchWidth-1:0] dst_reg_i,
+    input  op_reg_idx_t [FetchWidth-1:0] operands_reg_i,
 
-    /// To Wait Buffer
-    output logic [OperandsPerInst-1:0] operands_ready_o,
-    output tag_t [OperandsPerInst-1:0] operands_tag_o,
+    // To Wait Buffer
+    output op_mask_t [FetchWidth-1:0] operands_ready_o,
+    output op_tag_t  [FetchWidth-1:0] operands_tag_o,
 
     // From Execution Unit
     input logic [WritebackWidth-1:0] eu_valid_i,
@@ -48,7 +57,7 @@ module reg_table #(
     // # Typedefs                                                                            #
     // #######################################################################################
 
-    // Regsiter Table Entry
+    // Register Table Entry
     typedef struct packed {
         subwarp_id_t subwarp_id;
         reg_idx_t    dst;
@@ -66,14 +75,9 @@ module reg_table #(
     // Reuse existing entry when inserting
     logic reuse_existing_entry;
 
-    // #######################################################################################
-    // # Combinational Logic                                                                 #
-    // #######################################################################################
-
-    // Space available if not all entries are valid
-    // In theory we could even accept a new one if an existing dst is overwritten/updated,
-    // but this would create a dependency between space_available_o and insert_i
-    assign space_available_o = !(&table_valid_q);
+    // ######################################################################
+    // # Combinational Logic                                                #
+    // ######################################################################
 
     // All destination registers written if no entry is valid
     assign all_dst_written_o = !(|table_valid_q);
@@ -113,7 +117,6 @@ module reg_table #(
         table_valid_d = table_valid_q;
         table_d       = table_q;
 
-        reuse_existing_entry = 1'b0;
 
         // Clear logic
         // |-> if the EU is valid, clear all entries with the same producer tag, as result is in register file
@@ -128,38 +131,79 @@ module reg_table #(
         end : wb_loop
 
         // Insert logic
-        if (insert_i && space_available_o) begin : insert_logic
-            // Insert destination, first check if dst is already in table
-            for (int entry = 0; entry < NumTags; entry++) begin : check_existing_entries
-                if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i
-                    && table_q[entry].subwarp_id == subwarp_id_i) begin : modify_existing
-                    // Mark as valid, as we could have deallocated it in this cycle
-                    table_valid_d[entry]    = 1'b1;
-                    // Update producer tag
-                    table_d[entry].producer = tag_i;
-                    // Indicate that we reused an existing entry
-                    reuse_existing_entry      = 1'b1;
-                    break;
-                end : modify_existing
-            end : check_existing_entries
+        for (int fidx = 0; fidx < FetchWidth; fidx++) begin : loop_fetch_width
+            // Temporary signal to track if we use an existing entry for this fetch index
+            reuse_existing_entry = 1'b0;
+            
+            // Default outputs
+            operands_ready_o[fidx] = '0;
+            operands_tag_o  [fidx] = '0;
 
-            // If not reusing an existing entry, find a free entry
-            if (!reuse_existing_entry) begin : use_free_entry
-                for (int entry = 0; entry < NumTags; entry++) begin : find_free_entry
-                    if (!table_valid_q[entry]) begin : free_entry_found
-                        // Mark as valid
-                        table_valid_d[entry] = 1'b1;
+            // Insert into table
+            if (insert_i[fidx]) begin : insert_logic
+                // First check operands
+                for (int op = 0; op < OperandsPerInst; op++) begin : check_operand
+                    // Assume ready
+                    operands_ready_o[fidx][op] = 1'b1;
+                    // Check all entries, if valid and the destination in the table is the same as the operand
+                    // and part of the same subwarp |-> not ready
+                    for (int entry = 0; entry < NumTags; entry++) begin : check_entry
+                        if (table_valid_q[entry] && table_q[entry].dst == operands_reg_i[fidx][op]
+                            && table_q[entry].subwarp_id == subwarp_id_i) begin : entry_found
+                            operands_ready_o[fidx][op] = 1'b0;
+                            operands_tag_o  [fidx][op] = table_q[entry].producer;
+                            break;
+                        end : entry_found
+                    end : check_entry
 
-                        // Set the entry
-                        table_d[entry].dst        = dst_reg_i;
-                        table_d[entry].producer   = tag_i;
-                        table_d[entry].subwarp_id = subwarp_id_i;
+                    // Check previous dst in the same FetchWidth and use its tag if there is a dependency
+                    for (int prev_fidx = 0; prev_fidx < fidx; prev_fidx++) begin : check_prev_fetch
+                        if (dst_reg_i[prev_fidx] == operands_reg_i[fidx][op]) begin : prev_fidx_dependency
+                            operands_ready_o[fidx][op] = 1'b0;
+                            operands_tag_o  [fidx][op] = tag_i[prev_fidx];
+                        end : prev_fidx_dependency
+                    end : check_prev_fetch
+
+                    // Check if operand is produced by the EUs in the same cycle |-> then it is ready
+                    for (int wb = 0; wb < WritebackWidth; wb++) begin : check_wbs
+                        if (eu_valid_i[wb] && eu_tag_i[wb] == operands_tag_o[fidx][op]) begin
+                            operands_ready_o[fidx][op] = 1'b1;
+                        end
+                    end : check_wbs
+                end : check_operand
+
+                // Insert destination, first check if dst is already in table
+                for (int entry = 0; entry < NumTags; entry++) begin : check_existing_entries
+                    if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i[fidx]
+                        && table_q[entry].subwarp_id == subwarp_id_i) begin : modify_existing
+                        // Mark as valid, as we could have deallocated it in this cycle
+                        table_valid_d[entry]    = 1'b1;
+
+                        // Update producer tag
+                        table_d[entry].producer = tag_i[fidx];
+                        reuse_existing_entry      = 1'b1;
                         break;
-                    end : free_entry_found
-                end : find_free_entry
-            end : use_free_entry
-        end : insert_logic
-    end : reg_table_logic
+                    end : modify_existing
+                end : check_existing_entries
+
+                // If not, find a free entry
+                if (!reuse_existing_entry) begin : use_free_entry
+                    for (int entry = 0; entry < NumTags; entry++) begin : find_free_entry
+                        if (!table_valid_q[entry]) begin : free_entry_found
+                            // Mark as valid
+                            table_valid_d[entry] = 1'b1;
+
+                            // Set the entry
+                            table_d[entry].dst        = dst_reg_i   [fidx];
+                            table_d[entry].producer   = tag_i       [fidx];
+                            table_d[entry].subwarp_id = subwarp_id_i;
+                            break;
+                        end : free_entry_found
+                    end : find_free_entry
+                end : use_free_entry
+            end : insert_logic
+        end : loop_fetch_width
+    end
 
     // #######################################################################################
     // # Sequential Logic                                                                    #
@@ -168,16 +212,18 @@ module reg_table #(
     `FF(table_valid_q, table_valid_d, '0, clk_i, rst_ni)
     `FF(table_q,       table_d,       '0, clk_i, rst_ni)
 
-    // #######################################################################################
-    // # Assertions                                                                          #
-    // #######################################################################################
+    // ######################################################################
+    // # Assertions                                                         #
+    // ######################################################################
 
-    `ifndef SYNTHESIS
-        /// Check space_available_o and all_dst_written_o
-        // If space_available_o is high, then we must have at least one free entry
-        assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(space_available_o) || (table_valid_q != '1))
-            else $error("space_available_o is high, but all entries are occupied");
+    // TODO: Merge: These are not correct
+    `ifndef SYNTHESIS_TODO
+        // Check that insert_i is continous
+        for (genvar fidx = 1; fidx < FetchWidth; fidx++) begin : gen_check_insert
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                insert_i[fidx] |-> insert_i[fidx-1])
+            else $error("Insert signal is not continuous at fetch index %d: %b", fidx, insert_i);
+        end : gen_check_insert
 
         // If all_dst_written_o is high, then no entries must be valid
         assert property (@(posedge clk_i) disable iff(!rst_ni)
@@ -222,27 +268,27 @@ module reg_table #(
             end
         end : find_insert_index
 
-        // If inserting and space available and not reusing existing entry, then an entry must be allocated
+        // If inserting and not reusing existing entry, then an entry must be allocated
         assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(insert_i && space_available_o && !reuse_existing_entry)
+            !(insert_i && !reuse_existing_entry)
             || table_valid_d[insert_index])
             else $error("Inserting new entry, but entry is not being allocated");
 
         // Inserting new entry, subwarp_id must be set correctly
         assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(insert_i && space_available_o && !reuse_existing_entry)
+            !(insert_i && !reuse_existing_entry)
             || table_d[insert_index].subwarp_id == subwarp_id_i)
             else $error("Inserting new entry, but subwarp_id is not set correctly");
 
         // Inserting new entry, dst must be set correctly
         assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(insert_i && space_available_o && !reuse_existing_entry)
+            !(insert_i && !reuse_existing_entry)
             || table_d[insert_index].dst == dst_reg_i)
             else $error("Inserting new entry, but dst register is not set correctly");
 
         // Inserting new entry, producer tag must be set correctly
         assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(insert_i && space_available_o && !reuse_existing_entry)
+            !(insert_i && !reuse_existing_entry)
             || table_d[insert_index].producer == tag_i)
             else $error("Inserting new entry, but producer tag is not set correctly");
 
@@ -260,13 +306,13 @@ module reg_table #(
 
         // If inserting and reusing existing entry, then the existing entry must still be valid
         assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(insert_i && space_available_o && reuse_existing_entry)
+            !(insert_i && reuse_existing_entry)
             || (table_valid_d[insert_existing_index]))
             else $error("Reusing existing entry, but entry is not marked as valid");
 
         // If inserting and reusing existing entry, then the existing entry must be updated
         assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(insert_i && space_available_o && reuse_existing_entry)
+            !(insert_i && reuse_existing_entry)
             || (table_d[insert_existing_index].producer == tag_i))
             else $error("Reusing existing entry, but producer tag is not being updated");
 
@@ -349,12 +395,6 @@ module reg_table #(
         // All entries are used
         cover property (@(posedge clk_i) disable iff (!rst_ni) table_valid_q == '1);
 
-        // Insert when space available
-        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && space_available_o);
-
-        // Insert when no space available
-        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && !space_available_o);
-
         // All destination registers written
         cover property (@(posedge clk_i) disable iff (!rst_ni) all_dst_written_o);
         cover property (@(posedge clk_i) disable iff (!rst_ni) !all_dst_written_o);
@@ -365,17 +405,19 @@ module reg_table #(
             cover property (@(posedge clk_i) disable iff (!rst_ni) !eu_valid_i[wb]);
         end : gen_cover_eu_responses
 
-        // Reusing existing entry
-        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && reuse_existing_entry);
+        for (genvar fetch_idx = 0; fetch_idx < FetchWidth; fetch_idx++) begin : gen_cover_inserts
+            // Insert
+            cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i[fetch_idx]);
 
-        // Inserting new entry
-        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && !reuse_existing_entry);
+            // Operands ready
+            for (genvar op = 0; op < OperandsPerInst; op++) begin : gen_cover_operands_ready
+                cover property (@(posedge clk_i) disable iff (!rst_ni)  operands_ready_o[fetch_idx][op]);
+                cover property (@(posedge clk_i) disable iff (!rst_ni) !operands_ready_o[fetch_idx][op]);
+            end : gen_cover_operands_ready
+        end : gen_cover_inserts
 
-        // Operands ready
-        for (genvar op = 0; op < OperandsPerInst; op++) begin : gen_cover_operands_ready
-            cover property (@(posedge clk_i) disable iff (!rst_ni) operands_ready_o[op]);
-            cover property (@(posedge clk_i) disable iff (!rst_ni) !operands_ready_o[op]);
-        end : gen_cover_operands_ready
+        // Insert full width
+        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i == '1);
 
         // Assume that we only insert unique tags -> tag_i is not in table when insert_i is high
         logic insert_tag_in_table;

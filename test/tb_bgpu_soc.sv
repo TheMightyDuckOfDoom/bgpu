@@ -17,7 +17,8 @@ module tb_bgpu_soc #(
 
     parameter int unsigned MaxCycles = 10000000,
 
-    parameter string Benchmark = `BENCHMARK
+    parameter bit    InorderExecution = 1'b0,
+    parameter string Benchmark        = `BENCHMARK
 ) ();
     // #######################################################################################
     // # Local Parameters                                                                    #
@@ -220,7 +221,7 @@ module tb_bgpu_soc #(
         jtag_write_reg32('hFFFFFF0C, tgroup_id, 1'b1);
 
         // Start dispatch
-        jtag_write_reg32('hFFFFFF10, 0, 1'b0);
+        jtag_write_reg32('hFFFFFF10, InorderExecution ? 1 : 0, 1'b0);
     endtask
 
     task automatic dispatch_status(
@@ -230,8 +231,8 @@ module tb_bgpu_soc #(
 
         jtag_read_reg32('hFFFFFF10, status);
 
-        $display("@%t | [DISPATCH] Status: Start Dispatch: %d Running: %d Finished %d", $time,
-            status[0], status[1], status[2]);
+        $display("@%t | [DISPATCH] Status: Start Dispatch: %d Running: %d Finished %d Inorder %d", $time,
+            status[0], status[1], status[2], status[3]);
         $display("@%t | [DISPATCH] Finished Threads: %d", $time,
             status[8+3:4]);
         $display("@%t | [DISPATCH] Dispatched Threads: %d", $time,

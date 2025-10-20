@@ -17,8 +17,6 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 32,
-    /// How many instructions that wait on previous results can be buffered per warp
-    parameter int unsigned WaitBufferSizePerWarp = 4,
     /// How many registers can each warp access as operand or destination
     parameter int unsigned RegIdxWidth = 6,
     /// How many operands each instruction can have
@@ -191,7 +189,6 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .NumTags              ( NumTags               ),
             .PcWidth              ( PcWidth               ),
             .WarpWidth            ( WarpWidth             ),
-            .WaitBufferSizePerWarp( WaitBufferSizePerWarp ),
             .RegIdxWidth          ( RegIdxWidth           ),
             .OperandsPerInst      ( OperandsPerInst       )
         ) i_dispatcher (

@@ -488,7 +488,6 @@ module compute_unit import bgpu_pkg::*; #(
         .PcWidth              ( PcWidth              ),
         .NumWarps             ( NumWarps             ),
         .WarpWidth            ( WarpWidth            ),
-        .WaitBufferSizePerWarp( InflightInstrPerWarp ),
         .RegIdxWidth          ( RegIdxWidth          ),
         .OperandsPerInst      ( OperandsPerInst      )
     ) i_warp_dispatcher (

@@ -7,6 +7,10 @@
 /// Compute Cluster Synthesis Wrapper
 // Unpacks all interfaces into simple ports
 module compute_cluster_synth_wrapper #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
+    /// Number of instructions that can write back simultaneously
+    parameter int unsigned WritebackWidth = 1,
     /// Number of Compute Units in the cluster
     parameter int unsigned ComputeUnits = 2,
     /// Width of the Program Counter
@@ -307,6 +311,8 @@ module compute_cluster_synth_wrapper #(
     assign mem_axi_rsp.b_valid  = mem_axi_b_valid_i;
 
     compute_cluster #(
+        .FetchWidth            ( FetchWidth             ),
+        .WritebackWidth        ( WritebackWidth         ),
         .ComputeUnits          ( ComputeUnits           ),
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),

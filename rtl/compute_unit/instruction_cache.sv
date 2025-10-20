@@ -34,7 +34,6 @@ module instruction_cache #(
     parameter type enc_inst_t   = logic [      EncInstWidth-1:0],
     parameter type subwarp_id_t = logic [    SubwarpIdWidth-1:0],
     parameter type fetch_mask_t = logic [        FetchWidth-1:0]
->>>>>>> 4cdbcc0 (rtl: add support for fetchwidth to wait buffer)
 ) (
     // Clock and reset
     input logic clk_i,

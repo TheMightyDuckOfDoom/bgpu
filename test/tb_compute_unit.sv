@@ -559,23 +559,27 @@ module tb_compute_unit import bgpu_pkg::*; #(
                 $display("Fetcher output valid: %b", i_cu.fe_to_ic_valid_d);
                 if (i_cu.fe_to_ic_valid_d) begin
                     $display("Instruction at PC %d", i_cu.fe_to_ic_data_d.pc);
-                    $display("Act. mask:        %b", i_cu.fe_to_ic_data_d.act_mask);
+                    $display("Act.   mask:      %b", i_cu.fe_to_ic_data_d.act_mask);
+                    $display("Fetch. mask:      %b", i_cu.fe_to_ic_data_d.fetch_mask);
                     $display("Warp ID:          %d", i_cu.fe_to_ic_data_d.warp_id);
                 end else begin
                     $display("Instruction at PC X");
-                    $display("Act. mask:        X");
+                    $display("Act.   mask       X");
+                    $display("Fetch. mask:      X");
                     $display("Warp ID:          X");
                 end
 
-                $display("Decoder output valid: %b", i_cu.dec_to_ib_valid_q);
+                $display("\nDecoder output valid: %b", i_cu.dec_to_ib_valid_q);
                 if (i_cu.dec_to_ib_valid_q) begin
                     $display("Instruction at PC %d", i_cu.dec_to_ib_data_q.pc);
-                    $display("Act. mask:        %b", i_cu.dec_to_ib_data_q.act_mask);
+                    $display("Act.   mask:      %b", i_cu.dec_to_ib_data_q.act_mask);
                     $display("Warp ID:          %d", i_cu.dec_to_ib_data_q.warp_id);
+                    $display("Valid insts.      %b", i_cu.dec_to_ib_data_q.valid_insts);
                 end else begin
                     $display("Instruction at PC X");
-                    $display("Act. mask:        X");
+                    $display("Act.   mask:      X");
                     $display("Warp ID:          X");
+                    $display("Valid insts.      X");
                 end
                 `endif
             end

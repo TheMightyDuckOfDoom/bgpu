@@ -103,7 +103,7 @@ module decoder import bgpu_pkg::*; #(
             // Stop decoding the instruction if a previous one was a:
             // - branch instruction
             // - control instruction -> does not need an instruction buffer entry
-            if (!(dec_decoded_branch_o || (|dec_decoded_unused_ibe_o))) begin : decode_fetch_slice
+            if (ic_valid_i[fidx] && !(dec_decoded_branch_o || (|dec_decoded_unused_ibe_o))) begin : decode_fetch_slice
                 // Default is to increment the pc to the next instruction
                 dec_decoded_next_pc_o = dec_decoded_next_pc_o + 'd1;
 
@@ -182,7 +182,7 @@ module decoder import bgpu_pkg::*; #(
                 end : decode_bru
 
                 // Control instructions are not sent to the Dispatcher
-                if (ic_valid_i[fidx] && !(|dec_decoded_unused_ibe_o)) begin : valid_fetch
+                if (!(|dec_decoded_unused_ibe_o)) begin : valid_fetch
                     dec_valid_o[fidx] = 1'b1;
                 end : valid_fetch
             end : decode_fetch_slice

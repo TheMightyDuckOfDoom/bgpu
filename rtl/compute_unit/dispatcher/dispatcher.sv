@@ -20,14 +20,12 @@ module dispatcher import bgpu_pkg::*; #(
     parameter int unsigned FetchWidth = 1,
     /// Number of instructions that can write back simultaneously
     parameter int unsigned WritebackWidth = 1,
-    /// Number of inflight instructions
+    /// Number of inflight instructions per warp
     parameter int unsigned NumTags = 8,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 32,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 32,
-    /// How many instructions that wait on previous results can be buffered per warp
-    parameter int unsigned WaitBufferSizePerWarp = 4,
     /// How many registers can each warp access as operand or destination
     parameter int unsigned RegIdxWidth = 6,
     /// How many operands each instruction can have
@@ -117,8 +115,8 @@ module dispatcher import bgpu_pkg::*; #(
     // Register Table
     logic reg_table_space_available;
 
-    op_mask_t operands_ready;
-    op_tag_t  operands_tag;
+    op_mask_t [FetchWidth-1:0] operands_ready;
+    op_tag_t  [FetchWidth-1:0] operands_tag;
 
     // Wait Buffer
     logic wb_ready;
@@ -127,12 +125,9 @@ module dispatcher import bgpu_pkg::*; #(
     // # Combinational Logic                                                                 #
     // #######################################################################################
 
-    // Disp ready if:
-    // 1. Tag queue has a tag available -> free tags for full FetchWidth
-    // 2. Wait buffer has space
-    // 3. Register table has space
-
-    assign disp_ready_o = (&tag_available) && wb_ready && reg_table_space_available;
+    // Disp ready if we have tags available (implies space in reg table)
+    // Wait buffer is ensured to be ready to accept new instructions by credit counter
+    assign disp_ready_o = (tag_available & dec_valid_insts_i) == dec_valid_insts_i;
 
     // Insert new element |-> if handshake happens
     assign insert = dec_valid_i && disp_ready_o ? dec_valid_insts_i : '0;
@@ -162,6 +157,7 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     reg_table #(
+        .FetchWidth     ( FetchWidth      ),
         .WritebackWidth ( WritebackWidth  ),
         .WarpWidth      ( WarpWidth       ),
         .NumTags        ( NumTags         ),
@@ -173,12 +169,11 @@ module dispatcher import bgpu_pkg::*; #(
 
         .all_dst_written_o( ib_all_instr_finished_o ),
 
-        .space_available_o( reg_table_space_available ),
-        .insert_i         ( insert                    ),
-        .subwarp_id_i     ( dec_subwarp_id_i          ),
-        .tag_i            ( dst_tag                   ),
-        .dst_reg_i        ( dec_dst_i                 ),
-        .operands_reg_i   ( dec_operands_i            ),
+        .insert_i      ( insert           ),
+        .subwarp_id_i  ( dec_subwarp_id_i ),
+        .tag_i         ( dst_tag          ),
+        .dst_reg_i     ( dec_dst_i        ),
+        .operands_reg_i( dec_operands_i   ),
 
         .operands_ready_o( operands_ready ),
         .operands_tag_o  ( operands_tag   ),
@@ -197,7 +192,6 @@ module dispatcher import bgpu_pkg::*; #(
         .NumTags              ( NumTags               ),
         .PcWidth              ( PcWidth               ),
         .WarpWidth            ( WarpWidth             ),
-        .WaitBufferSizePerWarp( WaitBufferSizePerWarp ),
         .RegIdxWidth          ( RegIdxWidth           ),
         .OperandsPerInst      ( OperandsPerInst       )
     ) i_wait_buffer (
@@ -211,7 +205,6 @@ module dispatcher import bgpu_pkg::*; #(
 
         .dec_decoded_unused_ibe_i( dec_decoded_unused_ibe_i ),
 
-        .wb_ready_o           ( wb_ready              ),
         .dec_valid_i          ( insert                ),
         .dec_pc_i             ( dec_pc_i              ),
         .dec_act_mask_i       ( dec_act_mask_i        ),
@@ -239,14 +232,5 @@ module dispatcher import bgpu_pkg::*; #(
         .eu_valid_i( eu_valid_i ),
         .eu_tag_i  ( eu_tag_i   )
     );
-
-    // #######################################################################################
-    // # Assertions                                                                          #
-    // #######################################################################################
-
-    `ifndef SYNTHESIS
-        initial assert(NumTags >= WaitBufferSizePerWarp)
-        else $error(1, "NumTags must be >= WaitBufferSizePerWarp");
-    `endif
 
 endmodule : dispatcher
