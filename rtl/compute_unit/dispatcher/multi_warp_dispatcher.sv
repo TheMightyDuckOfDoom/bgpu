@@ -35,6 +35,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     parameter type         tag_t          = logic     [         TagWidth-1:0],
     parameter type         iid_t          = logic     [TagWidth+WidWidth-1:0],
     parameter type         subwarp_id_t   = logic     [   SubwarpIdWidth-1:0],
+    parameter type         fetch_mask_t   = logic     [       FetchWidth-1:0],
     parameter type         op_is_reg_t    = logic     [  OperandsPerInst-1:0],
     parameter type         op_reg_idx_t   = reg_idx_t [  OperandsPerInst-1:0]
 ) (
@@ -51,13 +52,14 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
 
     /// To fetcher
     // |-> which warps have space for a new instruction?
-    output logic [NumWarps-1:0] ib_space_available_o,
+    output fetch_mask_t [NumWarps-1:0] ib_space_available_o,
     // Are there any instructions in flight?
     output logic [NumWarps-1:0] ib_all_instr_finished_o,
 
-    /// From decoder -> control decoded
-    input  logic dec_control_decoded_i,
-    input  wid_t dec_control_decoded_warp_id_i,
+    /// From decoder -> Decoded instruction that does not need a wait buffer entry
+    input  logic        dec_decoded_i,
+    input  fetch_mask_t dec_decoded_unused_ibe_i,
+    input  wid_t        dec_decoded_warp_id_i,
 
     /// From decoder -> new instruction
     output logic                         ib_ready_o,
@@ -127,8 +129,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     disp_data_t [NumWarps-1:0] arb_in_data;
     disp_data_t arb_sel_data;
 
-    // Control decoded Demultiplexer
-    warp_mask_t dec_control_decoded_warp;
+    // Decoded Demultiplexer
+    fetch_mask_t [NumWarps-1:0] dec_decoded_unused_ibe;
 
     // OPC EU Handshake Demultiplexer
     warp_mask_t opc_eu_handshake_warp;
@@ -163,10 +165,11 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
                 eu_valid[warp][wb] = eu_valid_i[wb] && (eu_tag_i[wb][WidWidth-1:0] == warp[WidWidth-1:0]);
     end
 
-    // Control Decoded Demultiplexer
+    // Decoder Decoded Demultiplexer
     always_comb begin
-        dec_control_decoded_warp = '0;
-        dec_control_decoded_warp[dec_control_decoded_warp_id_i] = dec_control_decoded_i;
+        dec_decoded_unused_ibe = '0;
+        if (dec_decoded_i)
+            dec_decoded_unused_ibe[dec_decoded_warp_id_i] = dec_decoded_unused_ibe_i;
     end
 
     // OPC EU Handshake Demultiplexer
@@ -201,7 +204,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .ib_space_available_o   ( ib_space_available_o   [warp] ),
             .ib_all_instr_finished_o( ib_all_instr_finished_o[warp] ),
 
-            .dec_control_decoded_i( dec_control_decoded_warp[warp] ),
+            .dec_decoded_unused_ibe_i( dec_decoded_unused_ibe[warp] ),
 
             .disp_ready_o         ( ib_ready_warp [warp]  ),
             .dec_valid_i          ( dec_valid_warp[warp]  ),

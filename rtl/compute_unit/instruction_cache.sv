@@ -23,15 +23,18 @@ module instruction_cache #(
     parameter int unsigned NumCachelines = 8,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned SubwarpIdWidth     = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
-    parameter int unsigned WidWidth           =  NumWarps > 1 ? $clog2(NumWarps)  : 1,
-    parameter int unsigned CachelineAddrWidth = PcWidth - CachelineIdxBits,
-    parameter type         cache_addr_t = logic [CachelineAddrWidth-1:0],
-    parameter type         wid_t        = logic [          WidWidth-1:0],
-    parameter type         pc_t         = logic [           PcWidth-1:0],
-    parameter type         act_mask_t   = logic [         WarpWidth-1:0],
-    parameter type         enc_inst_t   = logic [      EncInstWidth-1:0],
-    parameter type         subwarp_id_t = logic [    SubwarpIdWidth-1:0]
+    parameter int unsigned SubwarpIdWidth     =        WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter int unsigned WidWidth           =         NumWarps > 1 ? $clog2(NumWarps)  : 1,
+    parameter int unsigned CachelineAddrWidth = CachelineIdxBits > 0 ? PcWidth - CachelineIdxBits
+                                                    : PcWidth,
+    parameter type cache_addr_t = logic [CachelineAddrWidth-1:0],
+    parameter type wid_t        = logic [          WidWidth-1:0],
+    parameter type pc_t         = logic [           PcWidth-1:0],
+    parameter type act_mask_t   = logic [         WarpWidth-1:0],
+    parameter type enc_inst_t   = logic [      EncInstWidth-1:0],
+    parameter type subwarp_id_t = logic [    SubwarpIdWidth-1:0],
+    parameter type fetch_mask_t = logic [        FetchWidth-1:0]
+>>>>>>> 4cdbcc0 (rtl: add support for fetchwidth to wait buffer)
 ) (
     // Clock and reset
     input logic clk_i,
@@ -52,6 +55,7 @@ module instruction_cache #(
     // From Fetcher
     output logic        ic_ready_o,
     input  logic        fe_valid_i,
+    input  fetch_mask_t fe_fetch_mask_i,
     input  pc_t         fe_pc_i,
     input  act_mask_t   fe_act_mask_i,
     input  wid_t        fe_warp_id_i,
@@ -59,7 +63,8 @@ module instruction_cache #(
 
     // To Decode
     input  logic                       dec_ready_i,
-    output logic      [FetchWidth-1:0] ic_valid_o,
+    output fetch_mask_t                ic_valid_o,
+    output fetch_mask_t                ic_fetch_mask_o,
     output pc_t                        ic_pc_o,
     output act_mask_t                  ic_act_mask_o,
     output wid_t                       ic_warp_id_o,
@@ -90,6 +95,7 @@ module instruction_cache #(
 
     // Fetch request
     typedef struct packed {
+        fetch_mask_t fetch_mask; // Which instructions in the fetch width are allowed to be valid
         pc_t         pc;         // Program counter of the instruction
         act_mask_t   act_mask;   // Active mask of the warp
         wid_t        warp_id;    // Warp ID of the instruction
@@ -154,6 +160,7 @@ module instruction_cache #(
 
         // Output to decoder
         ic_valid_o      = '0;
+        ic_fetch_mask_o = '0;
         ic_pc_o         = '0;
         ic_act_mask_o   = '0;
         ic_warp_id_o    = '0;
@@ -198,6 +205,7 @@ module instruction_cache #(
                 cache_valid_d = cache_valids_q[cache_select];
 
                 // Store the active request
+                active_req_d.fetch_mask = fe_fetch_mask_i;
                 active_req_d.pc         = fe_pc_i;
                 active_req_d.act_mask   = fe_act_mask_i;
                 active_req_d.warp_id    = fe_warp_id_i;
@@ -215,13 +223,14 @@ module instruction_cache #(
                 // -> Hit, send to decoder, check if we have a new request
 
                 // Send to decoder
+                ic_fetch_mask_o = active_req_q.fetch_mask;
                 ic_pc_o         = active_req_q.pc;
                 ic_act_mask_o   = active_req_q.act_mask;
                 ic_warp_id_o    = active_req_q.warp_id;
                 ic_subwarp_id_o = active_req_q.subwarp_id;
 
                 // First pc is always included in cacheline
-                ic_valid_o[0] = 1'b1;
+                ic_valid_o[0] = active_req_q.fetch_mask[0];
                 ic_inst_o [0] = cache_data[
                     active_req_q.pc[CachelineIdxBits-1:0]
                 ];
@@ -230,7 +239,7 @@ module instruction_cache #(
                 for (int fidx = 1; fidx < FetchWidth; fidx++) begin
                     if ((int'(active_req_q.pc[CachelineIdxBits-1:0]) + fidx)
                             < (1 << CachelineIdxBits)) begin
-                        ic_valid_o[fidx] = 1'b1;
+                        ic_valid_o[fidx] = active_req_q.fetch_mask[fidx];
                         ic_inst_o [fidx] = cache_data[
                             active_req_q.pc[CachelineIdxBits-1:0] + 'd1
                         ];
@@ -262,6 +271,7 @@ module instruction_cache #(
                         cache_valid_d = cache_valids_q[cache_select];
 
                         // Store the active request
+                        active_req_d.fetch_mask = fe_fetch_mask_i;
                         active_req_d.pc         = fe_pc_i;
                         active_req_d.act_mask   = fe_act_mask_i;
                         active_req_d.warp_id    = fe_warp_id_i;
@@ -310,13 +320,14 @@ module instruction_cache #(
 
         // Wait for decoder state
         else if (state_q == WAIT_FOR_DECODER) begin : wait_for_decoder_state
+            ic_fetch_mask_o = active_req_q.fetch_mask;
             ic_pc_o         = active_req_q.pc;
             ic_act_mask_o   = active_req_q.act_mask;
             ic_warp_id_o    = active_req_q.warp_id;
             ic_subwarp_id_o = active_req_q.subwarp_id;
 
             // First pc is always included in cacheline
-            ic_valid_o[0] = 1'b1;
+            ic_valid_o[0] = active_req_q.fetch_mask[0];
             ic_inst_o [0] = mem_data_q[
                 active_req_q.pc[CachelineIdxBits-1:0]
             ];
@@ -325,7 +336,7 @@ module instruction_cache #(
             for (int fidx = 1; fidx < FetchWidth; fidx++) begin
                 if ((int'(active_req_q.pc[CachelineIdxBits-1:0]) + fidx)
                         < (1 << CachelineIdxBits)) begin
-                    ic_valid_o[fidx] = 1'b1;
+                    ic_valid_o[fidx] = active_req_q.fetch_mask[fidx];
                     ic_inst_o [fidx] = mem_data_q[
                         active_req_q.pc[CachelineIdxBits-1:0] + 'd1
                     ];
@@ -359,6 +370,7 @@ module instruction_cache #(
                     cache_valid_d = cache_valids_q[cache_select];
 
                     // Store the active request
+                    active_req_d.fetch_mask = fe_fetch_mask_i;
                     active_req_d.pc         = fe_pc_i;
                     active_req_d.act_mask   = fe_act_mask_i;
                     active_req_d.warp_id    = fe_warp_id_i;
@@ -502,6 +514,28 @@ module instruction_cache #(
                 || (ic_valid_o && $stable({ic_pc_o, ic_act_mask_o, ic_warp_id_o,
                                           ic_subwarp_id_o, ic_inst_o}))
         ) else $fatal(1, "Decoder not ready, but output changed.");
+
+        // Check that fetch mask is valid
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            fe_valid_i |-> fe_fetch_mask_i != '0
+        ) else $fatal(1, "Fetch request received with zero fetch mask.");
+
+        // Check that fetch mask is contiguous
+        for (genvar fidx = 0; fidx < FetchWidth; fidx++) begin
+            if (fidx == 0) begin
+                assert property (@(posedge clk_i) disable iff (!rst_ni)
+                    fe_valid_i |-> fe_fetch_mask_i[0] == 1'b1
+                ) else $fatal(1, "Fetch request received with invalid fetch mask: First instruction must always be valid.");
+            end else begin
+                assert property (@(posedge clk_i) disable iff (!rst_ni)
+                    fe_valid_i && fe_fetch_mask_i[fidx] |-> (fe_fetch_mask_i[fidx-1])
+                ) else $fatal(1, "Fetch request received with invalid fetch mask: Fetch mask bits must be contiguous.");
+
+                assert property (@(posedge clk_i) disable iff (!rst_ni)
+                    ic_valid_o[fidx] |-> (ic_valid_o[fidx-1] || (fidx == 0))
+                ) else $fatal(1, "Instruction cache output valid signal invalid: Valid bits must be contiguous.");
+            end
+        end
     `endif
 
     // #######################################################################################

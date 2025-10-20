@@ -43,6 +43,7 @@ sources:
       
           - rtl/compute_unit/dispatcher/tag_queue.sv
           - rtl/compute_unit/dispatcher/reg_table.sv
+          - rtl/compute_unit/dispatcher/multi_credit_counter.sv
           - rtl/compute_unit/dispatcher/wait_buffer.sv
           - rtl/compute_unit/dispatcher/dispatcher.sv
           - rtl/compute_unit/dispatcher/multi_warp_dispatcher.sv

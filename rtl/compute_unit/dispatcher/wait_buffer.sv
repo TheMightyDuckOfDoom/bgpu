@@ -6,6 +6,8 @@
 
 /// Wait Buffer
 module wait_buffer import bgpu_pkg::*; #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
     /// Number of instructions that can write back simultaneously
     parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions
@@ -41,24 +43,24 @@ module wait_buffer import bgpu_pkg::*; #(
     /// From fetcher |-> which warp gets fetched next
     input  logic fe_handshake_i,
 
-    /// To fetcher |-> space for a new instruction?
-    output logic ib_space_available_o,
+    /// To fetcher |-> space for new instructions?
+    output logic [FetchWidth-1:0] ib_space_available_o,
 
-    /// From decoder -> control decoded, no buffer space need -> free up the credit
-    input  logic      dec_control_decoded_i,
+    /// From decoder -> Decoded instruction that does not need a wait buffer entry
+    input logic [FetchWidth-1:0] dec_decoded_unused_ibe_i,
 
     /// From decoder -> new instruction
     output logic        wb_ready_o,
-    input  logic        dec_valid_i,
     input  pc_t         dec_pc_i,
     input  act_mask_t   dec_act_mask_i,
-    input  tag_t        dec_tag_i,
-    input  reg_idx_t    dec_dst_reg_i,
-    input  inst_t       dec_inst_i,
-    input  op_mask_t    dec_operands_is_reg_i,
-    input  op_mask_t    dec_operands_ready_i,
-    input  op_tag_t     dec_operand_tags_i,
-    input  op_reg_idx_t dec_operands_i,
+    input  logic        [FetchWidth-1:0] dec_valid_i,
+    input  tag_t        [FetchWidth-1:0] dec_tag_i,
+    input  reg_idx_t    [FetchWidth-1:0] dec_dst_reg_i,
+    input  inst_t       [FetchWidth-1:0] dec_inst_i,
+    input  op_mask_t    [FetchWidth-1:0] dec_operands_is_reg_i,
+    input  op_mask_t    [FetchWidth-1:0] dec_operands_ready_i,
+    input  op_tag_t     [FetchWidth-1:0] dec_operand_tags_i,
+    input  op_reg_idx_t [FetchWidth-1:0] dec_operands_i,
 
     /// To Operand Collector
     input  logic        opc_ready_i,
@@ -82,6 +84,9 @@ module wait_buffer import bgpu_pkg::*; #(
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
+
+    // Wait Buffer Entry index
+    typedef logic [$clog2(WaitBufferSizePerWarp):0] wb_idx_t;
 
     // Dependency Mask
     typedef logic [WaitBufferSizePerWarp-1:0] entry_mask_t;
@@ -118,10 +123,10 @@ module wait_buffer import bgpu_pkg::*; #(
     // #######################################################################################
 
     // Dependecy mask of the new instruction
-    entry_mask_t dep_mask;
+    entry_mask_t [FetchWidth-1:0] dep_mask;
 
     // Entry to insert in the wait buffer
-    entry_mask_t insert_mask;
+    entry_mask_t [FetchWidth-1:0] insert_mask;
 
     // Which entry gets dispatched in this cycle
     entry_mask_t dispatch_mask;
@@ -140,36 +145,63 @@ module wait_buffer import bgpu_pkg::*; #(
     disp_data_t [WaitBufferSizePerWarp-1:0] arb_in_data;
     disp_data_t arb_sel_data;
 
-    logic inst_dispatched;
-    logic give_credit;
+    logic [FetchWidth  :0] give_credit;
+    logic [FetchWidth-1:0] take_credit;
+
+    logic    inst_dispatched;
+    wb_idx_t credits_left;
 
     // #######################################################################################
-    // # Combinatorial Logic                                                                 #
+    // # Credit Counter                                                                      #
     // #######################################################################################
 
-    // Credit counter
-    // Decremented when an instruction is fetched for the warp
-    // Incremented when the instruction get dispatched to the operand collector or a stop is decoded
-    assign inst_dispatched = (|arb_gnt) && disp_valid_o && opc_ready_i;
-    assign give_credit = inst_dispatched || dec_control_decoded_i;
-
-    credit_counter #(
+    multi_credit_counter #(
+        .NumTake        ( FetchWidth            ),
+        .NumGive        ( FetchWidth+1          ),
         .NumCredits     ( WaitBufferSizePerWarp ),
         .InitCreditEmpty( 1'b0                  )
     ) i_credit_counter (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .credit_take_i( fe_handshake_i ),
-        .credit_give_i( give_credit    ),
-        .credit_init_i( 1'b0 ),
+        .credit_o( credits_left ),
 
-        .credit_left_o( ib_space_available_o ),
-        // Not used
-        .credit_o     ( /* NOT CONNECTED */ ),
-        .credit_crit_o( /* NOT CONNECTED */ ),
-        .credit_full_o( /* NOT CONNECTED */ )
+        .credit_take_i( take_credit ),
+        .credit_give_i( give_credit ),
+        .credit_init_i( 1'b0        ),
+
+        .credit_left_o( /* Unused */ ),
+        .credit_crit_o( /* Unused */ ),
+        .credit_full_o( /* Unused */ )
     );
+
+    // #######################################################################################
+    // # Combinatorial Logic                                                                 #
+    // #######################################################################################
+
+    /// Credit counter
+    // Decremented when the fetcher sends a request for a new instruction
+    // -> Allocate as many as possible up to FetchWidth
+    assign inst_dispatched = (|arb_gnt) && disp_valid_o && opc_ready_i;
+    
+    // Incremented when the instruction get dispatched to the operand collector
+    // or the decoder indicates that no buffer space for the instruction was needed
+    // (control or was unable to fetch from cache)
+    assign give_credit           [0] = inst_dispatched;
+    assign give_credit[FetchWidth:1] = dec_decoded_unused_ibe_i;
+
+    // Take credits when a fetcher handshake happens
+    assign take_credit = fe_handshake_i ? ib_space_available_o : '0;
+
+    // How many instructions can be inserted into the wait buffer?
+    // Ones are continous from LSB side
+    always_comb begin : space_available_logic
+        ib_space_available_o = '0;
+        for (int fidx = 0; fidx < FetchWidth; fidx++) begin : loop_fetch_width
+            if (credits_left > wb_idx_t'(fidx))
+                ib_space_available_o[fidx] = 1'b1;
+        end : loop_fetch_width
+    end : space_available_logic
 
     // Wait buffer is ready if there is space available
     assign wb_ready_o = !(&wait_buffer_valid_q);
@@ -177,12 +209,14 @@ module wait_buffer import bgpu_pkg::*; #(
     // Determine which entry to insert
     always_comb begin : build_insert_mask
         insert_mask = '0;
-        for (int i = 0; i < WaitBufferSizePerWarp; i++) begin
-            if (!wait_buffer_valid_q[i]) begin
-                insert_mask[i] = 1'b1;
-                break;
-            end
-        end
+        for (int fidx = 0; fidx < FetchWidth; fidx++) begin : gen_insert_mask_per_fetch
+            for (int i = 0; i < WaitBufferSizePerWarp; i++) begin : loop_entries
+                if (!wait_buffer_valid_q[i]) begin
+                    insert_mask[fidx][i] = 1'b1;
+                    break;
+                end
+            end : loop_entries
+        end : gen_insert_mask_per_fetch
     end : build_insert_mask
 
     // Which entry to dispatch in this cycle
@@ -194,31 +228,46 @@ module wait_buffer import bgpu_pkg::*; #(
 
         // Inorder execution, all instructions are dependent on the previous ones
         if (inorder_execution_i) begin : inorder_execution
-            dep_mask = wait_buffer_valid_q;
+            for (int fidx = 0; fidx < FetchWidth; fidx++) begin : gen_inorder_dep
+                if (fidx == 0) begin
+                    // First instruction depends on all instructions in the wait buffer
+                    dep_mask[fidx] = wait_buffer_valid_q;
+                end else begin
+                    // Subsequent instructions depend on all previous instructions in this fetch
+                    dep_mask[fidx] = dep_mask[fidx-1] | insert_mask[fidx-1];
+                end
+            end : gen_inorder_dep
         end : inorder_execution
 
-        // If the destination of the new instruction is used as operand in the wait buffer,
-        // then we have to wait for it to be executed to avoid WAR hazards
+        // Out of order execution
+        // Need to guard agains WAR and WAW hazards
+        // Write to a register before it has been read
+        else begin : out_of_order_execution
+            // TODO: For now we only support FetchWidth == 1
+            assert(FetchWidth == 1) else $error("Out of order execution with FetchWidth > 1 is not supported yet");
 
-        // If the desitination of the new instructions is the same as a previous instruction,
-        // then we have to wait for it to be executed to avoid WAW hazards
-        for (int i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_dep_mask
-            if (wait_buffer_valid_q[i]) begin : check_entry
-                // Check if the destination register is used as operand in the wait buffer
-                for (int operand = 0; operand < OperandsPerInst; operand++)
-                begin : gen_operand_check
-                    if (wait_buffer_q[i].operands_is_reg[operand]
-                      && wait_buffer_q[i].operands[operand] == dec_dst_reg_i) begin
+            // If the destination of the new instruction is used as operand in the wait buffer,
+            // then we have to wait for it to be executed to avoid WAR hazards
+
+            // If the desitination of the new instructions is the same as a previous instruction,
+            // then we have to wait for it to be executed to avoid WAW hazards
+            for (int i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_dep_mask
+                if (wait_buffer_valid_q[i]) begin : check_entry
+                    // Check if the destination register is used as operand in the wait buffer
+                    for (int operand = 0; operand < OperandsPerInst; operand++) begin : gen_operand_check
+                        if (wait_buffer_q[i].operands_is_reg[operand]
+                        && wait_buffer_q[i].operands[operand] == dec_dst_reg_i) begin
+                            dep_mask[0][i] = 1'b1;
+                        end
+                    end : gen_operand_check
+
+                    // Check if the destination register is the same as the new instruction
+                    if (wait_buffer_q[i].dst_reg == dec_dst_reg_i) begin
                         dep_mask[i] = 1'b1;
                     end
-                end : gen_operand_check
-
-                // Check if the destination register is the same as the new instruction
-                if (wait_buffer_q[i].dst_reg == dec_dst_reg_i) begin
-                    dep_mask[i] = 1'b1;
-                end
-            end : check_entry
-        end : gen_dep_mask
+                end : check_entry
+            end : gen_dep_mask
+        end : out_of_order_execution
     end : build_dep_mask
 
     // Build the remove mask
@@ -275,24 +324,27 @@ module wait_buffer import bgpu_pkg::*; #(
             end : check_wb_operands
 
             // Insert instruction into buffer
-            if (dec_valid_i && wb_ready_o && insert_mask[entry]) begin : insert_entry
-                wait_buffer_valid_d     [entry] = 1'b1;
-                wait_buffer_dispatched_d[entry] = 1'b0;
+            for (int fidx = 0; fidx < FetchWidth; fidx++) begin : insert_entry_per_fetch
+                if (dec_valid_i && wb_ready_o && insert_mask[fidx][entry]) begin : insert_entry
+                    wait_buffer_valid_d     [entry] = 1'b1;
+                    wait_buffer_dispatched_d[entry] = 1'b0;
 
-                wait_buffer_d[entry].pc       = dec_pc_i;
-                wait_buffer_d[entry].act_mask = dec_act_mask_i;
-                wait_buffer_d[entry].inst     = dec_inst_i;
-                wait_buffer_d[entry].dst_reg  = dec_dst_reg_i;
-                wait_buffer_d[entry].tag      = dec_tag_i;
+                    wait_buffer_d[entry].pc       = dec_pc_i + fidx[PcWidth-1:0]; // Adjust PC for fetch index
+                    wait_buffer_d[entry].act_mask = dec_act_mask_i;
+                    wait_buffer_d[entry].inst     = dec_inst_i   [fidx];
+                    wait_buffer_d[entry].dst_reg  = dec_dst_reg_i[fidx];
+                    wait_buffer_d[entry].tag      = dec_tag_i    [fidx];
 
-                wait_buffer_d[entry].dep_mask = dep_mask & (~remove_mask);
+                    wait_buffer_d[entry].dep_mask = dep_mask[fidx] & (~remove_mask);
 
-                wait_buffer_d[entry].operands_is_reg = dec_operands_is_reg_i;
-                wait_buffer_d[entry].operands_ready  = dec_operands_ready_i
-                                                       | (~dec_operands_is_reg_i);
-                wait_buffer_d[entry].operands        = dec_operands_i;
-                wait_buffer_d[entry].operand_tags    = dec_operand_tags_i;
-            end : insert_entry
+                    wait_buffer_d[entry].operands_is_reg = dec_operands_is_reg_i[fidx];
+                    wait_buffer_d[entry].operands_ready  = dec_operands_ready_i[fidx]
+                                                        | (~dec_operands_is_reg_i[fidx]);
+
+                    wait_buffer_d[entry].operands     = dec_operands_i    [fidx];
+                    wait_buffer_d[entry].operand_tags = dec_operand_tags_i[fidx];
+                end : insert_entry
+            end : insert_entry_per_fetch
         end
     end : gen_insert_logic
 
@@ -352,9 +404,7 @@ module wait_buffer import bgpu_pkg::*; #(
 
     `FF(wait_buffer_valid_q,      wait_buffer_valid_d,      '0, clk_i, rst_ni)
     `FF(wait_buffer_dispatched_q, wait_buffer_dispatched_d, '0, clk_i, rst_ni)
-    for (genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_buffer_ff
-        `FF(wait_buffer_q[i], wait_buffer_d[i], '0, clk_i, rst_ni)
-    end : gen_buffer_ff
+    `FF(wait_buffer_q,            wait_buffer_d,            '0, clk_i, rst_ni)
 
     // #######################################################################################
     // # Assertions                                                                         #
@@ -383,9 +433,11 @@ module wait_buffer import bgpu_pkg::*; #(
         else $error("Dispatch mask has more than one bit set");
 
         // Insert mask can only have one or no bits set
-        assert property (@(posedge clk_i) disable iff(!rst_ni)
-            (insert_mask == '0 || $onehot(insert_mask)))
-        else $error("Insert mask has more than one bit set");
+        for (genvar fidx = 0; fidx < FetchWidth; fidx++) begin : gen_assert_insert_mask_per_fetch
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                (insert_mask[fidx] == '0 || $onehot(insert_mask[fidx])))
+            else $error("Insert mask %0d has more than one bit set", fidx);
+        end : gen_assert_insert_mask_per_fetch
 
         // Generate assertions for each wait buffer entry
         for (genvar i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_asserts
@@ -400,9 +452,11 @@ module wait_buffer import bgpu_pkg::*; #(
             else $error("Arbiter granted an instruction that is not ready in the wait buffer");
 
             // Assert that the wait buffer at the index is empty when the fetcher tries to insert an instruction
-            assert property (@(posedge clk_i) disable iff(!rst_ni)
-                dec_valid_i && wb_ready_o && insert_mask[i] |-> !wait_buffer_valid_q[i])
-            else $error("Insert index is already valid in the wait buffer");
+            for (genvar fidx = 0; fidx < FetchWidth; fidx++) begin : gen_insert_asserts_per_fetch
+                assert property (@(posedge clk_i) disable iff(!rst_ni)
+                    dec_valid_i && wb_ready_o && insert_mask[fidx][i] |-> !wait_buffer_valid_q[i])
+                else $error("Insert index %0d for insert %0d is already valid in the wait buffer", i, fidx);
+            end : gen_insert_asserts_per_fetch
 
             for (genvar j = 0; j < WaitBufferSizePerWarp; j++) begin : gen_cross_entry_asserts
                 // Assert that the dependency mask is only set for valid instructions

@@ -20,13 +20,13 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     parameter int unsigned EncInstWidth = 32,
 
     /// Number of instructions to process
-    parameter int unsigned NumInsts = 1000,
+    parameter int unsigned NumInsts = 10000,
 
     parameter time         TclkPeriod       = 10ns,
     parameter time         AcqDelay         = 9ns,
     parameter time         ApplDelay        = 1ns,
     parameter int unsigned MaxMstWaitCycles = 1,
-    parameter int unsigned MaxSimCycles     = 10000,
+    parameter int unsigned MaxSimCycles     = 100000,
     parameter int unsigned WatchdogTimeout  = 1000
 );
     // #######################################################################################
@@ -49,6 +49,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     typedef logic [      EncInstWidth-1:0] enc_inst_t;
     typedef logic [    SubwarpIdWidth-1:0] subwarp_id_t;
     typedef logic [CachelineAddrWidth-1:0] cache_addr_t;
+    typedef logic [        FetchWidth-1:0] fetch_mask_t;
 
     // Request from fetcher
     typedef struct packed {
@@ -61,6 +62,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     // Response to Decoder
     typedef struct packed {
         logic [FetchWidth-1:0] valid;
+        fetch_mask_t fetch_mask;
         pc_t         pc;
         act_mask_t   act_mask;
         wid_t        wid;
@@ -82,11 +84,9 @@ module tb_instruction_cache import bgpu_pkg::*; #(
     logic flush;
 
     // New request from fetcher
-    logic       fetch_req_valid, ic_ready;
-    fetch_req_t fetch_req;
-
-    // Request queue
-    fetch_req_t fetch_req_q[$];
+    logic        fetch_req_valid, ic_ready;
+    fetch_req_t  fetch_req;
+    fetch_mask_t fetch_req_fetch_mask;
 
     // Response to decoder
     logic [FetchWidth-1:0] ic_valid;
@@ -145,6 +145,21 @@ module tb_instruction_cache import bgpu_pkg::*; #(
         .data_o ( fetch_req       ),
         .ready_i( ic_ready        )
     );
+
+    initial begin : gen_fetch_mask
+        int rand_val;
+        fetch_req_fetch_mask = '0;
+
+        while (1) begin
+            @(posedge clk);
+            #ApplDelay;
+            rand_val = $urandom_range(1, (1 << FetchWidth) - 1);
+            fetch_req_fetch_mask = '0;
+            for (int fidx = 0; fidx < FetchWidth; fidx++)
+                if (fidx < FetchWidth)
+                    fetch_req_fetch_mask[fidx] = 1'b1;
+        end
+    end : gen_fetch_mask
 
     // Response to decoder
     rand_stream_slv #(
@@ -210,6 +225,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
             @(posedge clk);
             #AcqDelay;
             if (fetch_req_valid && ic_ready) begin
+                grsp.fetch_mask = fetch_req_fetch_mask;
                 grsp.pc         = fetch_req.pc;
                 grsp.act_mask   = fetch_req.act_mask;
                 grsp.wid        = fetch_req.wid;
@@ -219,14 +235,14 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 grsp.enc_inst = '0;
 
                 // First pc is always in cacheline
-                grsp.valid   [0] = 1'b1;
+                grsp.valid   [0] = fetch_req_fetch_mask[0];
                 grsp.enc_inst[0] = mem_data[fetch_req.pc];
 
                 // Others are valid as long as pc + fidx is within a cacheline
                 for (int fidx = 1; fidx < FetchWidth; fidx++) begin
                     if ((int'(fetch_req.pc[CachelineIdxBits-1:0]) + fidx)
                             < (1 << CachelineIdxBits)) begin
-                        grsp.valid   [fidx] = 1'b1;
+                        grsp.valid   [fidx] = fetch_req_fetch_mask[fidx];
                         grsp.enc_inst[fidx] = mem_data[fetch_req.pc + 'd1];
                     end
                 end
@@ -309,6 +325,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
         .ic_ready_o     ( ic_ready             ),
         .fe_valid_i     ( fetch_req_valid      ),
+        .fe_fetch_mask_i( fetch_req_fetch_mask ),
         .fe_pc_i        ( fetch_req.pc         ),
         .fe_act_mask_i  ( fetch_req.act_mask   ),
         .fe_warp_id_i   ( fetch_req.wid        ),
@@ -316,6 +333,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
         .dec_ready_i    ( dec_ready         ),
         .ic_valid_o     ( ic_valid          ),
+        .ic_fetch_mask_o( ic_rsp.fetch_mask ),
         .ic_pc_o        ( ic_rsp.pc         ),
         .ic_act_mask_o  ( ic_rsp.act_mask   ),
         .ic_warp_id_o   ( ic_rsp.wid        ),
@@ -351,9 +369,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
             // Process fetch request
             if (fetch_req_valid && ic_ready) begin
-                $display("Cycle %0d: Fetch Request - PC: %0h, Warp ID: %0d, Active Mask: %b",
-                         cycles, fetch_req.pc, fetch_req.wid, fetch_req.act_mask);
-                fetch_req_q.push_back(fetch_req);
+                $display("Cycle %0d: Fetch Request - PC: %0h, Warp ID: %0d, Active Mask: %b, Fetch Mask: %b",
+                         cycles, fetch_req.pc, fetch_req.wid, fetch_req.act_mask, fetch_req_fetch_mask);
                 fetch_req_count++;
             end
 
@@ -373,8 +390,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
             if ((|ic_valid) && dec_ready) begin
                 $display("Cycle %0d: Decoder Response - Valid: %b, PC: %0h, Warp ID: %0d",
                             cycles, ic_valid, ic_rsp.pc, ic_rsp.wid);
-                $display("Active Mask: %b, Instruction: ",
-                            ic_rsp.act_mask);
+                $display("Active Mask: %b, Fetch Mask: %b, Instruction: ",
+                            ic_rsp.act_mask, ic_rsp.fetch_mask);
                 for (int fidx = 0; fidx < FetchWidth; fidx++) begin
                     $display("[%d]: %0h", fidx, ic_rsp.enc_inst[fidx]);
                     if (ic_valid[fidx])
@@ -389,6 +406,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 queued_rsp = i_ic_rsp_to_decoder.gen_queue.queue.pop_front();
 
                 match = (grsp.valid == queued_rsp.valid) &&
+                        (grsp.fetch_mask == queued_rsp.fetch_mask) &&
                         (grsp.pc == queued_rsp.pc) &&
                         (grsp.wid == queued_rsp.wid) &&
                         (grsp.act_mask == queued_rsp.act_mask) &&
@@ -398,6 +416,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 assert(match) else begin
                     $display("Cycle %0d: Mismatch in decoder response", cycles);
                     $display("Expected: Valid: %b actual: %b", grsp.valid, queued_rsp.valid);
+                    $display("Expected: Fetch Mask: %b actual: %b", grsp.fetch_mask, queued_rsp.fetch_mask);
                     $display("Expected: PC: %0h actual: %0h", grsp.pc, queued_rsp.pc);
                     $display("Expected: Warp ID: %0d actual: %0d", grsp.wid, queued_rsp.wid);
                     $display("Expected: Subwarp ID: %0d actual: %0d",

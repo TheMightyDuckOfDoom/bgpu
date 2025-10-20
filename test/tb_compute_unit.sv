@@ -4,6 +4,8 @@
 
 /// Testbench for Compute Unit
 module tb_compute_unit import bgpu_pkg::*; #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
     /// Number of instructions that can write back simultaneously
     parameter int unsigned WritebackWidth = 1,
     /// Width of the Program Counter
@@ -229,6 +231,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
     // Instantiate Compute Unit
     compute_unit #(
     `ifndef TARGET_POST_SYNTH
+        .FetchWidth            ( FetchWidth             ),
         .WritebackWidth        ( WritebackWidth         ),
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),
@@ -741,7 +744,7 @@ module tb_compute_unit import bgpu_pkg::*; #(
                     insn_id_in_file);
 
                 // Control Instruction -> Retire this instruction
-                if (i_cu.dec_to_fetch_control) begin
+                if (|i_cu.dec_to_fetch_decoded_unused_ibe) begin
                     // Retire
                     $fwrite(fd, "R\t%0d\t%0d\t0\n",
                         insn_id_in_file, retire_id);

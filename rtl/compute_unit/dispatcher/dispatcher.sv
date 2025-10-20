@@ -56,13 +56,13 @@ module dispatcher import bgpu_pkg::*; #(
 
     /// To fetcher
     // which warps have space for a new instruction?
-    output logic ib_space_available_o,
+    output logic [FetchWidth-1:0] ib_space_available_o,
     // Have all destination registers been written to the register file?
     // -> All instructions finished
     output logic ib_all_instr_finished_o,
 
-    /// From decoder -> control decoded
-    input  logic dec_control_decoded_i,
+    /// From decoder -> Decoded instruction that does not need a wait buffer entry
+    input logic [FetchWidth-1:0] dec_decoded_unused_ibe_i,
 
     /// From decoder -> new instruction
     output logic                         disp_ready_o,
@@ -192,6 +192,7 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     wait_buffer #(
+        .FetchWidth           ( FetchWidth            ),
         .WritebackWidth       ( WritebackWidth        ),
         .NumTags              ( NumTags               ),
         .PcWidth              ( PcWidth               ),
@@ -208,7 +209,7 @@ module dispatcher import bgpu_pkg::*; #(
         .fe_handshake_i      ( fe_handshake_i       ),
         .ib_space_available_o( ib_space_available_o ),
 
-        .dec_control_decoded_i( dec_control_decoded_i ),
+        .dec_decoded_unused_ibe_i( dec_decoded_unused_ibe_i ),
 
         .wb_ready_o           ( wb_ready              ),
         .dec_valid_i          ( insert                ),

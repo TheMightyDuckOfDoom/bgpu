@@ -11,6 +11,8 @@
 /// If multiple warps are ready for fetching, a round-robin arbiter is used
 
 module fetcher #(
+    /// Number of instructions to fetch for the warp
+    parameter int unsigned FetchWidth = 1,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 32,
     /// Number of warps per compute unit
@@ -33,7 +35,8 @@ module fetcher #(
     parameter type wid_t        = logic [      WidWidth-1:0],
     parameter type pc_t         = logic [       PcWidth-1:0],
     parameter type act_mask_t   = logic [     WarpWidth-1:0],
-    parameter type subwarp_id_t = logic [SubwarpIdWidth-1:0]
+    parameter type subwarp_id_t = logic [SubwarpIdWidth-1:0],
+    parameter type fetch_mask_t = logic [    FetchWidth-1:0]
 ) (
     /// Clock and reset
     input logic clk_i,
@@ -54,13 +57,14 @@ module fetcher #(
 
     /// From instruction buffer
     // Which warp has space for a new instruction?
-    input  logic [NumWarps-1:0] ib_space_available_i,
+    input fetch_mask_t [NumWarps-1:0] ib_space_available_i,
     // Are there any instructions in flight?
-    input  logic [NumWarps-1:0] ib_all_instr_finished_i,
+    input logic [NumWarps-1:0] ib_all_instr_finished_i,
 
     /// To/From instruction cache
     input  logic        ic_ready_i,
     output logic        fe_valid_o,
+    output fetch_mask_t fe_fetch_mask_o,
     output pc_t         fe_pc_o,
     output act_mask_t   fe_act_mask_o,
     output wid_t        fe_warp_id_o,
@@ -126,7 +130,9 @@ module fetcher #(
     end : gen_arb_data
 
     // Warp can be fetched if there is space in the instruction buffer and its unit is ready
-    assign rr_warp_ready = ib_space_available_i & its_warp_ready;
+    for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_rr_ready
+        assign rr_warp_ready[warp] = (|ib_space_available_i[warp]) & its_warp_ready[warp];
+    end : gen_rr_ready
 
     // Round robin arbiter
     rr_arb_tree #(
@@ -214,6 +220,7 @@ module fetcher #(
     assign fe_pc_o         = arb_sel_data.pc;
     assign fe_act_mask_o   = arb_sel_data.act_mask;
     assign fe_subwarp_id_o = arb_sel_data.subwarp_id;
+    assign fe_fetch_mask_o = ib_space_available_i[fe_warp_id_o];
 
     // ########################################################################################
     // # Assertions                                                                           #

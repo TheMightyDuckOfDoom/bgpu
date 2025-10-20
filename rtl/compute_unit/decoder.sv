@@ -30,12 +30,14 @@ module decoder import bgpu_pkg::*; #(
     parameter type         act_mask_t     = logic     [      WarpWidth-1:0],
     parameter type         enc_inst_t     = logic     [   EncInstWidth-1:0],
     parameter type         subwarp_id_t   = logic     [ SubwarpIdWidth-1:0],
+    parameter type         fetch_mask_t   = logic     [     FetchWidth-1:0],
     parameter type         op_is_reg_t    = logic     [OperandsPerInst-1:0],
     parameter type         op_reg_idx_t   = reg_idx_t [OperandsPerInst-1:0]
 ) (
     // From Instruction Cache
     output logic                       dec_ready_o,
-    input  logic      [FetchWidth-1:0] ic_valid_i,
+    input  fetch_mask_t                ic_valid_i,
+    input  fetch_mask_t                ic_fetch_mask_i,
     input  pc_t                        ic_pc_i,
     input  act_mask_t                  ic_act_mask_i,
     input  wid_t                       ic_warp_id_i,
@@ -56,8 +58,7 @@ module decoder import bgpu_pkg::*; #(
 
     // To Fetcher |-> tells it what the next PC is
     output logic        dec_decoded_o,
-    // TODO: For FetchWidth > 1 we need to tell how many insts got decoded
-    output logic        dec_decoded_control_o,
+    output fetch_mask_t dec_decoded_unused_ibe_o,
     output logic        dec_stop_warp_o,
     output logic        dec_decoded_branch_o,
     output logic        dec_decoded_sync_o,
@@ -73,7 +74,7 @@ module decoder import bgpu_pkg::*; #(
     assign dec_subwarp_id_o  = ic_subwarp_id_i;
 
     // Instruction was decoded if a handshake between Decoder and Dispatcher happend
-    assign dec_decoded_o            = (((|ic_valid_i) && dec_decoded_control_o) || (|dec_valid_o))
+    assign dec_decoded_o            = (((|ic_valid_i) && (|dec_decoded_unused_ibe_o)) || (|dec_valid_o))
                                     && disp_ready_i;
     assign dec_decoded_warp_id_o    = dec_warp_id_o;
     assign dec_decoded_subwarp_id_o = ic_subwarp_id_i;
@@ -90,26 +91,26 @@ module decoder import bgpu_pkg::*; #(
     // Determine operand types and decode control instructions
     always_comb begin : decode_operand_inst_type
         // Defaults
-        dec_decoded_next_pc_o = ic_pc_i;
-        dec_decoded_branch_o  = 1'b0;
-        dec_decoded_sync_o    = 1'b0;
-        dec_decoded_control_o = 1'b0;
-        dec_operands_is_reg_o = '0;
-        dec_stop_warp_o       = 1'b0;
-        dec_valid_o           = '0;
+        dec_decoded_next_pc_o    = ic_pc_i;
+        dec_decoded_branch_o     = 1'b0;
+        dec_decoded_sync_o       = 1'b0;
+        dec_decoded_unused_ibe_o = '0;
+        dec_operands_is_reg_o    = '0;
+        dec_stop_warp_o          = 1'b0;
+        dec_valid_o              = '0;
 
         for (int fidx = 0; fidx < FetchWidth; fidx++) begin : loop_fetch_width
             // Stop decoding the instruction if a previous one was a:
             // - branch instruction
-            // - control instruction
-            if (!(dec_decoded_branch_o || dec_decoded_control_o)) begin : decode_fetch_slice
+            // - control instruction -> does not need an instruction buffer entry
+            if (!(dec_decoded_branch_o || (|dec_decoded_unused_ibe_o))) begin : decode_fetch_slice
                 // Default is to increment the pc to the next instruction
                 dec_decoded_next_pc_o = dec_decoded_next_pc_o + 'd1;
 
                 // Stop the warp if the instruction is a stop instruction
                 if (ic_inst_i[fidx][31:24] == '1) begin : decode_stop_inst
-                    dec_stop_warp_o       = 1'b1;
-                    dec_decoded_control_o = 1'b1;
+                    dec_stop_warp_o                = 1'b1;
+                    dec_decoded_unused_ibe_o[fidx] = 1'b1;
                 end : decode_stop_inst
 
                 // Integer Unit
@@ -164,10 +165,10 @@ module decoder import bgpu_pkg::*; #(
                                 + ic_inst_i[fidx][PcWidth-1:0] + 'd1;
 
                         // Is a control instruction
-                        dec_decoded_control_o = 1'b1;
+                        dec_decoded_unused_ibe_o[fidx] = 1'b1;
                     end : jump_instruction
                     else if (dec_inst_o[fidx].subtype == BRU_SYNC) begin : sync_instruction
-                        dec_decoded_control_o = 1'b1;
+                        dec_decoded_unused_ibe_o[fidx] = 1'b1;
                         dec_decoded_sync_o    = 1'b1;
                     end : sync_instruction
                     else begin : branch_instruction
@@ -181,11 +182,15 @@ module decoder import bgpu_pkg::*; #(
                 end : decode_bru
 
                 // Control instructions are not sent to the Dispatcher
-                if (ic_valid_i[fidx] && (!dec_decoded_control_o)) begin : valid_fetch
+                if (ic_valid_i[fidx] && !(|dec_decoded_unused_ibe_o)) begin : valid_fetch
                     dec_valid_o[fidx] = 1'b1;
                 end : valid_fetch
             end : decode_fetch_slice
         end : loop_fetch_width
+
+        // Instructions that were in the fetch mask but are not valid after decoding
+        // Need to be marked as unused IBE entries -> free up resources in the Dispatcher
+        dec_decoded_unused_ibe_o = ic_fetch_mask_i & (~dec_valid_o);
     end : decode_operand_inst_type
 
     `ifndef SYNTHESIS
