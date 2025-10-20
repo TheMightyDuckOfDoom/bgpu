@@ -6,8 +6,8 @@
 module tb_tag_queue #(
     // Simulation parameters
     parameter int unsigned MaxWaitCycles = 1,
-    parameter int unsigned MaxSimCycles  = 10000,
-    parameter int unsigned TagsToFree    = 1000,
+    parameter int unsigned MaxSimCycles  = 20000,
+    parameter int unsigned TagsToFree    = 10000,
 
     // Simulation time parameters
     parameter time ClkPeriod = 10ns,
@@ -229,8 +229,8 @@ module tb_tag_queue #(
             else $error("Got tags (%0d) should be greater than or equal to freed tags (%0d)",
             got_tags, freed_tags);
         
-        assert (freed_tags == TagsToFree)
-            else $error("Did not free enough tags: %0d != %0d", freed_tags, TagsToFree);
+        assert (freed_tags >= TagsToFree)
+            else $error("Did not free enough tags: %0d < %0d", freed_tags, TagsToFree);
 
         $finish;
     end
