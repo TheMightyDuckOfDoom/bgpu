@@ -5,7 +5,7 @@
 /// Testbench for Instruction Cache
 module tb_instruction_cache import bgpu_pkg::*; #(
     /// Number of instructions to fetch for the warp
-    parameter int unsigned FetchWidth = 2,
+    parameter int unsigned FetchWidth = 4,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 9,
     /// Number of warps
@@ -243,7 +243,7 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                     if ((int'(fetch_req.pc[CachelineIdxBits-1:0]) + fidx)
                             < (1 << CachelineIdxBits)) begin
                         grsp.valid   [fidx] = fetch_req_fetch_mask[fidx];
-                        grsp.enc_inst[fidx] = mem_data[fetch_req.pc + 'd1];
+                        grsp.enc_inst[fidx] = mem_data[fetch_req.pc + pc_t'(fidx)];
                     end
                 end
 

@@ -241,7 +241,7 @@ module instruction_cache #(
                             < (1 << CachelineIdxBits)) begin
                         ic_valid_o[fidx] = active_req_q.fetch_mask[fidx];
                         ic_inst_o [fidx] = cache_data[
-                            active_req_q.pc[CachelineIdxBits-1:0] + 'd1
+                            active_req_q.pc[CachelineIdxBits-1:0] + fidx[CachelineIdxBits-1:0]
                         ];
                     end
                 end
@@ -338,7 +338,7 @@ module instruction_cache #(
                         < (1 << CachelineIdxBits)) begin
                     ic_valid_o[fidx] = active_req_q.fetch_mask[fidx];
                     ic_inst_o [fidx] = mem_data_q[
-                        active_req_q.pc[CachelineIdxBits-1:0] + 'd1
+                        active_req_q.pc[CachelineIdxBits-1:0] + fidx[CachelineIdxBits-1:0]
                     ];
                 end
             end
