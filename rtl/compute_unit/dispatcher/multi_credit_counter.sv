@@ -69,7 +69,8 @@ module multi_credit_counter #(
     assign credit_full_o   = (credit_q == NumCredits[CreditWidth:0]);
 
     `ASSERT_NEVER(CreditUnderflow, (decrement > increment) && ((decrement + credit_o) < increment))
-    `ASSERT_NEVER(CreditOverflow, (increment > decrement) && ((decrement + credit_o) > (NumCredits[CreditWidth:0] + increment)))
+    `ASSERT_NEVER(CreditOverflow, (increment > decrement)
+        && ((decrement + credit_o) > (NumCredits[CreditWidth:0] + increment)))
 
     `ASSERT_INIT(NumCreditsValid, NumCredits > 0)
     `ASSERT_INIT(NumTakeValid, (NumTake <= NumCredits) && (NumTake > 0))

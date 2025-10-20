@@ -14,10 +14,22 @@ jobs:
       - name: Verible Lint
         uses: chipsalliance/verible-linter-action@main
         with:
+          fail_on_error: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
           paths: |
             ./rtl
             ./test
+      - name: Download Verible Artifacts
+        uses: actions/download-artifact@v4
+      - name: Check if Verible Lint Passed
+        run: |
+          if [ -s verible-verilog-lint*.log ]; then
+            echo "Verible Lint found issues."
+            cat verible-verilog-lint*.log
+            exit 1
+          else
+            echo "Verible Lint passed with no issues."
+          fi
 
   verilator-lint:
     runs-on: self-hosted

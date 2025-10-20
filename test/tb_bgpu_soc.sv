@@ -231,8 +231,8 @@ module tb_bgpu_soc #(
 
         jtag_read_reg32('hFFFFFF10, status);
 
-        $display("@%t | [DISPATCH] Status: Start Dispatch: %d Running: %d Finished %d Inorder %d", $time,
-            status[0], status[1], status[2], status[3]);
+        $display("@%t | [DISPATCH] Status: Start Dispatch: %d Running: %d Finished %d Inorder %d",
+            $time, status[0], status[1], status[2], status[3]);
         $display("@%t | [DISPATCH] Finished Threads: %d", $time,
             status[8+3:4]);
         $display("@%t | [DISPATCH] Dispatched Threads: %d", $time,

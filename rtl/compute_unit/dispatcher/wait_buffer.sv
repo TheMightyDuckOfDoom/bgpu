@@ -182,7 +182,7 @@ module wait_buffer import bgpu_pkg::*; #(
     // -> Allocate as many as possible up to FetchWidth
     // Take credits when a fetcher handshake happens
     assign take_credit = fe_handshake_i ? ib_space_available_o : '0;
-    
+
     // Incremented when the instruction gets written back from the execution units
     // or the decoder indicates that no buffer space for the instruction was needed
     // (control or was unable to fetch from cache)
@@ -343,7 +343,8 @@ module wait_buffer import bgpu_pkg::*; #(
                     wait_buffer_valid_d     [entry] = 1'b1;
                     wait_buffer_dispatched_d[entry] = 1'b0;
 
-                    wait_buffer_d[entry].pc       = dec_pc_i + fidx[PcWidth-1:0]; // Adjust PC for fetch index
+                    // Adjust PC for fetch index
+                    wait_buffer_d[entry].pc       = dec_pc_i + fidx[PcWidth-1:0];
                     wait_buffer_d[entry].act_mask = dec_act_mask_i;
                     wait_buffer_d[entry].inst     = dec_inst_i   [fidx];
                     wait_buffer_d[entry].dst_reg  = dec_dst_reg_i[fidx];
@@ -464,7 +465,8 @@ module wait_buffer import bgpu_pkg::*; #(
             for (genvar fidx = 0; fidx < FetchWidth; fidx++) begin : gen_insert_asserts_per_fetch
                 assert property (@(posedge clk_i) disable iff(!rst_ni)
                     dec_valid_i[fidx] && insert_mask[fidx][i] |-> !wait_buffer_valid_q[i])
-                else $error("Insert index %0d for insert %0d is already valid in the wait buffer", i, fidx);
+                else $error("Insert index %0d for insert %0d is already valid in the wait buffer",
+                    i, fidx);
             end : gen_insert_asserts_per_fetch
 
             for (genvar j = 0; j < NumTags; j++) begin : gen_cross_entry_asserts

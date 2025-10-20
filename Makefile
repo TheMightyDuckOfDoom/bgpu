@@ -29,8 +29,8 @@ TOP                ?= compute_unit
 TB_TOP             ?= tb_$(TOP)
 
 # Source files
-SRCS = $(wildcard rtl/**/*.sv)
-TB_SRCS = $($(BENDER) scripts flist -n )
+SRCS = $(wildcard rtl/*/*.sv rtl/*/*/*.sv)
+TB_SRCS = $(wildcard test/tb_*.sv)
 BENDER_DEPS:= Bender.lock Bender.yml Bender.local
 TBS = $(basename $(notdir $(wildcard test/tb_*.sv)))
 
@@ -67,15 +67,10 @@ lint-yosys: verilator/yosys_lint.f $(SRCS) $(TB_SRCS)
         --compat-mode --keep-hierarchy --lint-only \
         --allow-use-before-declare --ignore-unknown-modules"
 
-# Generate filelist for Verible linting
-verilator/verible_lint.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script flist -n $(BENDER_TARGET_LINT) -t verible > $@
-	tr "\n" " " < $@ > $@.tmp
-	mv $@.tmp $@
-
 # Lint using Verible
-lint-verible: verilator/verible_lint.f $(SRCS) $(TB_SRCS)
-	$(VERIBLE_LINT) $(file < verilator/verible_lint.f)
+lint-verible: $(TB_SRCS) $(SRCS)
+	$(VERIBLE_LINT) $(TB_SRCS)
+	$(VERIBLE_LINT) $(SRCS)
 
 ####################################################################################################
 # Formal Verification

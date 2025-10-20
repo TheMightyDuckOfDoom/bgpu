@@ -203,7 +203,7 @@ module compute_unit import bgpu_pkg::*; #(
         reg_idx_t   dst;
         warp_data_t data;
     } eu_to_opc_data_t;
-    
+
     // Result Collector mask type
     typedef logic [3:0] rc_mask_t;
 
@@ -262,7 +262,7 @@ module compute_unit import bgpu_pkg::*; #(
     logic lsu_to_rc_valid, rc_to_lsu_ready;
     logic bru_to_rc_valid, rc_to_bru_ready;
     eu_to_opc_data_t iu_to_rc_data, fpu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
-    
+
     // Writeback from Execution Units to Register Operand Collector Stage
     logic [WritebackWidth-1:0] opc_to_eu_ready_q, opc_to_eu_ready_d;
     logic [WritebackWidth-1:0] eu_to_opc_valid_q, eu_to_opc_valid_d;
@@ -795,7 +795,8 @@ module compute_unit import bgpu_pkg::*; #(
         // Port 0: take directly from EUs
         // Port N: only valid if previous port was not ready
         if (wb == 0)
-            assign eu_to_rc_valid[wb] = {fpu_to_rc_valid, iu_to_rc_valid, lsu_to_rc_valid, bru_to_rc_valid};
+            assign eu_to_rc_valid[wb] = {fpu_to_rc_valid, iu_to_rc_valid, lsu_to_rc_valid,
+                                         bru_to_rc_valid};
         else
             assign eu_to_rc_valid[wb] = eu_to_rc_valid[wb-1] & (~rc_to_eu_ready[wb-1]);
 
@@ -961,8 +962,8 @@ module compute_unit import bgpu_pkg::*; #(
             @(posedge clk_i);
             for (int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
                 if (eu_to_opc_valid_q[wb] && opc_to_eu_ready_d[wb]) begin
-                    data = $sformatf("%t: Tag: %0d, Warp: %0d, ActMask: %b, Dst: r%0d, Data: ", $time(),
-                        eu_to_opc_data_q[wb].tag, eu_to_opc_data_q[wb].tag[WidWidth-1:0],
+                    data = $sformatf("%t: Tag: %0d, Warp: %0d, ActMask: %b, Dst: r%0d, Data: ",
+                        $time(), eu_to_opc_data_q[wb].tag, eu_to_opc_data_q[wb].tag[WidWidth-1:0],
                         eu_to_opc_data_q[wb].act_mask, eu_to_opc_data_q[wb].dst);
 
                     for (int thread = 0; thread < WarpWidth; thread++) begin

@@ -519,22 +519,22 @@ module instruction_cache #(
             fe_valid_i |-> fe_fetch_mask_i != '0
         ) else $fatal(1, "Fetch request received with zero fetch mask.");
 
-        // Check that fetch mask is contiguous
-        for (genvar fidx = 0; fidx < FetchWidth; fidx++) begin
-            if (fidx == 0) begin
+        for (genvar fidx = 0; fidx < FetchWidth; fidx++) begin : gen_fetch_checks
+            if (fidx == 0) begin : gen_first_fetch_check
                 assert property (@(posedge clk_i) disable iff (!rst_ni)
-                    fe_valid_i |-> fe_fetch_mask_i[0] == 1'b1
-                ) else $fatal(1, "Fetch request received with invalid fetch mask: First instruction must always be valid.");
-            end else begin
+                    fe_valid_i |-> fe_fetch_mask_i[0]
+                ) else $fatal(1, "Fetch req received with invalid fetch mask: First is not valid.");
+            end : gen_first_fetch_check
+            else begin : gen_nonfirst_fetch_check
                 assert property (@(posedge clk_i) disable iff (!rst_ni)
                     fe_valid_i && fe_fetch_mask_i[fidx] |-> (fe_fetch_mask_i[fidx-1])
-                ) else $fatal(1, "Fetch request received with invalid fetch mask: Fetch mask bits must be contiguous.");
+                ) else $fatal(1, "Fetch req received with invalid fetch mask: Must be contiguous.");
 
                 assert property (@(posedge clk_i) disable iff (!rst_ni)
                     ic_valid_o[fidx] |-> (ic_valid_o[fidx-1] || (fidx == 0))
-                ) else $fatal(1, "Instruction cache output valid signal invalid: Valid bits must be contiguous.");
-            end
-        end
+                ) else $fatal(1, "IC output valid signal invalid: Valid bits must be contiguous.");
+            end : gen_nonfirst_fetch_check
+        end : gen_fetch_checks
     `endif
 
     // #######################################################################################

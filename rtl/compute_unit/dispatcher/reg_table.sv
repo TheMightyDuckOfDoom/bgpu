@@ -158,7 +158,8 @@ module reg_table #(
 
                     // Check previous dst in the same FetchWidth and use its tag if there is a dependency
                     for (int prev_fidx = 0; prev_fidx < fidx; prev_fidx++) begin : check_prev_fetch
-                        if (dst_reg_i[prev_fidx] == operands_reg_i[fidx][op]) begin : prev_fidx_dependency
+                        if (dst_reg_i[prev_fidx] == operands_reg_i[fidx][op])
+                        begin : prev_fidx_dependency
                             operands_ready_o[fidx][op] = 1'b0;
                             operands_tag_o  [fidx][op] = tag_i[prev_fidx];
                         end : prev_fidx_dependency

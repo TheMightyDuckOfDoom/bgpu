@@ -180,7 +180,7 @@ module tb_tag_queue #(
                 if (get[i] && valid[i]) begin : got_tag
                     got_tags++;
                     $display("[%0d] Got tag: %0d at cycle %0d", i, tag_out[i], cycles);
-                    
+
                     assert (tag_out_queue.size() < NumTags)
                         else $error("Queue size exceeded: %0d >= %0d", tag_out_queue.size(),
                             NumTags);
@@ -228,7 +228,7 @@ module tb_tag_queue #(
         assert (got_tags >= freed_tags)
             else $error("Got tags (%0d) should be greater than or equal to freed tags (%0d)",
             got_tags, freed_tags);
-        
+
         assert (freed_tags >= TagsToFree)
             else $error("Did not free enough tags: %0d < %0d", freed_tags, TagsToFree);
 

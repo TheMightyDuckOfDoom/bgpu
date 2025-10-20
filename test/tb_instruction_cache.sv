@@ -369,8 +369,9 @@ module tb_instruction_cache import bgpu_pkg::*; #(
 
             // Process fetch request
             if (fetch_req_valid && ic_ready) begin
-                $display("Cycle %0d: Fetch Request - PC: %0h, Warp ID: %0d, Active Mask: %b, Fetch Mask: %b",
-                         cycles, fetch_req.pc, fetch_req.wid, fetch_req.act_mask, fetch_req_fetch_mask);
+                $display("Cycle %0d: Fetch Req PC: %0h, Warp ID: %0d, Act Mask: %b, Fetch Mask: %b",
+                         cycles, fetch_req.pc, fetch_req.wid, fetch_req.act_mask,
+                         fetch_req_fetch_mask);
                 fetch_req_count++;
             end
 
@@ -416,7 +417,8 @@ module tb_instruction_cache import bgpu_pkg::*; #(
                 assert(match) else begin
                     $display("Cycle %0d: Mismatch in decoder response", cycles);
                     $display("Expected: Valid: %b actual: %b", grsp.valid, queued_rsp.valid);
-                    $display("Expected: Fetch Mask: %b actual: %b", grsp.fetch_mask, queued_rsp.fetch_mask);
+                    $display("Expected: Fetch Mask: %b actual: %b", grsp.fetch_mask,
+                             queued_rsp.fetch_mask);
                     $display("Expected: PC: %0h actual: %0h", grsp.pc, queued_rsp.pc);
                     $display("Expected: Warp ID: %0d actual: %0d", grsp.wid, queued_rsp.wid);
                     $display("Expected: Subwarp ID: %0d actual: %0d",
