@@ -136,15 +136,13 @@ module reg_table #(
             reuse_existing_entry = 1'b0;
             
             // Default outputs
-            operands_ready_o[fidx] = '0;
+            operands_ready_o[fidx] = '1;
             operands_tag_o  [fidx] = '0;
 
             // Insert into table
             if (insert_i[fidx]) begin : insert_logic
                 // First check operands
                 for (int op = 0; op < OperandsPerInst; op++) begin : check_operand
-                    // Assume ready
-                    operands_ready_o[fidx][op] = 1'b1;
                     // Check all entries, if valid and the destination in the table is the same as the operand
                     // and part of the same subwarp |-> not ready
                     for (int entry = 0; entry < NumTags; entry++) begin : check_entry

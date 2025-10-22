@@ -161,7 +161,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         for (int warp = 0; warp < NumWarps; warp++) begin : loop_warps
             for (int wb = 0; wb < WritebackWidth; wb++)
                 eu_valid[warp][wb] = eu_valid_i[wb]
-                && (eu_tag_i[wb][WidWidth-1:0] == warp[WidWidth-1:0]);
+                                     && (eu_tag_i[wb][WidWidth-1:0] == warp[WidWidth-1:0]);
         end : loop_warps
     end
 
