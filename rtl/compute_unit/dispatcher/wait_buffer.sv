@@ -193,6 +193,9 @@ module wait_buffer import bgpu_pkg::*; #(
 
         // If the destination of the new instruction is used as operand in the wait buffer,
         // then we have to wait for it to be executed to avoid WAR hazards
+
+        // If the desitination of the new instructions is the same as a previous instruction,
+        // then we have to wait for it to be executed to avoid WAW hazards
         for (int i = 0; i < WaitBufferSizePerWarp; i++) begin : gen_dep_mask
             if (wait_buffer_valid_q[i]) begin : check_entry
                 // Check if the destination register is used as operand in the wait buffer
@@ -203,6 +206,11 @@ module wait_buffer import bgpu_pkg::*; #(
                         dep_mask[i] = 1'b1;
                     end
                 end : gen_operand_check
+
+                // Check if the destination register is the same as the new instruction
+                if (wait_buffer_q[i].dst_reg == dec_dst_reg_i) begin
+                    dep_mask[i] = 1'b1;
+                end
             end : check_entry
         end : gen_dep_mask
     end : build_dep_mask
