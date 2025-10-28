@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: SHL-0.51
 
 `ifndef BENCHMARK
-    `define BENCHMARK add_4
+    `define BENCHMARK "add_4"
 `endif
 
 /// BGPU SoC top-level module testbench

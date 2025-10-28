@@ -365,8 +365,9 @@ module floating_point_unit import bgpu_pkg::*; #(
 
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_div_units
         // Instantiate one Divider per thread in the warp
-        fdiv #(
+        fop #(
             .DataWidth( RegWidth          ),
+            .Operation( "DIV"             ),
             .Latency  ( DivLatency        ),
             .tag_t    ( fpu_station_idx_t )
         ) i_div (

@@ -57,7 +57,7 @@ sources:
           - rtl/compute_unit/execution_units/floating_point_unit/int_to_fp.sv
           - rtl/compute_unit/execution_units/floating_point_unit/fp_to_int.sv
           - rtl/compute_unit/execution_units/floating_point_unit/fma.sv
-          - rtl/compute_unit/execution_units/floating_point_unit/fdiv.sv
+          - rtl/compute_unit/execution_units/floating_point_unit/fop.sv
           - rtl/compute_unit/execution_units/floating_point_unit/floating_point_unit.sv
 
           - rtl/compute_unit/execution_units/load_store_unit/coalesce_comparator.sv
