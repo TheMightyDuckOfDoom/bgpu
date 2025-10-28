@@ -251,10 +251,17 @@ module wait_buffer import bgpu_pkg::*; #(
                         for (int operand = 0; operand < OperandsPerInst; operand++)
                         begin : gen_operand_check
                             if (wait_buffer_q[i].operands_is_reg[operand]
-                            && wait_buffer_q[i].operands[operand] == dec_dst_reg_i[fidx]) begin
+                            && wait_buffer_q[i].operands[operand] == dec_dst_reg_i[fidx])
+                            begin : check_existing_war
                                 dep_mask[fidx][i] = 1'b1;
-                            end
+                            end : check_existing_war
                         end : gen_operand_check
+
+                        // Check if the destination register is the same as the new instruction
+                        if (wait_buffer_q[i].dst_reg == dec_dst_reg_i[fidx])
+                        begin : check_existing_waw
+                            dep_mask[fidx][i] = 1'b1;
+                        end : check_existing_waw
                     end : check_entry
 
                     // Check if the destination register is the same as the new instruction
@@ -263,7 +270,8 @@ module wait_buffer import bgpu_pkg::*; #(
                     end
                 end : gen_dep_mask
 
-                // Check if previous instructions have the current destination register as operand or destination
+                // Check if previous instructions have the current destination register as operand
+                // or the same destination register
                 for (int prev = 0; prev < fidx; prev++) begin : check_previous_operands
                     for (int operand = 0; operand < OperandsPerInst; operand++)
                     begin : gen_prev_operand_check
@@ -274,11 +282,11 @@ module wait_buffer import bgpu_pkg::*; #(
                         end
                     end : gen_prev_operand_check
 
-                    // Check for WAW hazard within the fetched instructions
-                    if (dec_dst_reg_i[prev] == dec_dst_reg_i[fidx]) begin
+                    // Check for WAW hazard
+                    if (dec_dst_reg_i[prev] == dec_dst_reg_i[fidx]) begin : check_prev_waw
                         // Depend on where the previous instruction will be inserted
                         dep_mask[fidx] = dep_mask[fidx] | insert_mask[prev];
-                    end
+                    end : check_prev_waw
                 end : check_previous_operands
             end : loop_fetch_width
         end : out_of_order_execution
