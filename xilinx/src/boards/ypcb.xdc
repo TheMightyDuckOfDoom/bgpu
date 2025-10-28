@@ -35,6 +35,7 @@ set_property BITSTREAM.CONFIG.CCLK_TRISTATE  TRUE   [current_design]
 set_property BITSTREAM.CONFIG.CONFIGRATE     66     [current_design]
 set_property BITSTREAM.CONFIG.UNUSEDPIN      PULLUP [current_design]
 
+# Uses mt28gu512aax1e-bpi-x16
 # set_property CONFIG_VOLTAGE                  1.8    [current_design]
 # set_property CFGBVS                          GND   [current_design]
 # set_property BITSTREAM.CONFIG.SPI_32BIT_ADDR YES    [current_design]

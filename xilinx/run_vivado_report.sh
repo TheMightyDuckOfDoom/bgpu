@@ -6,7 +6,7 @@ sed 's/,/,\n/g' out/${3}_yosys.v > out/${3}_yosys_commabreak.v
 echo -n 'set top "' > run_vivado_report.tcl
 echo -n $3 >> run_vivado_report.tcl
 echo '"' >> run_vivado_report.tcl
-echo 'set device "xc7k325tffg676-2l"' >> run_vivado_report.tcl
+echo 'set device "xc7k325tffg676-2"' >> run_vivado_report.tcl
 # echo 'set device "xc7v2000tflg1925-1"' >> run_vivado_report.tcl
 # echo 'set device "xcku060-ffva1156-1-c"' >> run_vivado_report.tcl
 # echo 'set device "xcku13p-ffve900-1-i"' >> run_vivado_report.tcl
