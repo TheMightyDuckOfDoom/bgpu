@@ -79,6 +79,8 @@ formal-%: formal/formal.f formal/%.sby
 	mkdir -p formal/work
 	cd formal && sby $*.sby -f --prefix work/$*
 
+formal: formal-tag_queue formal-reg_table
+
 ####################################################################################################
 # Verilator simulation
 ####################################################################################################

@@ -8,6 +8,7 @@
 // Gives out unique tags until all tags are used.
 // Tags can be freed again, and the queue will give out the next available tag.
 module tag_queue #(
+    /// Number of tags that can be given out.
     parameter int unsigned NumTags = 8,
 
     /// Dependent parameter, do **not** overwrite.
@@ -18,9 +19,11 @@ module tag_queue #(
     input  logic clk_i,
     input  logic rst_ni,
 
+    /// Freeing
     input  logic free_i,
     input  tag_t tag_i,
 
+    /// Getting
     input  logic get_i,
     output logic valid_o,
     output tag_t tag_o

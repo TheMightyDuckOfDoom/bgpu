@@ -7,7 +7,7 @@
 /// Register Table
 // Maps a register to a tag that produces the most recent value
 module reg_table #(
-    parameter int unsigned WarpWidth       = 1,
+    parameter int unsigned WarpWidth       = 2,
     parameter int unsigned NumTags         = 4,
     parameter int unsigned RegIdxWidth     = 2,
     parameter int unsigned OperandsPerInst = 2,
@@ -18,14 +18,15 @@ module reg_table #(
     parameter type         reg_idx_t      = logic [   RegIdxWidth-1:0],
     parameter type         subwarp_id_t   = logic [SubwarpIdWidth-1:0]
 ) (
+    /// Clock and Reset
     input logic clk_i,
     input logic rst_ni,
 
-    // To Fetcher -> Are all registers written to register file?
+    /// To Fetcher -> Are all registers written to register file?
     // -> no pending instruction
     output logic all_dst_written_o,
 
-    // From Decoder
+    /// From Decoder
     output logic        space_available_o,
     input  logic        insert_i,
     input  tag_t        tag_i,
@@ -33,13 +34,13 @@ module reg_table #(
     input  reg_idx_t    dst_reg_i,
     input  reg_idx_t [OperandsPerInst-1:0] operands_reg_i,
 
-    // To Wait Buffer
+    /// To Wait Buffer
     output logic [OperandsPerInst-1:0] operands_ready_o,
     output tag_t [OperandsPerInst-1:0] operands_tag_o,
 
-    // From Execution Unit
-    input  logic eu_valid_i,
-    input  tag_t eu_tag_i
+    /// From Execution Unit
+    input logic eu_valid_i,
+    input tag_t eu_tag_i
 );
 
     // #######################################################################################
@@ -62,7 +63,7 @@ module reg_table #(
     reg_table_entry_t [NumTags-1:0] table_q, table_d;
 
     // Reuse existing entry when inserting
-    logic use_existing_entry;
+    logic reuse_existing_entry;
 
     // #######################################################################################
     // # Combinational Logic                                                                 #
@@ -103,13 +104,13 @@ module reg_table #(
         end : check_operand
     end : operand_check_logic
 
-    // Insert logic
+    // Register Table Logic
     always_comb begin : reg_table_logic
         // Default
         table_valid_d = table_valid_q;
         table_d       = table_q;
 
-        use_existing_entry = 1'b0;
+        reuse_existing_entry = 1'b0;
 
         // Clear logic
         // |-> if the EU is valid, clear all entries with the same producer tag, as result is in register file
@@ -132,13 +133,13 @@ module reg_table #(
                     // Update producer tag
                     table_d[entry].producer = tag_i;
                     // Indicate that we reused an existing entry
-                    use_existing_entry      = 1'b1;
+                    reuse_existing_entry      = 1'b1;
                     break;
                 end : modify_existing
             end : check_existing_entries
 
             // If not reusing an existing entry, find a free entry
-            if (!use_existing_entry) begin : use_free_entry
+            if (!reuse_existing_entry) begin : use_free_entry
                 for (int entry = 0; entry < NumTags; entry++) begin : find_free_entry
                     if (!table_valid_q[entry]) begin : free_entry_found
                         // Mark as valid
@@ -182,7 +183,7 @@ module reg_table #(
         // Check if eu tag is in the table
         logic [$clog2(NumTags)-1:0] eu_match_index;
         logic eu_tag_in_table;
-        always_comb begin
+        always_comb begin : check_eu_tag_in_table
             eu_match_index  = '0;
             eu_tag_in_table = 1'b0;
             for (int entry = 0; entry < NumTags; entry++) begin
@@ -191,13 +192,113 @@ module reg_table #(
                     eu_match_index  = entry[$clog2(NumTags)-1:0];
                 end
             end
-        end
+        end : check_eu_tag_in_table
 
         // If EU valid and is in the table, then it mus be freed if it is not reused
         assert property (@(posedge clk_i) disable iff(!rst_ni)
-            !(eu_valid_i && eu_tag_in_table && !use_existing_entry)
+            !(eu_valid_i && eu_tag_in_table && !reuse_existing_entry)
             || (!table_valid_d[eu_match_index]))
             else $error("EU tag %d is not being freed from the register table", eu_tag_i);
+
+        /// Check Insert Logic
+        logic [$clog2(NumTags)-1:0] insert_index;
+        always_comb begin : find_insert_index
+            insert_index = '0;
+            for (int entry = 0; entry < NumTags; entry++) begin
+                if (!table_valid_q[entry]) begin
+                    insert_index = entry[$clog2(NumTags)-1:0];
+                    break;
+                end
+            end
+        end : find_insert_index
+
+        // If inserting and space available and not reusing existing entry, then an entry must be allocated
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(insert_i && space_available_o && !reuse_existing_entry)
+            || table_valid_d[insert_index])
+            else $error("Inserting new entry, but entry is not being allocated");
+
+        // Inserting new entry, subwarp_id must be set correctly
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(insert_i && space_available_o && !reuse_existing_entry)
+            || table_d[insert_index].subwarp_id == subwarp_id_i)
+            else $error("Inserting new entry, but subwarp_id is not set correctly");
+
+        // Inserting new entry, dst must be set correctly
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(insert_i && space_available_o && !reuse_existing_entry)
+            || table_d[insert_index].dst == dst_reg_i)
+            else $error("Inserting new entry, but dst register is not set correctly");
+
+        // Inserting new entry, producer tag must be set correctly
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(insert_i && space_available_o && !reuse_existing_entry)
+            || table_d[insert_index].producer == tag_i)
+            else $error("Inserting new entry, but producer tag is not set correctly");
+
+        logic [$clog2(NumTags)-1:0] insert_existing_index;
+        always_comb begin : find_insert_existing_index
+            insert_existing_index = '0;
+            for (int entry = 0; entry < NumTags; entry++) begin
+                if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i
+                    && table_q[entry].subwarp_id == subwarp_id_i) begin
+                    insert_existing_index = entry[$clog2(NumTags)-1:0];
+                    break;
+                end
+            end
+        end : find_insert_existing_index
+
+        // If inserting and reusing existing entry, then the existing entry must still be valid
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(insert_i && space_available_o && reuse_existing_entry)
+            || (table_valid_d[insert_existing_index]))
+            else $error("Reusing existing entry, but entry is not marked as valid");
+
+        // If inserting and reusing existing entry, then the existing entry must be updated
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(insert_i && space_available_o && reuse_existing_entry)
+            || (table_d[insert_existing_index].producer == tag_i))
+            else $error("Reusing existing entry, but producer tag is not being updated");
+
+        /// Operand Checks
+        for (genvar op = 0; op < OperandsPerInst; op++) begin : gen_assert_operands
+            logic operand_from_eu;
+            assign operand_from_eu = (eu_valid_i && operands_tag_o[op] == eu_tag_i);
+
+            // If operand has the same tag as EU and EU is valid, then it must be ready
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                !(operand_from_eu) || operands_ready_o[op])
+                else $error("Operand %d has tag %d from EU but is not marked as ready",
+                    op, operands_tag_o[op]);
+
+            // If operand is in the table and not comming from eu
+            logic operand_in_table;
+            logic [$clog2(NumTags)-1:0] matching_entry_index;
+            always_comb begin : check_operand_in_table
+                operand_in_table = 1'b0;
+                matching_entry_index = '0;
+                for (int entry = 0; entry < NumTags; entry++) begin
+                    if (table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]
+                        && table_q[entry].subwarp_id == subwarp_id_i) begin
+                        operand_in_table     = 1'b1;
+                        matching_entry_index = entry[$clog2(NumTags)-1:0];
+                    end
+                end
+            end : check_operand_in_table
+
+            // Then it must not be ready
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                !(!operand_from_eu && operand_in_table) || (!operands_ready_o[op]))
+                else $error("Operand %d with tag %d is marked as ready but is in the table",
+                    op, operands_tag_o[op]);
+
+            // Then the tag must be the one from the destinations producer
+            assert property (@(posedge clk_i) disable iff(!rst_ni)
+                !(!operand_from_eu && operand_in_table)
+                || (operands_tag_o[op] == table_q[matching_entry_index].producer))
+                else $error("Operand %d has tag %d but should have tag %d from the table",
+                    op, operands_tag_o[op], table_q[matching_entry_index].producer);
+        end : gen_assert_operands
 
         /// Sanity Checks of the Table
         // Check that there a no entries with matching destination register or tag
@@ -245,10 +346,10 @@ module reg_table #(
         cover property (@(posedge clk_i) disable iff (!rst_ni) eu_valid_i);
 
         // Reusing existing entry
-        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && use_existing_entry);
+        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && reuse_existing_entry);
 
         // Inserting new entry
-        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && !use_existing_entry);
+        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && !reuse_existing_entry);
 
         // Operands ready
         for (genvar op = 0; op < OperandsPerInst; op++) begin : gen_cover_operands_ready
@@ -258,14 +359,14 @@ module reg_table #(
 
         // Assume that we only insert unique tags -> tag_i is not in table when insert_i is high
         logic insert_tag_in_table;
-        always_comb begin
+        always_comb begin : assume_insert_tag_in_table
             insert_tag_in_table = 1'b0;
             for (int entry = 0; entry < NumTags; entry++) begin
                 if (table_valid_q[entry] && table_q[entry].producer == tag_i) begin
                     insert_tag_in_table = 1'b1;
                 end
             end
-        end
+        end : assume_insert_tag_in_table
 
         // Assume that we never successfully insert a tag that is already in the table
         assume property (@(posedge clk_i) disable iff (!rst_ni)
