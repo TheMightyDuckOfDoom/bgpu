@@ -36,7 +36,7 @@ packages:
       Path: vendor/cve2
     dependencies: []
   flopoco-sv-lib:
-    revision: f4275cdf64bf78b2af1ed5b071bf2e9d18b72a2d
+    revision: 608f75743b470e7bcab6d25369b49dbd2baed54c
     version: null
     source:
       Git: https://github.com/TheMightyDuckOfDoom/flopoco-sv-lib
@@ -66,7 +66,7 @@ packages:
     - common_cells
     - common_verification
   riscv-dbg:
-    revision: 8ef87abf81cab39ad7b52435aa2a3357678fa1d6
+    revision: a21b39ad11833d9afc7ab366944b811d5a641901
     version: null
     source:
       Git: https://github.com/pulp-platform/riscv-dbg.git
