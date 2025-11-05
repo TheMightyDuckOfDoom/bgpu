@@ -68,6 +68,17 @@ lint-verible: verilator/verible_lint.f $(SRCS) $(TB_SRCS)
 	$(VERIBLE_LINT) $(file < verilator/verible_lint.f)
 
 ####################################################################################################
+# Formal Verification
+####################################################################################################
+
+# File list for formal verification
+formal/formal.f: $(BENDER_DEPS) vendor/
+	$(BENDER) script flist-plus -D FORMAL > $@
+
+formal-%: formal/formal.f formal/%.sby
+	cd formal && sby $*.sby -f
+
+####################################################################################################
 # Verilator simulation
 ####################################################################################################
 
