@@ -73,10 +73,11 @@ lint-verible: verilator/verible_lint.f $(SRCS) $(TB_SRCS)
 
 # File list for formal verification
 formal/formal.f: $(BENDER_DEPS) vendor/
-	$(BENDER) script flist-plus -D FORMAL > $@
+	$(BENDER) script flist-plus -t formal -D FORMAL > $@
 
 formal-%: formal/formal.f formal/%.sby
-	cd formal && sby $*.sby -f
+	mkdir -p formal/work
+	cd formal && sby $*.sby -f --prefix work/$*
 
 ####################################################################################################
 # Verilator simulation
@@ -246,11 +247,14 @@ gowin-eda-pnr-report:
 # Clean
 ####################################################################################################
 
-clean: asic-clean gowin-clean xilinx-clean verilator-clean
+clean: asic-clean gowin-clean xilinx-clean verilator-clean formal-clean
 	rm -f *.vcd
 	rm -f *.out
 	rm -f *.log
 	rm -rf vendor
+
+formal-clean:
+	rm -rf formal/work
 
 verilator-clean:
 	rm -f  verilator/*.f

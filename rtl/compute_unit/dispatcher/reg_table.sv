@@ -7,9 +7,9 @@
 /// Register Table
 // Maps a register to a tag that produces the most recent value
 module reg_table #(
-    parameter int unsigned WarpWidth       = 32,
-    parameter int unsigned NumTags         = 8,
-    parameter int unsigned RegIdxWidth     = 6,
+    parameter int unsigned WarpWidth       = 1,
+    parameter int unsigned NumTags         = 4,
+    parameter int unsigned RegIdxWidth     = 2,
     parameter int unsigned OperandsPerInst = 2,
 
     parameter int unsigned TagWidth       = $clog2(NumTags),
@@ -42,9 +42,9 @@ module reg_table #(
     input  tag_t eu_tag_i
 );
 
-    // ######################################################################
-    // # Typedefs                                                          #
-    // ######################################################################
+    // #######################################################################################
+    // # Typedefs                                                                            #
+    // #######################################################################################
 
     // Regsiter Table Entry
     typedef struct packed {
@@ -53,34 +53,61 @@ module reg_table #(
         tag_t        producer;
     } reg_table_entry_t;
 
-    // ######################################################################
-    // # Signals                                                           #
-    // ######################################################################
+    // #######################################################################################
+    // # Signals                                                                             #
+    // #######################################################################################
 
-    logic [NumTags-1:0] table_valid_q, table_valid_d;
+    // Register Table
+    logic             [NumTags-1:0] table_valid_q, table_valid_d;
     reg_table_entry_t [NumTags-1:0] table_q, table_d;
 
+    // Reuse existing entry when inserting
     logic use_existing_entry;
 
-    // ######################################################################
-    // # Combinational Logic                                               #
-    // ######################################################################
+    // #######################################################################################
+    // # Combinational Logic                                                                 #
+    // #######################################################################################
 
     // Space available if not all entries are valid
-    // |-> in theory we could even accept a new one if an existing dst is overwritten/updated
+    // In theory we could even accept a new one if an existing dst is overwritten/updated,
+    // but this would create a dependency between space_available_o and insert_i
     assign space_available_o = !(&table_valid_q);
 
     // All destination registers written if no entry is valid
     assign all_dst_written_o = !(|table_valid_q);
 
+    // Determine if operand is ready and its tag
+    always_comb begin : operand_check_logic
+        // Default
+        operands_ready_o = '1;
+        operands_tag_o   = '0;
+
+        // Check each operand
+        for (int op = 0; op < OperandsPerInst; op++) begin : check_operand
+            // Check all entries, if valid and the destination is the same as the operand
+            // and part of the same subwarp |-> not ready, return tag
+            for (int entry = 0; entry < NumTags; entry++) begin : check_entry
+                if (table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]
+                    && table_q[entry].subwarp_id == subwarp_id_i) begin : entry_found
+                    // Not ready, return tag
+                    operands_ready_o[op] = 1'b0;
+                    operands_tag_o  [op] = table_q[entry].producer;
+                    break;
+                end : entry_found
+            end : check_entry
+
+            // Check if operand is produced by the EUs in the same cycle |-> then it is ready
+            if (eu_valid_i && eu_tag_i == operands_tag_o[op]) begin
+                operands_ready_o[op] = 1'b1;
+            end
+        end : check_operand
+    end : operand_check_logic
+
     // Insert logic
-    always_comb begin
+    always_comb begin : reg_table_logic
         // Default
         table_valid_d = table_valid_q;
         table_d       = table_q;
-
-        operands_ready_o = '0;
-        operands_tag_o   = '0;
 
         use_existing_entry = 1'b0;
 
@@ -96,41 +123,21 @@ module reg_table #(
 
         // Insert logic
         if (insert_i && space_available_o) begin : insert_logic
-            // First check operands
-            for (int op = 0; op < OperandsPerInst; op++) begin : check_operand
-                operands_ready_o[op] = 1'b1;
-                // Check all entries, if valid and the destination is the same as the operand
-                // and part of the same subwarp |-> not ready
-                for (int entry = 0; entry < NumTags; entry++) begin : check_entry
-                    if (table_valid_q[entry] && table_q[entry].dst == operands_reg_i[op]
-                        && table_q[entry].subwarp_id == subwarp_id_i) begin : entry_found
-                        operands_ready_o[op] = 1'b0;
-                        operands_tag_o  [op] = table_q[entry].producer;
-                        break;
-                    end : entry_found
-                end : check_entry
-
-                // Check if operand is produced by the EUs in the same cycle |-> then it is ready
-                if (eu_valid_i && eu_tag_i == operands_tag_o[op]) begin
-                    operands_ready_o[op] = 1'b1;
-                end
-            end : check_operand
-
             // Insert destination, first check if dst is already in table
             for (int entry = 0; entry < NumTags; entry++) begin : check_existing_entries
                 if (table_valid_q[entry] && table_q[entry].dst == dst_reg_i
                     && table_q[entry].subwarp_id == subwarp_id_i) begin : modify_existing
                     // Mark as valid, as we could have deallocated it in this cycle
                     table_valid_d[entry]    = 1'b1;
-
                     // Update producer tag
                     table_d[entry].producer = tag_i;
+                    // Indicate that we reused an existing entry
                     use_existing_entry      = 1'b1;
                     break;
                 end : modify_existing
             end : check_existing_entries
 
-            // If not, find a free entry
+            // If not reusing an existing entry, find a free entry
             if (!use_existing_entry) begin : use_free_entry
                 for (int entry = 0; entry < NumTags; entry++) begin : find_free_entry
                     if (!table_valid_q[entry]) begin : free_entry_found
@@ -146,39 +153,66 @@ module reg_table #(
                 end : find_free_entry
             end : use_free_entry
         end : insert_logic
-    end
+    end : reg_table_logic
 
-    // ######################################################################
-    // # Sequential Logic                                                   #
-    // ######################################################################
+    // #######################################################################################
+    // # Sequential Logic                                                                    #
+    // #######################################################################################
 
-    for (genvar i = 0; i < NumTags; i++) begin : gen_ffs
-        `FF(table_valid_q[i], table_valid_d[i], '0, clk_i, rst_ni)
-        `FF(table_q      [i], table_d      [i], '0, clk_i, rst_ni)
-    end
+    `FF(table_valid_q, table_valid_d, '0, clk_i, rst_ni)
+    `FF(table_q,       table_d,       '0, clk_i, rst_ni)
 
-    // ######################################################################
-    // # Assertions                                                        #
-    // ######################################################################
+    // #######################################################################################
+    // # Assertions                                                                          #
+    // #######################################################################################
 
     `ifndef SYNTHESIS
-        // Check that there is space available when inserting
-        assert property (@(posedge clk_i) insert_i |-> space_available_o)
-        else $error("No space available in register table when inserting");
+        /// Check space_available_o and all_dst_written_o
+        // If space_available_o is high, then we must have at least one free entry
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(space_available_o) || (table_valid_q != '1))
+            else $error("space_available_o is high, but all entries are occupied");
 
+        // If all_dst_written_o is high, then no entries must be valid
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(all_dst_written_o) || (table_valid_q == '0))
+            else $error("all_dst_written_o is high, but some entries are still occupied");
+
+        /// Check EU responses
+        // Check if eu tag is in the table
+        logic [$clog2(NumTags)-1:0] eu_match_index;
+        logic eu_tag_in_table;
+        always_comb begin
+            eu_match_index  = '0;
+            eu_tag_in_table = 1'b0;
+            for (int entry = 0; entry < NumTags; entry++) begin
+                if (table_valid_q[entry] && table_q[entry].producer == eu_tag_i) begin
+                    eu_tag_in_table = 1'b1;
+                    eu_match_index  = entry[$clog2(NumTags)-1:0];
+                end
+            end
+        end
+
+        // If EU valid and is in the table, then it mus be freed if it is not reused
+        assert property (@(posedge clk_i) disable iff(!rst_ni)
+            !(eu_valid_i && eu_tag_in_table && !use_existing_entry)
+            || (!table_valid_d[eu_match_index]))
+            else $error("EU tag %d is not being freed from the register table", eu_tag_i);
+
+        /// Sanity Checks of the Table
         // Check that there a no entries with matching destination register or tag
         for (genvar i = 0; i < NumTags; i++) begin : gen_check_entries
             for (genvar j = 0; j < NumTags; j++) begin : gen_check_entries_inner
                 // Check destination register
-                assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i]
-                    && table_valid_q[j] |-> i == j || (table_q[i].dst != table_q[j].dst
+                assert property (@(posedge clk_i) disable iff(!rst_ni) !(table_valid_q[i]
+                    && table_valid_q[j] && i != j) || (table_q[i].dst != table_q[j].dst
                     || table_q[i].subwarp_id != table_q[j].subwarp_id))
                 else $error("Destination register %d is in multiple entries: %d and %d",
                     table_q[i].dst, i, j);
 
                 // Check producer tag
-                assert property (@(posedge clk_i) disable iff(!rst_ni) table_valid_q[i]
-                    && table_valid_q[j] |-> i == j || (table_q[i].producer != table_q[j].producer
+                assert property (@(posedge clk_i) disable iff(!rst_ni) !(table_valid_q[i]
+                    && table_valid_q[j] && i != j) || (table_q[i].producer != table_q[j].producer
                     || table_q[i].subwarp_id != table_q[j].subwarp_id))
                 else $error("Producer tag %d is in multiple entries: %d and %d",
                     table_q[i].producer, i, j);
@@ -186,4 +220,64 @@ module reg_table #(
         end : gen_check_entries
     `endif
 
+    // #######################################################################################
+    // # Formal Properties                                                                   #
+    // #######################################################################################
+
+    `ifdef FORMAL
+        // All entries are free
+        cover property (@(posedge clk_i) disable iff (!rst_ni) table_valid_q == '0);
+
+        // All entries are used
+        cover property (@(posedge clk_i) disable iff (!rst_ni) table_valid_q == '1);
+
+        // Insert when space available
+        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && space_available_o);
+
+        // Insert when no space available
+        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && !space_available_o);
+
+        // All destination registers written
+        cover property (@(posedge clk_i) disable iff (!rst_ni) all_dst_written_o);
+        cover property (@(posedge clk_i) disable iff (!rst_ni) !all_dst_written_o);
+
+        // Responses from Execution Unit
+        cover property (@(posedge clk_i) disable iff (!rst_ni) eu_valid_i);
+
+        // Reusing existing entry
+        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && use_existing_entry);
+
+        // Inserting new entry
+        cover property (@(posedge clk_i) disable iff (!rst_ni) insert_i && !use_existing_entry);
+
+        // Operands ready
+        for (genvar op = 0; op < OperandsPerInst; op++) begin : gen_cover_operands_ready
+            cover property (@(posedge clk_i) disable iff (!rst_ni) operands_ready_o[op]);
+            cover property (@(posedge clk_i) disable iff (!rst_ni) !operands_ready_o[op]);
+        end : gen_cover_operands_ready
+
+        // Assume that we only insert unique tags -> tag_i is not in table when insert_i is high
+        logic insert_tag_in_table;
+        always_comb begin
+            insert_tag_in_table = 1'b0;
+            for (int entry = 0; entry < NumTags; entry++) begin
+                if (table_valid_q[entry] && table_q[entry].producer == tag_i) begin
+                    insert_tag_in_table = 1'b1;
+                end
+            end
+        end
+
+        // Assume that we never successfully insert a tag that is already in the table
+        assume property (@(posedge clk_i) disable iff (!rst_ni)
+            !(insert_i && space_available_o) || !(insert_tag_in_table))
+            else $error("Assumption failed: Inserting tag %d that is already in the table", tag_i);
+
+        // Reset at beginning
+        fv_reset #(
+            .RESET_CYCLES( 1 )
+        ) i_fv_reset (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni )
+        );
+    `endif
 endmodule : reg_table

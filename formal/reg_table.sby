@@ -12,10 +12,10 @@ smtbmc boolector
 
 [script]
 plugin -i slang-sva.so
-read_slang --top tag_queue -F formal.f \
+read_slang --top reg_table -F formal.f \
         --compat-mode --keep-hierarchy \
         --allow-use-before-declare --ignore-unknown-modules
-prep -top tag_queue
+prep -top reg_table
 
 [files]
 formal.f
