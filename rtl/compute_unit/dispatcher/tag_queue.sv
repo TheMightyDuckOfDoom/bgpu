@@ -125,14 +125,6 @@ module tag_queue #(
 
         // Can only free used tags
         assume property (@(posedge clk_i) disable iff (!rst_ni) free_i == tags_used_q[tag_i]);
-
-        // Reset at beginning
-        fv_reset #(
-            .RESET_CYCLES( 1 )
-        ) i_fv_reset (
-            .clk_i ( clk_i  ),
-            .rst_ni( rst_ni )
-        );
     `endif
 
 endmodule : tag_queue

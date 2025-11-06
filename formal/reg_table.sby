@@ -6,6 +6,7 @@ prove
 cover: mode cover
 prove: mode prove
 depth 20
+smtc startup_reset.smtc
 
 [engines]
 smtbmc boolector
@@ -19,3 +20,7 @@ prep -top reg_table
 
 [files]
 formal.f
+
+[file startup_reset.smtc]
+initial
+assume (= [rst_ni] false)

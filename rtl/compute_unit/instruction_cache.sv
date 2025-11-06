@@ -14,11 +14,11 @@ module instruction_cache #(
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 32,
     /// Encoded instruction width
-    parameter int unsigned EncInstWidth = 32,
+    parameter int unsigned EncInstWidth = 4,
     /// Encoded instructions per cacheline -> Also determines the memory interface width
-    parameter int unsigned CachelineIdxBits = 2,
+    parameter int unsigned CachelineIdxBits = 1,
     /// Number of cachelines in the instruction cache
-    parameter int unsigned NumCachelines = 8,
+    parameter int unsigned NumCachelines = 2,
 
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned SubwarpIdWidth     =        WarpWidth > 1 ? $clog2(WarpWidth) : 1,
@@ -431,10 +431,109 @@ module instruction_cache #(
     // # Assertions                                                                          #
     // #######################################################################################
 
+    // TODO: These are not exhaustive
     `ifndef SYNTHESIS
+        /// Check if new state is valid given the current state
+        // From IDLE state
         assert property (@(posedge clk_i) disable iff (!rst_ni)
-            mem_valid_i |-> state_q == WAIT_FOR_MEM
+            !(state_q == IDLE) || (state_d == IDLE || state_d == HANDLE_INSTR)
+        ) else $fatal(1, "Invalid state transition from IDLE state to %0d", state_d);
+        // From HANDLE_INSTR state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(state_q == HANDLE_INSTR) || (state_d == IDLE || state_d == HANDLE_INSTR
+                                           || state_d == WAIT_FOR_MEM)
+        ) else $fatal(1, "Invalid state transition from HANDLE_INSTR state to %0d", state_d);
+        // From WAIT_FOR_MEM state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(state_q == WAIT_FOR_MEM) || (state_d == WAIT_FOR_MEM || state_d == WAIT_FOR_DECODER)
+        ) else $fatal(1, "Invalid state transition from WAIT_FOR_MEM state to %0d", state_d);
+        // From WAIT_FOR_DECODER state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(state_q == WAIT_FOR_DECODER) || (state_d == IDLE || state_d == HANDLE_INSTR
+                                               || state_d == WAIT_FOR_DECODER)
+        ) else $fatal(1, "Invalid state transition from WAIT_FOR_DECODER state to %0d", state_d);
+
+        /// Memory interface assertions
+        // Ensure that we only receive memory responses in the WAIT_FOR_MEM state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !mem_valid_i || (state_q == WAIT_FOR_MEM)
         ) else $fatal(1, "Memory response received, but not in WAIT_FOR_MEM state.");
+
+        // Ensure that we only send memory requests in the HANDLE_INSTR state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !mem_req_o || (state_q == HANDLE_INSTR)
+        ) else $fatal(1, "Memory request sent, but not in HANDLE_INSTR state.");
+
+        // If we sent out a memory request, we must got to the WAIT_FOR_MEM state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(mem_req_o && mem_ready_i) || (state_d == WAIT_FOR_MEM)
+        ) else $fatal(1, "Memory request sent, but did not go to WAIT_FOR_MEM state.");
+    `endif
+
+    // #######################################################################################
+    // # Formal Properties                                                                   #
+    // #######################################################################################
+
+    `ifdef FORMAL
+        /// Check that we can reach all states
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == IDLE));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == HANDLE_INSTR));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_MEM));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_DECODER));
+
+        /// Check that we can perform all transitions
+        // IDLE state
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == IDLE)
+            && (state_d == HANDLE_INSTR));
+        // HANDLE_INSTR state
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == HANDLE_INSTR)
+            && (state_d == IDLE));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == HANDLE_INSTR)
+            && (state_d == HANDLE_INSTR));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == HANDLE_INSTR)
+            && (state_d == WAIT_FOR_MEM));
+        // WAIT_FOR_MEM state
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_MEM)
+            && (state_d == WAIT_FOR_MEM));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_MEM)
+            && (state_d == WAIT_FOR_DECODER));
+        // WAIT_FOR_DECODER state
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_DECODER)
+            && (state_d == IDLE));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_DECODER)
+            && (state_d == HANDLE_INSTR));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_DECODER)
+            && (state_d == WAIT_FOR_DECODER));
+
+        /// Cover Handshakes
+        // Check that we can perform memory requests
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (mem_req_o && mem_ready_i));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (!mem_req_o && mem_ready_i));
+        // Check that we can receive a new instruction
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (fe_valid_i && ic_ready_o));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (fe_valid_i && !ic_ready_o));
+        // Check that we can send an instruction to the decoder
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (ic_valid_o && dec_ready_i));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (!ic_valid_o && dec_ready_i));
+
+        /// Memory Latency Model
+        localparam int unsigned FormalMemLatency = 5;
+        logic [FormalMemLatency-1:0] mem_valid_shift;
+        always_ff @(posedge clk_i or negedge rst_ni) begin
+            if (!rst_ni) begin
+                mem_valid_shift <= '0;
+            end else begin
+                mem_valid_shift <= {mem_valid_shift[FormalMemLatency-2:0],
+                                    mem_req_o && mem_ready_i};
+            end
+        end
+
+        // Memory valid signal must be delayed version of mem_req_o && mem_ready_i
+        assume property (@(posedge clk_i) disable iff (!rst_ni)
+            (mem_valid_i == mem_valid_shift[FormalMemLatency-1]));
+
+        // There can only be one active memory request at a time
+        assert property (@(posedge clk_i) $onehot0(mem_valid_shift));
     `endif
 
 endmodule : instruction_cache

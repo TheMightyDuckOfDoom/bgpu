@@ -32,10 +32,6 @@ vendor_package:
 sources:
     - rtl/bgpu_pkg.sv
 
-    - target: formal
-      files:
-          - formal/fv_reset.sv
-
     - target: not(any(post_synth, post_layout))
       files:
           - rtl/compute_unit/fetcher/warp_its_unit.sv

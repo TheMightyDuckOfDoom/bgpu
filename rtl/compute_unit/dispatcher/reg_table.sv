@@ -372,13 +372,5 @@ module reg_table #(
         assume property (@(posedge clk_i) disable iff (!rst_ni)
             !(insert_i && space_available_o) || !(insert_tag_in_table))
             else $error("Assumption failed: Inserting tag %d that is already in the table", tag_i);
-
-        // Reset at beginning
-        fv_reset #(
-            .RESET_CYCLES( 1 )
-        ) i_fv_reset (
-            .clk_i ( clk_i  ),
-            .rst_ni( rst_ni )
-        );
     `endif
 endmodule : reg_table
