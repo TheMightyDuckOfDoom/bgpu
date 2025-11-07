@@ -84,26 +84,32 @@ module tag_queue #(
         initial assert (NumTags > 1) else $error("NumTags must be greater than 1");
 
         // Valid output only when tags are available
-        assert property (@(posedge clk_i) !valid_o | (tags_used_q != '1))
+        assert_valid_only_when_available:
+            assert property (@(posedge clk_i) !valid_o | (tags_used_q != '1))
             else $error("valid_o is high but no tags are available! (%0b)", tags_used_q);
 
         // Given tag must be currently unused
-        assert property (@(posedge clk_i) !(valid_o && rst_ni) || (tags_used_q[tag_o] == 1'b0))
+        assert_tag_unused_when_valid:
+            assert property (@(posedge clk_i) disable iff (!rst_ni) !valid_o || !tags_used_q[tag_o])
             else $error("Giving out an already used tag: %0d", tag_o);
 
         // After a tag is given out, it must be marked as used
-        assert property (@(posedge clk_i) !($past(valid_o && get_i && rst_ni) && rst_ni) ||
-            (tags_used_q[$past(tag_o)] == 1'b1))
-            else $error("Tag %0d was given out but not marked as used!", $past(tag_o));
+        assert_mark_as_used:
+            assert property (@(posedge clk_i) disable iff (!rst_ni) !(valid_o && get_i)
+                || tags_used_d[tag_o])
+            else $error("Tag %0d is given out but not marked as used!", tag_o);
 
         // We can only free used tags
-        assert property (@(posedge clk_i) !(free_i & rst_ni) || (tags_used_q[tag_i] == 1'b1))
+        assert_only_free_unused_tags:
+            assert property (@(posedge clk_i) disable iff (!rst_ni) !free_i
+                || tags_used_q[tag_i])
             else $error("Trying to free an unused tag: %0d", tag_i);
 
         // After a tag is freed, it must be marked as unused
-        assert property (@(posedge clk_i) !($past(free_i && rst_ni) && rst_ni)
-            || (tags_used_q[$past(tag_i)] == 1'b0))
-            else $error("Tag %0d was freed but not marked as unused!", $past(tag_i));
+        assert_mark_as_unused:
+            assert property (@(posedge clk_i) disable iff (!rst_ni) !free_i
+                || !tags_used_d[tag_i])
+            else $error("Tag %0d is freed but not marked as unused!", tag_i);
     `endif
 
     // #######################################################################################
@@ -112,19 +118,40 @@ module tag_queue #(
 
     `ifdef FORMAL
         // All tags are free
-        cover property (@(posedge clk_i) disable iff (!rst_ni) tags_used_q == '0);
+        cover_all_free:
+            cover property (@(posedge clk_i) disable iff (!rst_ni) tags_used_q == '0);
 
         // All tags are used
-        cover property (@(posedge clk_i) disable iff (!rst_ni) tags_used_q == '1);
+        cover_all_used:
+            cover property (@(posedge clk_i) disable iff (!rst_ni) tags_used_q == '1);
 
         // Try to get a tag when all are used
-        cover property (@(posedge clk_i) disable iff (!rst_ni) get_i && (tags_used_q == '1));
+        cover_get_when_all_used:
+            cover property (@(posedge clk_i) disable iff (!rst_ni) get_i && (tags_used_q == '1));
 
         // Try to get and free a tag at the same time
-        cover property (@(posedge clk_i) disable iff (!rst_ni) get_i && free_i);
+        cover_get_and_free:
+            cover property (@(posedge clk_i) disable iff (!rst_ni) get_i && free_i);
+
+        // Cover that we actually get a tag
+        cover_get_handshake:
+            cover property (@(posedge clk_i) disable iff (!rst_ni) valid_o && get_i);
+
+        // Cover that we free a tag
+        cover_free:
+            cover property (@(posedge clk_i) disable iff (!rst_ni) free_i);
+
+        // Cover that we have a tag available
+        cover_valid:
+            cover property (@(posedge clk_i) disable iff (!rst_ni) valid_o);
+
+        // Cover that we do not have a tag available
+        cover_invalid:
+            cover property (@(posedge clk_i) disable iff (!rst_ni) !valid_o);
 
         // Can only free used tags
-        assume property (@(posedge clk_i) disable iff (!rst_ni) free_i == tags_used_q[tag_i]);
+        assume_only_free_unused_tags:
+            assume property (@(posedge clk_i) disable iff (!rst_ni) free_i == tags_used_q[tag_i]);
     `endif
 
 endmodule : tag_queue
