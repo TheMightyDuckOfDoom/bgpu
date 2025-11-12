@@ -8,23 +8,22 @@
 // Simple direct mapped cache
 module instruction_cache #(
     /// Width of the Program Counter
-    parameter int unsigned PcWidth = 32,
+    parameter int unsigned PcWidth = 8,
     /// Number of warps per compute unit
     parameter int unsigned NumWarps = 8,
     /// Number of threads per warp
     parameter int unsigned WarpWidth = 32,
     /// Encoded instruction width
-    parameter int unsigned EncInstWidth = 32,
+    parameter int unsigned EncInstWidth = 4,
     /// Encoded instructions per cacheline -> Also determines the memory interface width
     parameter int unsigned CachelineIdxBits = 2,
     /// Number of cachelines in the instruction cache
     parameter int unsigned NumCachelines = 8,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned SubwarpIdWidth     =        WarpWidth > 1 ? $clog2(WarpWidth) : 1,
-    parameter int unsigned WidWidth           =         NumWarps > 1 ? $clog2(NumWarps)  : 1,
-    parameter int unsigned CachelineAddrWidth = CachelineIdxBits > 0 ? PcWidth - CachelineIdxBits
-                                                    : PcWidth,
+    parameter int unsigned SubwarpIdWidth     = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter int unsigned WidWidth           =  NumWarps > 1 ? $clog2(NumWarps)  : 1,
+    parameter int unsigned CachelineAddrWidth = PcWidth - CachelineIdxBits,
     parameter type         cache_addr_t = logic [CachelineAddrWidth-1:0],
     parameter type         wid_t        = logic [          WidWidth-1:0],
     parameter type         pc_t         = logic [           PcWidth-1:0],
@@ -431,10 +430,232 @@ module instruction_cache #(
     // # Assertions                                                                          #
     // #######################################################################################
 
+    // TODO: These are not exhaustive
     `ifndef SYNTHESIS
+        /// Check if new state is valid given the current state
+        // From IDLE state
         assert property (@(posedge clk_i) disable iff (!rst_ni)
-            mem_valid_i |-> state_q == WAIT_FOR_MEM
+            !(state_q == IDLE) || (state_d == IDLE || state_d == HANDLE_INSTR)
+        ) else $fatal(1, "Invalid state transition from IDLE state to %0d", state_d);
+        // From HANDLE_INSTR state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(state_q == HANDLE_INSTR) || (state_d == IDLE || state_d == HANDLE_INSTR
+                                           || state_d == WAIT_FOR_MEM)
+        ) else $fatal(1, "Invalid state transition from HANDLE_INSTR state to %0d", state_d);
+        // From WAIT_FOR_MEM state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(state_q == WAIT_FOR_MEM) || (state_d == WAIT_FOR_MEM || state_d == WAIT_FOR_DECODER)
+        ) else $fatal(1, "Invalid state transition from WAIT_FOR_MEM state to %0d", state_d);
+        // From WAIT_FOR_DECODER state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(state_q == WAIT_FOR_DECODER) || (state_d == IDLE || state_d == HANDLE_INSTR
+                                               || state_d == WAIT_FOR_DECODER)
+        ) else $fatal(1, "Invalid state transition from WAIT_FOR_DECODER state to %0d", state_d);
+
+        /// Memory interface assertions
+        // Ensure that we only receive memory responses in the WAIT_FOR_MEM state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !mem_valid_i || (state_q == WAIT_FOR_MEM)
         ) else $fatal(1, "Memory response received, but not in WAIT_FOR_MEM state.");
+
+        // Ensure that we only send memory requests in the HANDLE_INSTR state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !mem_req_o || (state_q == HANDLE_INSTR)
+        ) else $fatal(1, "Memory request sent, but not in HANDLE_INSTR state.");
+
+        // If we sent out a memory request, we must got to the WAIT_FOR_MEM state
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(mem_req_o && mem_ready_i) || (state_d == WAIT_FOR_MEM)
+        ) else $fatal(1, "Memory request sent, but did not go to WAIT_FOR_MEM state.");
+
+        // If decoder is not ready, the output must stay stable and valid
+        assert property (@(posedge clk_i)
+            !$past(ic_valid_o && !dec_ready_i && rst_ni) || !rst_ni
+                || (ic_valid_o && $stable({ic_pc_o, ic_act_mask_o, ic_warp_id_o,
+                                          ic_subwarp_id_o, ic_inst_o}))
+        ) else $fatal(1, "Decoder not ready, but output changed.");
+    `endif
+
+    // #######################################################################################
+    // # Formal Properties                                                                   #
+    // #######################################################################################
+
+    `ifdef FORMAL
+        /// Check that we can reach all states
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == IDLE));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == HANDLE_INSTR));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_MEM));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_DECODER));
+
+        /// Check that we can perform all transitions
+        // IDLE state
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == IDLE)
+            && (state_d == HANDLE_INSTR));
+        // HANDLE_INSTR state
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == HANDLE_INSTR)
+            && (state_d == IDLE));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == HANDLE_INSTR)
+            && (state_d == HANDLE_INSTR));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == HANDLE_INSTR)
+            && (state_d == WAIT_FOR_MEM));
+        // WAIT_FOR_MEM state
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_MEM)
+            && (state_d == WAIT_FOR_MEM));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_MEM)
+            && (state_d == WAIT_FOR_DECODER));
+        // WAIT_FOR_DECODER state
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_DECODER)
+            && (state_d == IDLE));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_DECODER)
+            && (state_d == HANDLE_INSTR));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (state_q == WAIT_FOR_DECODER)
+            && (state_d == WAIT_FOR_DECODER));
+
+        /// Cover Handshakes
+        // Check that we can perform memory requests
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (mem_req_o && mem_ready_i));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (!mem_req_o && mem_ready_i));
+        // Check that we can receive memory responses
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (mem_valid_i));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (!mem_valid_i));
+        // Check that we can receive a new instruction
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (fe_valid_i && ic_ready_o));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (fe_valid_i && !ic_ready_o));
+        // Check that we can send an instruction to the decoder
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (ic_valid_o && dec_ready_i));
+        cover property (@(posedge clk_i) disable iff (!rst_ni) (!ic_valid_o && dec_ready_i));
+
+        /// Memory Latency Model
+        localparam int unsigned FormalMemLatency = 3;
+        logic [FormalMemLatency-1:0] fv_mem_req_shift;
+        cache_addr_t [FormalMemLatency-1:0] fv_mem_addr_shift;
+        always_ff @(posedge clk_i or negedge rst_ni) begin
+            if (!rst_ni) begin
+                fv_mem_req_shift  <= '0;
+                fv_mem_addr_shift <= '0;
+            end else begin
+                fv_mem_req_shift <= {fv_mem_req_shift[FormalMemLatency-2:0],
+                                    mem_req_o && mem_ready_i};
+                fv_mem_addr_shift <= {fv_mem_addr_shift[FormalMemLatency-2:0],
+                                     mem_addr_o};
+            end
+        end
+
+        // Memory valid signal must be delayed version of mem_req_o && mem_ready_i
+        assume property (@(posedge clk_i) disable iff (!rst_ni)
+            (mem_valid_i == fv_mem_req_shift[FormalMemLatency-1]));
+
+        // There can only be one active memory request at a time
+        assert property (@(posedge clk_i) $onehot0(fv_mem_req_shift));
+
+        // New request
+        cache_addr_t f_mem_addr;
+        cache_data_t f_mem_data;
+        act_mask_t   f_act_mask;
+        wid_t        f_warp_id;
+        subwarp_id_t f_subwarp_id;
+
+        assign f_mem_addr   = $anyconst;
+        assign f_mem_data   = $anyconst;
+        assign f_act_mask   = $anyconst;
+        assign f_warp_id    = $anyconst;
+        assign f_subwarp_id = $anyconst;
+
+        // Assume that if the fetcher request the instruction with f_pc, we have a request with f_* signals
+        logic fetcher_request_matches_f_pc;
+        assign fetcher_request_matches_f_pc =
+            fe_valid_i && (fe_pc_i[PcWidth-1:CachelineIdxBits] == f_mem_addr);
+        assume property (@(posedge clk_i) disable iff (!rst_ni)
+            !fetcher_request_matches_f_pc || (fe_act_mask_i == f_act_mask)
+        );
+        assume property (@(posedge clk_i) disable iff (!rst_ni)
+            !fetcher_request_matches_f_pc || (fe_warp_id_i == f_warp_id)
+        );
+        assume property (@(posedge clk_i) disable iff (!rst_ni)
+            !fetcher_request_matches_f_pc || (fe_subwarp_id_i == f_subwarp_id)
+        );
+
+        // Assert that valid cachelines that match the assumed memory address return the correct data
+        cache_addr_t [NumCachelines-1:0] cacheline_addrs;
+        logic [NumCachelines-1:0]        cacheline_matches;
+        for (genvar i = 0; i < NumCachelines; i++) begin : gen_cacheline_addrs
+            assign cacheline_addrs[i] = {
+                i_tag_mem.sram[i],
+                cache_select_t'(i)
+            };
+            assign cacheline_matches[i] = (cacheline_addrs[i] == f_mem_addr) && cache_valids_q[i];
+
+            assert property (@(posedge clk_i) disable iff (!rst_ni)
+                !(cacheline_matches[i]) || (f_mem_data == i_inst_mem.sram[i])
+            ) else $fatal(1, "Memory data does not match cache data for matching addresses.");
+        end
+
+        logic request_matches_addr;
+        assign request_matches_addr = mem_valid_i
+            && (fv_mem_addr_shift[FormalMemLatency-1] == f_mem_addr);
+        assume property (@(posedge clk_i) disable iff (!rst_ni)
+            !request_matches_addr || (mem_data_i == f_mem_data)
+        ) else $fatal(1, "Memory data does not match assumed data.");
+
+        // If instruction has the same address as our assumed memory address, the data must match
+        logic result_matches_mem_addr;
+        assign result_matches_mem_addr = ic_valid_o
+            && (ic_pc_o[PcWidth-1:CachelineIdxBits] == f_mem_addr);
+        enc_inst_t result_exp_inst;
+        assign result_exp_inst = f_mem_data[
+            ic_pc_o[CachelineIdxBits-1:0]
+        ];
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !result_matches_mem_addr || (ic_inst_o == result_exp_inst)
+        ) else $fatal(1, "Instruction data does not match memory data for matching addresses.");
+
+        // Other signals must also match the f_* signals
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !result_matches_mem_addr || (ic_act_mask_o == f_act_mask)
+        ) else $fatal(1, "Active mask does not match assumed data.");
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !result_matches_mem_addr || (ic_warp_id_o == f_warp_id)
+        ) else $fatal(1, "Warp ID does not match assumed data.");
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !result_matches_mem_addr || (ic_subwarp_id_o == f_subwarp_id)
+        ) else $fatal(1, "Subwarp ID does not match assumed data.");
+
+        logic active_req_matches_mem_addr;
+        assign active_req_matches_mem_addr =
+            (active_req_q.pc[PcWidth-1:CachelineIdxBits] == f_mem_addr);
+
+        // Cache miss -> data came from memory
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(active_req_matches_mem_addr && state_q == WAIT_FOR_DECODER)
+            || (mem_data_q == f_mem_data)
+        ) else $fatal(1, "Stored memory data does not match assumed data.");
+
+        // Data in active request must match f_* signals
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(active_req_matches_mem_addr && (state_q != IDLE))
+            || (active_req_q.act_mask == f_act_mask)
+        ) else $fatal(1, "Active mask does not match assumed data on cache miss.");
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(active_req_matches_mem_addr && (state_q != IDLE))
+            || (active_req_q.warp_id == f_warp_id)
+        ) else $fatal(1, "Warp ID does not match assumed data on cache miss.");
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(active_req_matches_mem_addr && (state_q != IDLE))
+            || (active_req_q.subwarp_id == f_subwarp_id)
+        ) else $fatal(1, "Subwarp ID does not match assumed data on cache miss.");
+
+        // Cache hit -> data came from cache
+        logic cache_hit_matches_mem_addr;
+        assign cache_hit_matches_mem_addr = cache_valid_q
+            && (cache_tag_q == active_req_q.pc[PcWidth-1-:CacheTagBits])
+            && active_req_matches_mem_addr;
+
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(state_q == HANDLE_INSTR && ic_valid_o && cache_hit_matches_mem_addr)
+            || (cache_data == f_mem_data)
+        ) else $fatal(1, "Cache data does not match assumed data.");
     `endif
 
 endmodule : instruction_cache

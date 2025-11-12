@@ -1,0 +1,26 @@
+[tasks]
+cover
+prove
+
+[options]
+cover: mode cover
+prove: mode prove
+depth 20
+smtc startup_reset.smtc
+
+[engines]
+smtbmc boolector
+
+[script]
+plugin -i slang-sva.so
+read_slang --top tag_queue -F formal.f \
+        --compat-mode --keep-hierarchy \
+        --allow-use-before-declare --ignore-unknown-modules
+prep -top tag_queue
+
+[files]
+formal.f
+
+[file startup_reset.smtc]
+initial
+assume (= [rst_ni] false)
