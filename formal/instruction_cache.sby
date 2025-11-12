@@ -5,7 +5,7 @@ prove
 [options]
 cover: mode cover
 prove: mode prove
-depth 20
+depth 10
 smtc startup_reset.smtc
 
 [engines]
@@ -14,7 +14,7 @@ smtbmc yices
 [script]
 plugin -i slang-sva.so
 read_slang --top instruction_cache -F formal.f \
-        --compat-mode --keep-hierarchy \
+        --compat-mode \
         --allow-use-before-declare --ignore-unknown-modules
 prep -top instruction_cache
 
