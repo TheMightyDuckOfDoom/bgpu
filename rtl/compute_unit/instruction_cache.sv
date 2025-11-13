@@ -8,7 +8,7 @@
 // Simple direct mapped cache
 module instruction_cache #(
     /// Number of instructions to fetch for the warp
-    parameter int unsigned FetchWidth = 2,
+    parameter int unsigned FetchWidth = 4,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 8,
     /// Number of warps per compute unit
@@ -380,12 +380,7 @@ module instruction_cache #(
                 end
             end
         end : wait_for_decoder_state
-
     end : state_logic
-
-    // // Direct mapped -> select the cacheline based on the PC of the active request
-    // assign cache_select = active_req_q.pc[CacheSelectBits+CachelineIdxBits-1:
-    //                                      CachelineIdxBits];
 
     // Cache write tag
     assign write_cache_tag =   // Get the tag from pc of the active request
@@ -471,6 +466,13 @@ module instruction_cache #(
 
     // TODO: These are not exhaustive
     `ifndef SYNTHESIS
+        // Check that FetchWidth is not larger than number of instructions per cacheline
+        // As otherwise some instructions would never be fetched
+        // Formal checks this using a cover of ic_valid_o == '1
+        initial assert (FetchWidth <= (1 << CachelineIdxBits))
+        else $fatal(1, "FetchWidth (%0d) should not be larger than insts per cacheline (%0d).",
+                        FetchWidth, (1 << CachelineIdxBits));
+
         /// Check if new state is valid given the current state
         // From IDLE state
         assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -509,29 +511,33 @@ module instruction_cache #(
 
         // If decoder is not ready, the output must stay stable and valid
         assert property (@(posedge clk_i)
-            !$past(ic_valid_o && !dec_ready_i && rst_ni) || !rst_ni
-                || (ic_valid_o && $stable({ic_pc_o, ic_act_mask_o, ic_warp_id_o,
+            !$past(|ic_valid_o && !dec_ready_i && rst_ni) || !rst_ni
+                || ($stable({ic_valid_o, ic_fetch_mask_o, ic_pc_o, ic_act_mask_o, ic_warp_id_o,
                                           ic_subwarp_id_o, ic_inst_o}))
         ) else $fatal(1, "Decoder not ready, but output changed.");
 
         // Check that fetch mask is valid
         assert property (@(posedge clk_i) disable iff (!rst_ni)
-            fe_valid_i |-> fe_fetch_mask_i != '0
+            !fe_valid_i || (fe_fetch_mask_i != '0)
         ) else $fatal(1, "Fetch request received with zero fetch mask.");
 
         for (genvar fidx = 0; fidx < FetchWidth; fidx++) begin : gen_fetch_checks
             if (fidx == 0) begin : gen_first_fetch_check
                 assert property (@(posedge clk_i) disable iff (!rst_ni)
-                    fe_valid_i |-> fe_fetch_mask_i[0]
+                    !fe_valid_i || fe_fetch_mask_i[0]
                 ) else $fatal(1, "Fetch req received with invalid fetch mask: First is not valid.");
             end : gen_first_fetch_check
             else begin : gen_nonfirst_fetch_check
                 assert property (@(posedge clk_i) disable iff (!rst_ni)
-                    fe_valid_i && fe_fetch_mask_i[fidx] |-> (fe_fetch_mask_i[fidx-1])
+                    !active_req_q.fetch_mask[fidx] || active_req_q.fetch_mask[fidx-1]
+                ) else $fatal(1, "Active request has invalid fetch mask: Must be contiguous.");
+
+                assert property (@(posedge clk_i) disable iff (!rst_ni)
+                    !(fe_valid_i && fe_fetch_mask_i[fidx]) || (fe_fetch_mask_i[fidx-1])
                 ) else $fatal(1, "Fetch req received with invalid fetch mask: Must be contiguous.");
 
                 assert property (@(posedge clk_i) disable iff (!rst_ni)
-                    ic_valid_o[fidx] |-> (ic_valid_o[fidx-1] || (fidx == 0))
+                    !ic_valid_o[fidx] || ic_valid_o[fidx-1]
                 ) else $fatal(1, "IC output valid signal invalid: Valid bits must be contiguous.");
             end : gen_nonfirst_fetch_check
         end : gen_fetch_checks
@@ -580,11 +586,19 @@ module instruction_cache #(
         cover property (@(posedge clk_i) disable iff (!rst_ni) (mem_valid_i));
         cover property (@(posedge clk_i) disable iff (!rst_ni) (!mem_valid_i));
         // Check that we can receive a new instruction
-        cover property (@(posedge clk_i) disable iff (!rst_ni) (fe_valid_i && ic_ready_o));
-        cover property (@(posedge clk_i) disable iff (!rst_ni) (fe_valid_i && !ic_ready_o));
         // Check that we can send an instruction to the decoder
-        cover property (@(posedge clk_i) disable iff (!rst_ni) (ic_valid_o && dec_ready_i));
-        cover property (@(posedge clk_i) disable iff (!rst_ni) (!ic_valid_o && dec_ready_i));
+        for (genvar i = 1; i <= FetchWidth; i++) begin : gen_formal_covers
+            logic [FetchWidth-1:0] fmask;
+            assign fmask = (('d1 << i) - 'd1);
+            cover property (@(posedge clk_i) disable iff (!rst_ni) fe_valid_i
+                && (fe_fetch_mask_i == fmask) && ic_ready_o);
+            cover property (@(posedge clk_i) disable iff (!rst_ni) fe_valid_i
+                && (fe_fetch_mask_i == fmask) && !ic_ready_o);
+            cover property (@(posedge clk_i) disable iff (!rst_ni) (ic_valid_o == fmask)
+                && dec_ready_i);
+            cover property (@(posedge clk_i) disable iff (!rst_ni) (ic_valid_o == fmask)
+                && !dec_ready_i);
+        end : gen_formal_covers
 
         /// Memory Latency Model
         localparam int unsigned FormalMemLatency = 3;
@@ -612,12 +626,14 @@ module instruction_cache #(
         // New request
         cache_addr_t f_mem_addr;
         cache_data_t f_mem_data;
+        fetch_mask_t f_fetch_mask;
         act_mask_t   f_act_mask;
         wid_t        f_warp_id;
         subwarp_id_t f_subwarp_id;
 
         assign f_mem_addr   = $anyconst;
         assign f_mem_data   = $anyconst;
+        assign f_fetch_mask = $anyconst;
         assign f_act_mask   = $anyconst;
         assign f_warp_id    = $anyconst;
         assign f_subwarp_id = $anyconst;
@@ -627,6 +643,9 @@ module instruction_cache #(
         assign fetcher_request_matches_f_pc =
             fe_valid_i && (fe_pc_i[PcWidth-1:CachelineIdxBits] == f_mem_addr);
         assume property (@(posedge clk_i) disable iff (!rst_ni)
+            !fetcher_request_matches_f_pc || (fe_fetch_mask_i == f_fetch_mask)
+        );
+        assume property (@(posedge clk_i) disable iff (!rst_ni)
             !fetcher_request_matches_f_pc || (fe_act_mask_i == f_act_mask)
         );
         assume property (@(posedge clk_i) disable iff (!rst_ni)
@@ -635,6 +654,16 @@ module instruction_cache #(
         assume property (@(posedge clk_i) disable iff (!rst_ni)
             !fetcher_request_matches_f_pc || (fe_subwarp_id_i == f_subwarp_id)
         );
+
+        // Fetch mask non-zero
+        assume property (@(posedge clk_i) disable iff (!rst_ni) !fe_valid_i
+            || fe_fetch_mask_i != '0);
+        // Fetch mask contiguous
+        for (genvar fidx = 1; fidx < FetchWidth; fidx++) begin : gen_formal_fetch_checks
+            assume property (@(posedge clk_i) disable iff (!rst_ni)
+                !(fe_valid_i && fe_fetch_mask_i[fidx]) || (fe_fetch_mask_i[fidx-1])
+            );
+        end : gen_formal_fetch_checks
 
         // Assert that valid cachelines that match the assumed memory address return the correct data
         cache_addr_t [NumCachelines-1:0] cacheline_addrs;
@@ -659,18 +688,23 @@ module instruction_cache #(
         ) else $fatal(1, "Memory data does not match assumed data.");
 
         // If instruction has the same address as our assumed memory address, the data must match
-        logic result_matches_mem_addr;
-        assign result_matches_mem_addr = ic_valid_o
-            && (ic_pc_o[PcWidth-1:CachelineIdxBits] == f_mem_addr);
-        enc_inst_t result_exp_inst;
-        assign result_exp_inst = f_mem_data[
-            ic_pc_o[CachelineIdxBits-1:0]
-        ];
-        assert property (@(posedge clk_i) disable iff (!rst_ni)
-            !result_matches_mem_addr || (ic_inst_o == result_exp_inst)
-        ) else $fatal(1, "Instruction data does not match memory data for matching addresses.");
+        logic [FetchWidth-1:0] result_matches_mem_addr;
+        for (genvar fidx = 0; fidx < FetchWidth; fidx++) begin : gen_result_matches_mem_addr
+            assign result_matches_mem_addr[fidx] = ic_valid_o[fidx]
+                && (ic_pc_o[PcWidth-1:CachelineIdxBits] == f_mem_addr);
+            enc_inst_t result_exp_inst;
+            assign result_exp_inst = f_mem_data[
+                ic_pc_o[CachelineIdxBits-1:0] + fidx[CachelineIdxBits-1:0]
+            ];
+            assert property (@(posedge clk_i) disable iff (!rst_ni)
+                !result_matches_mem_addr[fidx] || (ic_inst_o[fidx] == result_exp_inst)
+            ) else $fatal(1, "Instruction data missmatch at fetch index %0d.", fidx);
+        end : gen_result_matches_mem_addr
 
         // Other signals must also match the f_* signals
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !result_matches_mem_addr || (ic_fetch_mask_o == f_fetch_mask)
+        ) else $fatal(1, "Fetch mask does not match assumed data.");
         assert property (@(posedge clk_i) disable iff (!rst_ni)
             !result_matches_mem_addr || (ic_act_mask_o == f_act_mask)
         ) else $fatal(1, "Active mask does not match assumed data.");
@@ -692,6 +726,11 @@ module instruction_cache #(
         ) else $fatal(1, "Stored memory data does not match assumed data.");
 
         // Data in active request must match f_* signals
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !(active_req_matches_mem_addr && (state_q != IDLE))
+            || (active_req_q.fetch_mask == f_fetch_mask)
+        ) else $fatal(1, "Fetch mask does not match assumed data on cache miss.");
+
         assert property (@(posedge clk_i) disable iff (!rst_ni)
             !(active_req_matches_mem_addr && (state_q != IDLE))
             || (active_req_q.act_mask == f_act_mask)

@@ -260,6 +260,7 @@ clean: asic-clean gowin-clean xilinx-clean verilator-clean formal-clean
 	rm -f *.log
 
 formal-clean:
+	rm -f  formal/*.f
 	rm -rf formal/work
 
 verilator-clean:
