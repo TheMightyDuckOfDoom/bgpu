@@ -263,11 +263,6 @@ module wait_buffer import bgpu_pkg::*; #(
                             dep_mask[fidx][i] = 1'b1;
                         end : check_existing_waw
                     end : check_entry
-
-                    // Check if the destination register is the same as the new instruction
-                    if (wait_buffer_q[i].dst_reg == dec_dst_reg_i) begin
-                        dep_mask[i] = 1'b1;
-                    end
                 end : gen_dep_mask
 
                 // Check if previous instructions have the current destination register as operand
