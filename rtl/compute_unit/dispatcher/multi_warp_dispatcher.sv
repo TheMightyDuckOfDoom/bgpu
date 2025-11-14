@@ -7,6 +7,10 @@
 module multi_warp_dispatcher import bgpu_pkg::*; #(
     /// Number of instructions to fetch for the warp
     parameter int unsigned FetchWidth = 1,
+    /// Number of instructions to dispatch simultaneously
+    // Each warp dispatches atmost one instruction per cycle -> saves complexity in dispatcher
+    // but multiple warps can dispatch simultaneously
+    parameter int unsigned DispatchWidth = 1,
     /// Number of instructions that can write back simultaneously
     parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions per warp
@@ -73,19 +77,19 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     input  op_reg_idx_t [FetchWidth-1:0] dec_operands_i,
 
     /// To Operand Collector
-    input  logic        opc_ready_i,
-    output logic        disp_valid_o,
-    output iid_t        disp_tag_o,
-    output pc_t         disp_pc_o,
-    output act_mask_t   disp_act_mask_o,
-    output inst_t       disp_inst_o,
-    output reg_idx_t    disp_dst_o,
-    output op_is_reg_t  disp_operands_is_reg_o,
-    output op_reg_idx_t disp_operands_o,
+    input  logic        [DispatchWidth-1:0] opc_ready_i,
+    output logic        [DispatchWidth-1:0] disp_valid_o,
+    output iid_t        [DispatchWidth-1:0] disp_tag_o,
+    output pc_t         [DispatchWidth-1:0] disp_pc_o,
+    output act_mask_t   [DispatchWidth-1:0] disp_act_mask_o,
+    output inst_t       [DispatchWidth-1:0] disp_inst_o,
+    output reg_idx_t    [DispatchWidth-1:0] disp_dst_o,
+    output op_is_reg_t  [DispatchWidth-1:0] disp_operands_is_reg_o,
+    output op_reg_idx_t [DispatchWidth-1:0] disp_operands_o,
 
     /// From Operand Collector -> instruction has read its operands
-    input logic opc_eu_handshake_i,
-    input iid_t opc_eu_tag_i,
+    input logic [DispatchWidth-1:0] opc_eu_handshake_i,
+    input iid_t [DispatchWidth-1:0] opc_eu_tag_i,
 
     /// From Execution Units
     input  logic [WritebackWidth-1:0] eu_valid_i,
@@ -120,18 +124,20 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     tag_t [WritebackWidth-1:0] eu_tag;
 
     // Round Robin Arbiter
-    warp_mask_t arb_gnt;
-    warp_mask_t rr_inst_ready;
+    warp_mask_t arb_gnts;
+    warp_mask_t [DispatchWidth-1:0] arb_gnt;
+    warp_mask_t [DispatchWidth-1:0] rr_inst_ready;
 
-    wid_t arb_sel_wid;
+    wid_t       [DispatchWidth-1:0] arb_sel_wid;
+    disp_data_t [DispatchWidth-1:0] arb_sel_data;
     disp_data_t [NumWarps-1:0] arb_in_data;
-    disp_data_t arb_sel_data;
 
     // Decoded Demultiplexer
     fetch_mask_t [NumWarps-1:0] dec_decoded_unused_ibe;
 
     // OPC EU Handshake Demultiplexer
     warp_mask_t opc_eu_handshake_warp;
+    tag_t [NumWarps-1:0] opc_eu_tag;
 
     // #######################################################################################
     // # Dispatcher per warp                                                                 #
@@ -175,13 +181,25 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // OPC EU Handshake Demultiplexer
     always_comb begin
         opc_eu_handshake_warp = '0;
-        opc_eu_handshake_warp[opc_eu_tag_i[WidWidth-1:0]] = opc_eu_handshake_i;
+        opc_eu_tag = '0;
+        for (int didx = 0; didx < DispatchWidth; didx++) begin
+            opc_eu_handshake_warp[opc_eu_tag_i[didx][WidWidth-1:0]] = opc_eu_handshake_i[didx];
+            opc_eu_tag[opc_eu_tag_i[didx][WidWidth-1:0]] = opc_eu_tag_i[didx][WidWidth+:TagWidth];
+        end
     end
 
     // Extract EU Tags
     for (genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_eu_tags
         assign eu_tag[wb] = eu_tag_i[wb][WidWidth+:TagWidth];
     end : gen_eu_tags
+
+    // Combine all arbiter grants
+    always_comb begin
+        arb_gnts = '0;
+        for (int didx = 0; didx < DispatchWidth; didx++) begin
+            arb_gnts |= arb_gnt[didx];
+        end
+    end
 
     // Dispatcher per Warp
     for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
@@ -216,8 +234,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .dec_operands_is_reg_i( dec_operands_is_reg_i ),
             .dec_operands_i       ( dec_operands_i        ),
 
-            .opc_ready_i           ( arb_gnt      [warp]                 ),
-            .disp_valid_o          ( rr_inst_ready[warp]                 ),
+            .opc_ready_i           ( arb_gnts     [warp]                 ),
+            .disp_valid_o          ( rr_inst_ready[0][warp]              ),
             .disp_pc_o             ( arb_in_data  [warp].pc              ),
             .disp_act_mask_o       ( arb_in_data  [warp].act_mask        ),
             .disp_tag_o            ( arb_in_data  [warp].tag             ),
@@ -226,8 +244,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .disp_operands_is_reg_o( arb_in_data  [warp].operands_is_reg ),
             .disp_operands_o       ( arb_in_data  [warp].operands        ),
 
-            .opc_eu_handshake_i( opc_eu_handshake_warp[warp]      ),
-            .opc_eu_tag_i      ( opc_eu_tag_i[WidWidth+:TagWidth] ),
+            .opc_eu_handshake_i( opc_eu_handshake_warp[warp] ),
+            .opc_eu_tag_i      ( opc_eu_tag           [warp] ),
 
             .eu_valid_i( eu_valid[warp] ),
             .eu_tag_i  ( eu_tag         )
@@ -238,38 +256,70 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // # Round Robin Arbiter                                                                 #
     // #######################################################################################
 
-    rr_arb_tree #(
-        .DataType ( disp_data_t ),
-        .NumIn    ( NumWarps    ),
-        .ExtPrio  ( 1'b0 ),
-        .AxiVldRdy( 1'b0 ),
-        .LockIn   ( 1'b0 ),
-        .FairArb  ( 1'b1 )
-    ) i_rr_arb (
-        .clk_i ( clk_i  ),
-        .rst_ni( rst_ni ),
+    for (genvar didx = 0; didx < DispatchWidth; didx++) begin : gen_rr_arb
+        if (didx > 0) begin : gen_upper_rr_inst_ready
+            assign rr_inst_ready[didx] = rr_inst_ready[didx-1] & (~arb_gnt[didx-1]);
+        end : gen_upper_rr_inst_ready
 
-        .req_i  ( rr_inst_ready ),
-        .gnt_o  ( arb_gnt       ),
-        .data_i ( arb_in_data   ),
+        rr_arb_tree #(
+            .DataType ( disp_data_t ),
+            .NumIn    ( NumWarps    ),
+            .ExtPrio  ( 1'b0 ),
+            .AxiVldRdy( 1'b0 ),
+            .LockIn   ( 1'b0 ),
+            .FairArb  ( 1'b1 )
+        ) i_rr_arb (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
 
-        // Directly to Operand Collector
-        .req_o ( disp_valid_o ),
-        .gnt_i ( opc_ready_i  ),
-        .data_o( arb_sel_data ),
-        .idx_o ( arb_sel_wid  ),
+            .req_i  ( rr_inst_ready[didx] ),
+            .gnt_o  ( arb_gnt      [didx] ),
+            .data_i ( arb_in_data         ),
 
-        // Unused
-        .flush_i( 1'b0 ),
-        .rr_i   ( '0   )
-    );
+            // Directly to Operand Collector
+            .req_o ( disp_valid_o[didx] ),
+            .gnt_i ( opc_ready_i [didx] ),
+            .data_o( arb_sel_data[didx] ),
+            .idx_o ( arb_sel_wid [didx] ),
 
-    assign disp_tag_o             = {arb_sel_data.tag, arb_sel_wid};
-    assign disp_pc_o              = arb_sel_data.pc;
-    assign disp_act_mask_o        = arb_sel_data.act_mask;
-    assign disp_inst_o            = arb_sel_data.inst;
-    assign disp_dst_o             = arb_sel_data.dst_reg;
-    assign disp_operands_is_reg_o = arb_sel_data.operands_is_reg;
-    assign disp_operands_o        = arb_sel_data.operands;
+            // Unused
+            .flush_i( 1'b0 ),
+            .rr_i   ( '0   )
+        );
+
+        assign disp_tag_o            [didx] = {arb_sel_data[didx].tag, arb_sel_wid[didx]};
+        assign disp_pc_o             [didx] = arb_sel_data[didx].pc;
+        assign disp_act_mask_o       [didx] = arb_sel_data[didx].act_mask;
+        assign disp_inst_o           [didx] = arb_sel_data[didx].inst;
+        assign disp_dst_o            [didx] = arb_sel_data[didx].dst_reg;
+        assign disp_operands_is_reg_o[didx] = arb_sel_data[didx].operands_is_reg;
+        assign disp_operands_o       [didx] = arb_sel_data[didx].operands;
+    end : gen_rr_arb
+
+    // #######################################################################################
+    // # Assertions                                                                          #
+    // #######################################################################################
+
+    `ifndef SYNTHESIS
+        for (genvar didx = 0; didx < DispatchWidth; didx++) begin : gen_out_asserts
+            for (genvar other_didx = 0; other_didx < DispatchWidth; other_didx++)
+            begin : gen_out_asserts_inner
+                if (didx != other_didx) begin : gen_diff_didx
+                    // Check for OPC EU Handshake for the same warp received on multiple dispatch outputs
+                    assert property (@(posedge clk_i) disable iff (!rst_ni)
+                        (opc_eu_handshake_i[didx] && opc_eu_handshake_i[other_didx]
+                        -> opc_eu_tag_i[didx][WidWidth-1:0]
+                            != opc_eu_tag_i[other_didx][WidWidth-1:0]))
+                    else $error("OPC EU Handshake for the same warp received!");
+
+                    // Check that no two dispatch outputs dispatch to the same warp in the same cycle
+                    assert property (@(posedge clk_i) disable iff (!rst_ni)
+                        (disp_valid_o[didx] && disp_valid_o[other_didx]
+                        -> arb_gnt[didx] != arb_gnt[other_didx]))
+                    else $error("Two outputs dispatching to the same warp in the same cycle!");
+                end : gen_diff_didx
+            end : gen_out_asserts_inner
+        end : gen_out_asserts
+    `endif // SYNTHESIS
 
 endmodule : multi_warp_dispatcher

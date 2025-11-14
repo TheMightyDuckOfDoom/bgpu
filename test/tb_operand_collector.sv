@@ -55,7 +55,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
         act_mask_t act_mask;
         inst_t     inst;
         reg_idx_t  dst;
-        logic      [OperandsPerInst-1:0] src_required;
+        logic      [OperandsPerInst-1:0] src_is_reg;
         reg_idx_t  [OperandsPerInst-1:0] src;
         data_t     [OperandsPerInst-1:0] data;
     } insert_inst_t;
@@ -207,15 +207,15 @@ module tb_operand_collector import bgpu_pkg::*; #(
         .rst_ni( rst_n ),
 
         // From Dispatcher
-        .opc_ready_o        ( insert_inst_ready            ),
-        .disp_valid_i       ( insert_inst_valid            ),
-        .disp_tag_i         ( insert_inst_req.tag          ),
-        .disp_pc_i          ( insert_inst_req.pc           ),
-        .disp_act_mask_i    ( insert_inst_req.act_mask     ),
-        .disp_inst_i        ( insert_inst_req.inst         ),
-        .disp_dst_i         ( insert_inst_req.dst          ),
-        .disp_src_required_i( insert_inst_req.src_required ),
-        .disp_src_i         ( insert_inst_req.src          ),
+        .opc_ready_o        ( insert_inst_ready          ),
+        .disp_valid_i       ( insert_inst_valid          ),
+        .disp_tag_i         ( insert_inst_req.tag        ),
+        .disp_pc_i          ( insert_inst_req.pc         ),
+        .disp_act_mask_i    ( insert_inst_req.act_mask   ),
+        .disp_inst_i        ( insert_inst_req.inst       ),
+        .disp_dst_i         ( insert_inst_req.dst        ),
+        .disp_src_is_reg_i  ( insert_inst_req.src_is_reg ),
+        .disp_src_i         ( insert_inst_req.src        ),
 
         // To Register File
         .opc_read_req_valid_o  ( read_req_valid   ),
@@ -271,7 +271,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
                 $display("  Destination Register: %0h", inserted_inst_q.dst);
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     $display("  Source Register %0d: req %0b reg %0h Data: %0h",
-                             i, insert_inst_req.src_required[i], inserted_inst_q.src[i],
+                             i, insert_inst_req.src_is_reg[i], inserted_inst_q.src[i],
                              inserted_inst_q.data[i]);
                 end
             end
@@ -285,7 +285,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
                     $display("Cycle %0d: Read request  for wid=%0h, reg_idx=%0h",
                              cycles, read_rsp_wid[i], read_req[i].reg_idx);
 
-                    assert(inserted_inst_q.src_required[i] == 1'b1)
+                    assert(inserted_inst_q.src_is_reg[i] == 1'b1)
                     else $error("Source register %0d not required for instruction with tag %0h",
                                 i, inserted_inst_q.tag);
 
@@ -303,7 +303,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
             // Execution unit handshake
             if (opc_valid && eu_ready) begin
                 completed_insts++;
-                num_expected_reqs += $countbits(inserted_inst_q.src_required, 1'b1);
+                num_expected_reqs += $countbits(inserted_inst_q.src_is_reg, 1'b1);
                 $display("Cycle %0d:", cycles);
                 $display("  Completed inst with tag %0h, pc %0h, act_mask %0h, dst %0h inst %0h",
                          opc_inst.tag, opc_inst.pc, opc_inst.act_mask, opc_inst.dst, opc_inst.inst);
@@ -325,7 +325,7 @@ module tb_operand_collector import bgpu_pkg::*; #(
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     $display("  Operand %0d: Data %0h", i, opc_inst.data[i]);
                     expected_data = '0;
-                    if (inserted_inst_q.src_required[i]) begin
+                    if (inserted_inst_q.src_is_reg[i]) begin
                         expected_data = inserted_inst_q.data[i];
                     end else begin
                         for (int j = 0; j < WarpWidth; j++) begin

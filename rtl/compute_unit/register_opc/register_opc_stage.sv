@@ -4,6 +4,8 @@
 
 /// Register and Operand Collector Stage
 module register_opc_stage import bgpu_pkg::*; #(
+    /// Number of instructions to dispatch simultaneously
+    parameter int unsigned DispatchWidth = 1,
     /// Number of instructions that can write back simultaneously
     parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions per warp
@@ -28,39 +30,42 @@ module register_opc_stage import bgpu_pkg::*; #(
     parameter int unsigned NumOperandCollectors = 6,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned TagWidth    = $clog2(NumTags),
-    parameter int unsigned WidWidth    = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type         wid_t       = logic [            WidWidth-1:0],
-    parameter type         reg_idx_t   = logic [         RegIdxWidth-1:0],
-    parameter type         pc_t        = logic [             PcWidth-1:0],
-    parameter type         act_mask_t  = logic [           WarpWidth-1:0],
-    parameter type         warp_data_t = logic [RegWidth * WarpWidth-1:0],
-    parameter type         iid_t       = logic [   TagWidth+WidWidth-1:0]
+    parameter int unsigned TagWidth     = $clog2(NumTags),
+    parameter int unsigned WidWidth     = NumWarps > 1 ? $clog2(NumWarps) : 1,
+    parameter type         wid_t        = logic      [            WidWidth-1:0],
+    parameter type         reg_idx_t    = logic      [         RegIdxWidth-1:0],
+    parameter type         pc_t         = logic      [             PcWidth-1:0],
+    parameter type         act_mask_t   = logic      [           WarpWidth-1:0],
+    parameter type         warp_data_t  = logic      [RegWidth * WarpWidth-1:0],
+    parameter type         iid_t        = logic      [   TagWidth+WidWidth-1:0],
+    parameter type         op_is_reg_t  = logic      [     OperandsPerInst-1:0],
+    parameter type         op_reg_idx_t = reg_idx_t  [     OperandsPerInst-1:0],
+    parameter type         op_data_t    = warp_data_t[     OperandsPerInst-1:0]
 ) (
     /// Clock and Reset
     input  logic clk_i,
     input  logic rst_ni,
 
     /// From Multi Warp Dispatcher
-    output logic      opc_ready_o,
-    input  logic      disp_valid_i,
-    input  iid_t      disp_tag_i,
-    input  pc_t       disp_pc_i,
-    input  act_mask_t disp_act_mask_i,
-    input  inst_t     disp_inst_i,
-    input  reg_idx_t  disp_dst_i,
-    input  logic      [OperandsPerInst-1:0] disp_src_required_i,
-    input  reg_idx_t  [OperandsPerInst-1:0] disp_src_i,
+    output logic        [DispatchWidth-1:0] opc_ready_o,
+    input  logic        [DispatchWidth-1:0] disp_valid_i,
+    input  iid_t        [DispatchWidth-1:0] disp_tag_i,
+    input  pc_t         [DispatchWidth-1:0] disp_pc_i,
+    input  act_mask_t   [DispatchWidth-1:0] disp_act_mask_i,
+    input  inst_t       [DispatchWidth-1:0] disp_inst_i,
+    input  reg_idx_t    [DispatchWidth-1:0] disp_dst_i,
+    input  op_is_reg_t  [DispatchWidth-1:0] disp_src_is_reg_i,
+    input  op_reg_idx_t [DispatchWidth-1:0] disp_src_i,
 
     /// To Execution Units
-    output logic       opc_valid_o,
-    input  logic       eu_ready_i,
-    output iid_t       opc_tag_o,
-    output pc_t        opc_pc_o,
-    output act_mask_t  opc_act_mask_o,
-    output inst_t      opc_inst_o,
-    output reg_idx_t   opc_dst_o,
-    output warp_data_t [OperandsPerInst-1:0] opc_operand_data_o,
+    output logic      [DispatchWidth-1:0] opc_valid_o,
+    input  logic      [DispatchWidth-1:0] eu_ready_i,
+    output iid_t      [DispatchWidth-1:0] opc_tag_o,
+    output pc_t       [DispatchWidth-1:0] opc_pc_o,
+    output act_mask_t [DispatchWidth-1:0] opc_act_mask_o,
+    output inst_t     [DispatchWidth-1:0] opc_inst_o,
+    output reg_idx_t  [DispatchWidth-1:0] opc_dst_o,
+    output op_data_t  [DispatchWidth-1:0] opc_operand_data_o,
 
     /// From Execution Units
     output logic       [WritebackWidth-1:0] opc_to_eu_ready_o,
@@ -87,17 +92,29 @@ module register_opc_stage import bgpu_pkg::*; #(
     // # Typedefs                                                                            #
     // #######################################################################################
 
-    typedef logic [     OpcTagWidth-1:0] opc_tag_t;
-    typedef logic [    BankSelWidth-1:0] bank_sel_t;
-    typedef logic [BankRegAddrWidth-1:0] bank_reg_addr_t;
+    typedef logic [NumOperandCollectors-1:0] opc_mask_t;
+    typedef logic [         OpcTagWidth-1:0] opc_tag_t;
+    typedef logic [        BankSelWidth-1:0] bank_sel_t;
+    typedef logic [    BankRegAddrWidth-1:0] bank_reg_addr_t;
+
+    // Instruction to Operand Collector
+    typedef struct packed {
+        iid_t        tag;        // Instruction ID
+        pc_t         pc;         // Program Counter
+        act_mask_t   act_mask;   // Activation Mask
+        inst_t       inst;       // Instruction
+        reg_idx_t    dst;        // Destination Register Index
+        op_is_reg_t  src_is_reg; // Source is Register Flags
+        op_reg_idx_t src;        // Source Register Indices
+    } disp_inst_t;
 
     // Ready instruction from Operand Collector to Execution Unit
     typedef struct packed {
-        iid_t       tag;       // Instruction ID
-        pc_t        pc;        // Program Counter
-        act_mask_t  act_mask;  // Activation Mask
-        inst_t      inst;      // Instruction
-        reg_idx_t   dst;       // Destination Register Index
+        iid_t       tag;      // Instruction ID
+        pc_t        pc;       // Program Counter
+        act_mask_t  act_mask; // Activation Mask
+        inst_t      inst;     // Instruction
+        reg_idx_t   dst;      // Destination Register Index
         warp_data_t [OperandsPerInst-1:0] operands; // Operands Data
     } opc_inst_t;
 
@@ -113,7 +130,8 @@ module register_opc_stage import bgpu_pkg::*; #(
 
     /// Operand Collectors
     // Insert instruction valid and ready per Operand Collector
-    logic [NumOperandCollectors-1:0] opc_insert_valid, opc_insert_ready;
+    opc_mask_t opc_insert_valid, opc_insert_ready, opc_insert_ready_tmp;
+    disp_inst_t [NumOperandCollectors-1:0] opc_insert_inst;
 
     // Read Request
     logic     [NumOPCRequestPorts-1:0] opc_read_req_valid;
@@ -134,9 +152,11 @@ module register_opc_stage import bgpu_pkg::*; #(
     warp_data_t [NumOPCRequestPorts-1:0] opc_read_rsp_data;
 
     // Read Response to Execution Units
-    logic      [NumOperandCollectors-1:0] opc_eu_valid, opc_eu_ready;
+    opc_mask_t opc_eu_ready;
     opc_inst_t [NumOperandCollectors-1:0] opc_eu_inst;
-    opc_inst_t                            selected_opc_inst;
+
+    opc_mask_t [DispatchWidth-1:0] rr_opc_valid, rr_opc_ready;
+    opc_inst_t [DispatchWidth-1:0] selected_opc_inst;
 
     /// Register File Banks
     // Write port
@@ -338,17 +358,38 @@ module register_opc_stage import bgpu_pkg::*; #(
 
     // Distribute the instruction to a ready Operand Collector
     always_comb begin : select_operand_collector_for_insert
-        opc_insert_valid = '0;
-        for (int i = 0; i < NumOperandCollectors; i++) begin : check_operand_collector_ready
-            if (opc_insert_ready[i]) begin
-                opc_insert_valid[i] = disp_valid_i;
-                break;
-            end
-        end : check_operand_collector_ready
-    end : select_operand_collector_for_insert
+        opc_insert_valid     = '0;
+        opc_insert_inst      = '0;
+        opc_ready_o          = '0;
+        opc_insert_ready_tmp = opc_insert_ready;
 
-    // We can accpet an instruction if at least one Operand Collector is ready
-    assign opc_ready_o = |opc_insert_ready;
+        for (int didx = 0; didx < DispatchWidth; didx++) begin
+            for (int i = 0; i < NumOperandCollectors; i++) begin
+                // Find first ready Operand Collector
+                if (opc_insert_ready_tmp[i]) begin
+                    opc_ready_o[didx] = 1'b1;
+                    opc_insert_ready_tmp[i] = 1'b0;
+
+                    // Handshake
+                    if (disp_valid_i[didx]) begin
+                        // Send instruction to Operand Collector
+                        opc_insert_valid[i] = 1'b1;
+
+                        // Connect instruction signals
+                        opc_insert_inst[i].tag        = disp_tag_i       [didx];
+                        opc_insert_inst[i].pc         = disp_pc_i        [didx];
+                        opc_insert_inst[i].act_mask   = disp_act_mask_i  [didx];
+                        opc_insert_inst[i].inst       = disp_inst_i      [didx];
+                        opc_insert_inst[i].dst        = disp_dst_i       [didx];
+                        opc_insert_inst[i].src_is_reg = disp_src_is_reg_i[didx];
+                        opc_insert_inst[i].src        = disp_src_i       [didx];
+                    end
+
+                    break;
+                end
+            end
+        end
+    end : select_operand_collector_for_insert
 
     // Generate Operand Collectors
     for (genvar i = 0; i < NumOperandCollectors; i++) begin : gen_operand_collectors
@@ -365,15 +406,15 @@ module register_opc_stage import bgpu_pkg::*; #(
             .rst_ni( rst_ni ),
 
             // From Multi Warp Dispatcher
-            .opc_ready_o        ( opc_insert_ready[i] ),
-            .disp_valid_i       ( opc_insert_valid[i] ),
-            .disp_tag_i         ( disp_tag_i          ),
-            .disp_pc_i          ( disp_pc_i           ),
-            .disp_act_mask_i    ( disp_act_mask_i     ),
-            .disp_inst_i        ( disp_inst_i         ),
-            .disp_dst_i         ( disp_dst_i          ),
-            .disp_src_required_i( disp_src_required_i ),
-            .disp_src_i         ( disp_src_i          ),
+            .opc_ready_o      ( opc_insert_ready[i]            ),
+            .disp_valid_i     ( opc_insert_valid[i]            ),
+            .disp_tag_i       ( opc_insert_inst [i].tag        ),
+            .disp_pc_i        ( opc_insert_inst [i].pc         ),
+            .disp_act_mask_i  ( opc_insert_inst [i].act_mask   ),
+            .disp_inst_i      ( opc_insert_inst [i].inst       ),
+            .disp_dst_i       ( opc_insert_inst [i].dst        ),
+            .disp_src_is_reg_i( opc_insert_inst [i].src_is_reg ),
+            .disp_src_i       ( opc_insert_inst [i].src        ),
 
             // To Register File
             .opc_read_req_valid_o  ( opc_read_req_valid  [i*OperandsPerInst +: OperandsPerInst] ),
@@ -387,7 +428,7 @@ module register_opc_stage import bgpu_pkg::*; #(
 
             // To Execution Units
             .eu_ready_i        ( opc_eu_ready[i]          ),
-            .opc_valid_o       ( opc_eu_valid[i]          ),
+            .opc_valid_o       ( rr_opc_valid[0][i]       ),
             .opc_tag_o         ( opc_eu_inst [i].tag      ),
             .opc_pc_o          ( opc_eu_inst [i].pc       ),
             .opc_act_mask_o    ( opc_eu_inst [i].act_mask ),
@@ -401,29 +442,43 @@ module register_opc_stage import bgpu_pkg::*; #(
     // # Operand Collector to Execution Unit Selection                                       #
     // #######################################################################################
 
-    // Arbitrate the output of the Operand Collectors to a single output stream
-    stream_arbiter #(
-        .DATA_T   ( opc_inst_t           ),
-        .N_INP    ( NumOperandCollectors ),
-        .ARBITER  ( "rr"                 )
-    ) i_opc_to_eu_arbiter (
-        .clk_i        ( clk_i             ),
-        .rst_ni       ( rst_ni            ),
-        .inp_data_i   ( opc_eu_inst       ),
-        .inp_valid_i  ( opc_eu_valid      ),
-        .inp_ready_o  ( opc_eu_ready      ),
-        .oup_data_o   ( selected_opc_inst ),
-        .oup_valid_o  ( opc_valid_o       ),
-        .oup_ready_i  ( eu_ready_i        )
-    );
+    always_comb begin : gen_opc_eu_ready
+        opc_eu_ready = '0;
+        for (int didx = 0; didx < DispatchWidth; didx++) begin
+            opc_eu_ready |= rr_opc_ready[didx];
+        end
+    end : gen_opc_eu_ready
 
-    // Assign the selected instruction to the output
-    assign opc_tag_o          = selected_opc_inst.tag;
-    assign opc_pc_o           = selected_opc_inst.pc;
-    assign opc_act_mask_o     = selected_opc_inst.act_mask;
-    assign opc_inst_o         = selected_opc_inst.inst;
-    assign opc_dst_o          = selected_opc_inst.dst;
-    assign opc_operand_data_o = selected_opc_inst.operands;
+    for (genvar didx = 0; didx < DispatchWidth; didx++) begin : gen_output_arbiter
+        if (didx > 0) begin : gen_upper_rr_opc_valid
+            assign rr_opc_valid[didx] = rr_opc_valid[didx-1] & (~rr_opc_ready[didx-1]);
+        end : gen_upper_rr_opc_valid
+
+        // Arbitrate the output of the Operand Collectors to a single output stream
+        stream_arbiter #(
+            .DATA_T   ( opc_inst_t           ),
+            .N_INP    ( NumOperandCollectors ),
+            .ARBITER  ( "prio"               )
+        ) i_opc_to_eu_arbiter (
+            .clk_i        ( clk_i       ),
+            .rst_ni       ( rst_ni      ),
+            .inp_data_i   ( opc_eu_inst ),
+
+            .inp_valid_i  ( rr_opc_valid     [didx] ),
+            .inp_ready_o  ( rr_opc_ready     [didx] ),
+            .oup_data_o   ( selected_opc_inst[didx] ),
+            .oup_valid_o  ( opc_valid_o      [didx] ),
+            .oup_ready_i  ( eu_ready_i       [didx] )
+        );
+
+        // Assign the selected instruction to the output
+        assign opc_tag_o         [didx] = selected_opc_inst[didx].tag;
+        assign opc_pc_o          [didx] = selected_opc_inst[didx].pc;
+        assign opc_act_mask_o    [didx] = selected_opc_inst[didx].act_mask;
+        assign opc_inst_o        [didx] = selected_opc_inst[didx].inst;
+        assign opc_dst_o         [didx] = selected_opc_inst[didx].dst;
+        assign opc_operand_data_o[didx] = selected_opc_inst[didx].operands;
+    end : gen_output_arbiter
 
     // #######################################################################################
     // # Assertions                                                                          #

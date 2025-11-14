@@ -16,6 +16,11 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     parameter time ApplDelay = 1ns,
     parameter time AcqDelay  = 8ns,
 
+    /// Enable bandwidth test mode (makes EUs always ready)
+    parameter bit BandwidthTestMode = 1'b0,
+
+    /// Number of instructions to dispatch simultaneously
+    parameter int unsigned DispatchWidth = 2,
     /// Number of instructions that can write back simultaneously
     parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions per warp
@@ -61,15 +66,19 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
 
     typedef reg_data_t [NumRegistersPerWarp-1:0] reg_per_warp_t;
     typedef reg_per_warp_t [NumWarps-1:0] reg_file_t;
+    typedef reg_data_t [OperandsPerInst-1:0] op_data_t;
+
+    typedef logic     [OperandsPerInst-1:0] op_is_reg_t;
+    typedef reg_idx_t [OperandsPerInst-1:0] op_idx_t;
 
     typedef struct packed {
-        iid_t      tag;
-        pc_t       pc;
-        act_mask_t active_mask;
-        inst_t     inst;
-        reg_idx_t  dst;
-        logic      [OperandsPerInst-1:0] srcs_required;
-        reg_idx_t  [OperandsPerInst-1:0] srcs;
+        iid_t       tag;
+        pc_t        pc;
+        act_mask_t  active_mask;
+        inst_t      inst;
+        reg_idx_t   dst;
+        op_is_reg_t srcs_is_reg;
+        op_idx_t    srcs;
     } disp_req_t;
 
     typedef struct packed {
@@ -78,7 +87,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
         act_mask_t active_mask;
         inst_t     inst;
         reg_idx_t  dst;
-        reg_data_t [OperandsPerInst-1:0] src_data;
+        op_data_t  src_data;
     } eu_req_t;
 
     typedef struct packed {
@@ -95,12 +104,27 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     logic clk, rst_n, initialized;
 
     // From Dispatcher
-    logic opc_ready, disp_valid;
-    disp_req_t disp_req;
+    logic      [DispatchWidth-1:0] opc_ready, disp_valid_mst, disp_valid;
+    disp_req_t [DispatchWidth-1:0] disp_req;
+
+    iid_t       [DispatchWidth-1:0] disp_req_tag;
+    pc_t        [DispatchWidth-1:0] disp_req_pc;
+    act_mask_t  [DispatchWidth-1:0] disp_req_active_mask;
+    inst_t      [DispatchWidth-1:0] disp_req_inst;
+    reg_idx_t   [DispatchWidth-1:0] disp_req_dst;
+    op_is_reg_t [DispatchWidth-1:0] disp_req_srcs_is_reg;
+    op_idx_t    [DispatchWidth-1:0] disp_req_srcs;
 
     // To Execution units
-    logic opc_valid, eu_ready;
-    eu_req_t eu_req;
+    logic [DispatchWidth-1:0] opc_valid, eu_ready, eu_ready_sub;
+    eu_req_t [DispatchWidth-1:0] eu_req;
+
+    iid_t      [DispatchWidth-1:0] eu_req_tag;
+    pc_t       [DispatchWidth-1:0] eu_req_pc;
+    act_mask_t [DispatchWidth-1:0] eu_req_active_mask;
+    inst_t     [DispatchWidth-1:0] eu_req_inst;
+    reg_idx_t  [DispatchWidth-1:0] eu_req_dst;
+    op_data_t  [DispatchWidth-1:0] eu_req_src_data;
 
     // From Execution units
     logic opc_to_eu_ready, eu_valid;
@@ -125,62 +149,87 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     // # Dispatcher Interface Master                                                         #
     // #######################################################################################
 
-    rand_stream_mst #(
-        .data_t       ( disp_req_t       ),
-        .ApplDelay    ( ApplDelay        ),
-        .AcqDelay     ( AcqDelay         ),
-        .MinWaitCycles( 0                ),
-        .MaxWaitCycles( MaxMstWaitCycles )
-    ) i_dispatcher_mst (
-        .clk_i  ( clk        ),
-        .rst_ni ( rst_n      ),
-        .valid_o( disp_valid ),
-        .ready_i( opc_ready  ),
-        .data_o ( disp_req   )
-    );
+    for (genvar didx = 0; didx < DispatchWidth; didx++) begin : gen_dispatcher_mst
+        rand_stream_mst #(
+            .data_t       ( disp_req_t       ),
+            .ApplDelay    ( ApplDelay        ),
+            .AcqDelay     ( AcqDelay         ),
+            .MinWaitCycles( 0                ),
+            .MaxWaitCycles( MaxMstWaitCycles )
+        ) i_dispatcher_mst (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
 
-    stream_watchdog #(
-        .NumCycles( WatchdogTimeout )
-    ) i_dispatcher_watchdog (
-        .clk_i  ( clk        ),
-        .rst_ni ( rst_n      ),
-        .valid_i( disp_valid ),
-        .ready_i( opc_ready  )
-    );
+            .valid_o( disp_valid_mst[didx] ),
+            .ready_i( opc_ready     [didx] ),
+            .data_o ( disp_req      [didx] )
+        );
+
+        stream_watchdog #(
+            .NumCycles( WatchdogTimeout )
+        ) i_dispatcher_watchdog (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
+
+            .valid_i( disp_valid_mst[didx] ),
+            .ready_i( opc_ready     [didx] )
+        );
+
+        assign disp_valid          [didx] = disp_valid_mst[didx] && initialized;
+        assign disp_req_tag        [didx] = disp_req[didx].tag;
+        assign disp_req_pc         [didx] = disp_req[didx].pc;
+        assign disp_req_active_mask[didx] = disp_req[didx].active_mask;
+        assign disp_req_inst       [didx] = disp_req[didx].inst;
+        assign disp_req_dst        [didx] = disp_req[didx].dst;
+        assign disp_req_srcs_is_reg[didx] = disp_req[didx].srcs_is_reg;
+        assign disp_req_srcs       [didx] = disp_req[didx].srcs;
+    end : gen_dispatcher_mst
 
     // #######################################################################################
     // # Execution Units                                                                     #
     // #######################################################################################
 
-    rand_stream_slv #(
-        .data_t       ( eu_req_t         ),
-        .ApplDelay    ( ApplDelay        ),
-        .AcqDelay     ( AcqDelay         ),
-        .MinWaitCycles( 1                ),
-        .MaxWaitCycles( MaxSubWaitCycles ),
-        .Enqueue      ( 1'b0             )
-    ) i_eu_sub (
-        .clk_i  ( clk       ),
-        .rst_ni ( rst_n     ),
-        .data_i ( eu_req    ),
-        .valid_i( opc_valid ),
-        .ready_o( eu_ready  )
-    );
+    for (genvar didx = 0; didx < DispatchWidth; didx++) begin : gen_eu
+        rand_stream_slv #(
+            .data_t       ( eu_req_t         ),
+            .ApplDelay    ( ApplDelay        ),
+            .AcqDelay     ( AcqDelay         ),
+            .MinWaitCycles( 1                ),
+            .MaxWaitCycles( MaxSubWaitCycles ),
+            .Enqueue      ( 1'b0             )
+        ) i_eu_sub (
+            .clk_i ( clk   ),
+            .rst_ni( rst_n ),
 
-    stream_watchdog #(
-        .NumCycles( WatchdogTimeout )
-    ) i_eu_watchdog (
-        .clk_i  ( clk                  ),
-        .rst_ni ( rst_n && initialized ),
-        .valid_i( opc_valid            ),
-        .ready_i( eu_ready             )
-    );
+            .data_i ( eu_req      [didx] ),
+            .valid_i( opc_valid   [didx] ),
+            .ready_o( eu_ready_sub[didx] )
+        );
+
+        stream_watchdog #(
+            .NumCycles( WatchdogTimeout )
+        ) i_eu_watchdog (
+            .clk_i  ( clk                  ),
+            .rst_ni ( rst_n && initialized ),
+            .valid_i( opc_valid   [didx]   ),
+            .ready_i( eu_ready_sub[didx]   )
+        );
+
+        assign eu_ready[didx]             = eu_ready_sub[didx] || BandwidthTestMode;
+        assign eu_req  [didx].tag         = eu_req_tag        [didx];
+        assign eu_req  [didx].pc          = eu_req_pc         [didx];
+        assign eu_req  [didx].active_mask = eu_req_active_mask[didx];
+        assign eu_req  [didx].inst        = eu_req_inst       [didx];
+        assign eu_req  [didx].dst         = eu_req_dst        [didx];
+        assign eu_req  [didx].src_data    = eu_req_src_data   [didx];
+    end : gen_eu
 
     // #######################################################################################
     // # DUT                                                                                 #
     // #######################################################################################
 
     register_opc_stage #(
+        .DispatchWidth        ( DispatchWidth         ),
         .WritebackWidth       ( WritebackWidth        ),
         .NumTags              ( NumTags               ),
         .PcWidth              ( PcWidth               ),
@@ -198,25 +247,25 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
         .rst_ni( rst_n ),
 
         // Dispatcher interface
-        .opc_ready_o        ( opc_ready                 ),
-        .disp_valid_i       ( disp_valid && initialized ),
-        .disp_tag_i         ( disp_req.tag              ),
-        .disp_pc_i          ( disp_req.pc               ),
-        .disp_act_mask_i    ( disp_req.active_mask      ),
-        .disp_inst_i        ( disp_req.inst             ),
-        .disp_dst_i         ( disp_req.dst              ),
-        .disp_src_required_i( disp_req.srcs_required    ),
-        .disp_src_i         ( disp_req.srcs             ),
+        .opc_ready_o      ( opc_ready            ),
+        .disp_valid_i     ( disp_valid           ),
+        .disp_tag_i       ( disp_req_tag         ),
+        .disp_pc_i        ( disp_req_pc          ),
+        .disp_act_mask_i  ( disp_req_active_mask ),
+        .disp_inst_i      ( disp_req_inst        ),
+        .disp_dst_i       ( disp_req_dst         ),
+        .disp_src_is_reg_i( disp_req_srcs_is_reg ),
+        .disp_src_i       ( disp_req_srcs        ),
 
         // To Execution units
         .opc_valid_o       ( opc_valid          ),
         .eu_ready_i        ( eu_ready           ),
-        .opc_tag_o         ( eu_req.tag         ),
-        .opc_pc_o          ( eu_req.pc          ),
-        .opc_act_mask_o    ( eu_req.active_mask ),
-        .opc_inst_o        ( eu_req.inst        ),
-        .opc_dst_o         ( eu_req.dst         ),
-        .opc_operand_data_o( eu_req.src_data    ),
+        .opc_tag_o         ( eu_req_tag         ),
+        .opc_pc_o          ( eu_req_pc          ),
+        .opc_act_mask_o    ( eu_req_active_mask ),
+        .opc_inst_o        ( eu_req_inst        ),
+        .opc_dst_o         ( eu_req_dst         ),
+        .opc_operand_data_o( eu_req_src_data    ),
 
         // From Execution units
         .opc_to_eu_ready_o( opc_to_eu_ready ),
@@ -234,6 +283,29 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     disp_req_t disp_requests[$];
     eu_req_t   eu_requests  [$];
 
+    initial begin : acquire_block
+        forever begin
+            @(posedge clk);
+            for (int didx = 0; didx < DispatchWidth; didx++) begin
+                if (opc_ready[didx] && disp_valid[didx]) begin
+                    // Add dispatch request to the queue
+                    disp_requests.push_back(disp_req[didx]);
+                    $display("Disp req %d: Tag %0h, PC %0h, Act Mask %b, Dst %0d, Inst %0h, Req %b",
+                        didx, disp_req[didx].tag, disp_req[didx].pc, disp_req[didx].active_mask,
+                        disp_req[didx].dst, disp_req[didx].inst, disp_req[didx].srcs_is_reg);
+                end
+
+                if (opc_valid[didx] && eu_ready[didx]) begin
+                    // Add to EU requests
+                    eu_requests.push_back(eu_req[didx]);
+                    $display("EU req %d: Tag %0h, PC %0h, Act Mask %b, Dst %0d, Inst %0h, Data %h",
+                        didx, eu_req[didx].tag, eu_req[didx].pc, eu_req[didx].active_mask,
+                        eu_req[didx].dst, eu_req[didx].inst, eu_req[didx].src_data);
+                end
+            end
+        end
+    end : acquire_block
+
     // Check if dispatched instruction and instruction sent to Execution Unit match
     initial begin : check_disp_req_match
         disp_req_t   disp;
@@ -245,74 +317,53 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
 
         forever begin
             @(posedge clk);
-            #AcqDelay;
-            #1ns;
+            while (disp_requests.size() > 0 && eu_requests.size() > 0) begin
+                // Get newest eu request
+                eu = eu_requests.pop_front();
 
-            if (opc_ready && disp_valid && initialized) begin
-                // Add dispatch request to the queue
-                disp_requests.push_back(disp_req);
-                $display("Dispatch req: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h, Req %b",
-                    disp_req.tag, disp_req.pc, disp_req.active_mask, disp_req.dst, disp_req.inst,
-                    disp_req.srcs_required);
-            end
+                // Search for matching dispatch request
+                found = 1'b0;
+                foreach (disp_requests[i]) begin
+                    disp = disp_requests[i];
+                    if (disp.tag == eu.tag
+                        && disp.pc == eu.pc
+                        && disp.active_mask == eu.active_mask
+                        && disp.dst == eu.dst
+                        && disp.inst == eu.inst) begin
 
-            if (opc_valid && eu_ready) begin
-                // Add to EU requests
-                eu_requests.push_back(eu_req);
-                $display("EU req: Tag %0h, PC %0h, Active Mask %b, Dst %0d, Inst %0h, Src Data %h",
-                    eu_req.tag, eu_req.pc, eu_req.active_mask, eu_req.dst, eu_req.inst,
-                    eu_req.src_data);
-            end
+                        for (int j = 0; j < OperandsPerInst; j++) begin
+                            if (!disp.srcs_is_reg[j]) begin
+                                continue; // Skip if the source is not required
+                            end
 
-            if (disp_requests.size() == 0 || eu_requests.size() == 0) begin
-                continue;
-            end
+                            wid = 0;
+                            reg_idx = 0;
 
-            // Get newest eu request
-            eu = eu_requests.pop_front();
+                            if (NumWarps > 1)
+                                wid[WidWidth-1:0] = eu.tag[WidWidth-1:0];
 
-            // Search for matching dispatch request
-            found = 1'b0;
-            foreach (disp_requests[i]) begin
-                disp = disp_requests[i];
-                if (disp.tag == eu.tag
-                    && disp.pc == eu.pc
-                    && disp.active_mask == eu.active_mask
-                    && disp.dst == eu.dst
-                    && disp.inst == eu.inst) begin
+                            reg_idx[RegIdxWidth-1:0] = disp.srcs[j];
 
-                    for (int j = 0; j < OperandsPerInst; j++) begin
-                        if (!disp.srcs_required[j]) begin
-                            continue; // Skip if the source is not required
+                            if (eu.src_data[j] != reg_file[wid][reg_idx]) begin
+                                $display("Mismatch in source data for operand %0d", j);
+                                $error("Expected: %0h, Got: %0h",
+                                    reg_file[wid][reg_idx], eu.src_data[j]);
+                            end else begin
+                                $display("Source data for operand %0d: %0d == %0d", j,
+                                    eu.src_data[j], reg_file[wid][reg_idx]);
+                            end
                         end
 
-                        wid = 0;
-                        reg_idx = 0;
-
-                        if (NumWarps > 1)
-                            wid[WidWidth-1:0] = eu.tag[WidWidth-1:0];
-
-                        reg_idx[RegIdxWidth-1:0] = disp.srcs[j];
-
-                        if (eu.src_data[j] != reg_file[wid][reg_idx]) begin
-                            $display("Mismatch in source data for operand %0d", j);
-                            $error("Expected: %0h, Got: %0h",
-                                reg_file[wid][reg_idx], eu.src_data[j]);
-                        end else begin
-                            $display("Source data for operand %0d: %0d == %0d", j,
-                                eu.src_data[j], reg_file[wid][reg_idx]);
-                        end
+                        disp_requests.delete(i);
+                        found = 1'b1;
+                        break;
                     end
-
-                    disp_requests.delete(i);
-                    found = 1'b1;
-                    break;
                 end
-            end
 
-            assert (found)
-            else $error("No matching dispatch request found for Execution Unit request tag %0h!",
-                eu.tag);
+                assert (found)
+                else $error("No matching disp request found for Execution Unit request tag %0h!",
+                    eu.tag);
+            end
         end
     end : check_disp_req_match
 
@@ -343,6 +394,9 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
     initial begin : simulation_logic
         int unsigned cycles, dispatched_insts, insts_sent_to_eu;
 
+        int unsigned dispatched_insts_per_port[DispatchWidth];
+        int unsigned insts_sent_to_eu_per_port[DispatchWidth];
+
         int unsigned dispatched_per_opc     [NumOperandCollectors];
         int unsigned insts_completed_per_opc[NumOperandCollectors];
         int unsigned read_stalls_per_opc    [NumOperandCollectors];
@@ -359,6 +413,9 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
         cycles = 0;
         dispatched_insts = 0;
         insts_sent_to_eu = 0;
+
+        dispatched_insts_per_port = '{default: 0};
+        insts_sent_to_eu_per_port = '{default: 0};
 
         disp_requests = {};
         eu_requests   = {};
@@ -396,29 +453,47 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
         #ApplDelay;
         eu_valid    = 1'b0;
         @(posedge clk);
+        #ApplDelay;
+        initialized = 1'b1;
 
         $display("Starting simulation!");
 
         while (cycles < MaxSimCycles && insts_sent_to_eu < InstsToComplete) begin
             // Wait for clock edge
             @(posedge clk);
-            #ApplDelay;
-            initialized = 1'b1;
-            #(AcqDelay-ApplDelay);
             cycles++;
 
-            // Instruction dispatch
-            if (disp_valid && opc_ready) begin
-                dispatched_insts++;
-                $display("Cycle %0d: Dispatching instruction", cycles);
-                $display("\tTag: %0h", disp_req.tag);
-                $display("\tPC: %0h", disp_req.pc);
-                $display("\tActive Mask: %b", disp_req.active_mask);
-                $display("\tInstruction: %0h", disp_req.inst);
-                $display("\tDst reg: %0d", disp_req.dst);
-                for (int i = 0; i < OperandsPerInst; i++) begin
-                    $display("\tSrc[%0d] req: %0b reg: %0d", i, disp_req.srcs_required[i],
-                        disp_req.srcs[i]);
+            for (int didx = 0; didx < DispatchWidth; didx++) begin
+                // Instruction dispatch
+                if (disp_valid[didx] && opc_ready[didx]) begin
+                    dispatched_insts++;
+                    dispatched_insts_per_port[didx]++;
+                    $display("Cycle %0d: Dispatching instruction %d", cycles, didx);
+                    $display("\tTag: %0h", disp_req[didx].tag);
+                    $display("\tPC: %0h", disp_req[didx].pc);
+                    $display("\tActive Mask: %b", disp_req[didx].active_mask);
+                    $display("\tInstruction: %0h", disp_req[didx].inst);
+                    $display("\tDst reg: %0d", disp_req[didx].dst);
+                    for (int i = 0; i < OperandsPerInst; i++) begin
+                        $display("\tSrc[%0d] req: %0b reg: %0d", i, disp_req[didx].srcs_is_reg[i],
+                            disp_req[didx].srcs[i]);
+                    end
+                end
+
+                // To Execution units
+                if (opc_valid[didx] && eu_ready[didx]) begin
+                    insts_sent_to_eu++;
+                    insts_sent_to_eu_per_port[didx]++;
+                    $display("Cycle %0d: Sending instruction to Execution Unit %d", cycles, didx);
+                    $display("\tTag: %0h", eu_req[didx].tag);
+                    $display("\tTag (wid): %0h", eu_req[didx].tag[WidWidth-1:0]);
+                    $display("\tPC: %0h", eu_req[didx].pc);
+                    $display("\tActive Mask: %b", eu_req[didx].active_mask);
+                    $display("\tInstruction: %0h", eu_req[didx].inst);
+                    $display("\tDst reg: %0d", eu_req[didx].dst);
+                    for (int i = 0; i < OperandsPerInst; i++) begin
+                        $display("\tSrc[%0d] data: %0h", i, eu_req[didx].src_data[i]);
+                    end
                 end
             end
 
@@ -430,7 +505,7 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
                         i);
                 end
                 if (i_register_opc_stage.opc_eu_ready[i]
-                    && i_register_opc_stage.opc_eu_valid[i]
+                    && i_register_opc_stage.rr_opc_valid[0][i]
                 ) begin
                     insts_completed_per_opc[i]++;
                     $display("Cycle %0d: Operand Collector %0d is sending instruction to EU",
@@ -447,21 +522,6 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
                     end
                 end
             end
-
-            // To Execution units
-            if (opc_valid && eu_ready) begin
-                insts_sent_to_eu++;
-                $display("Cycle %0d: Sending instruction to Execution Unit", cycles);
-                $display("\tTag: %0h", eu_req.tag);
-                $display("\tTag (wid): %0h", eu_req.tag[WidWidth-1:0]);
-                $display("\tPC: %0h", eu_req.pc);
-                $display("\tActive Mask: %b", eu_req.active_mask);
-                $display("\tInstruction: %0h", eu_req.inst);
-                $display("\tDst reg: %0d", eu_req.dst);
-                for (int i = 0; i < OperandsPerInst; i++) begin
-                    $display("\tSrc[%0d] data: %0h", i, eu_req.src_data[i]);
-                end
-            end
         end
 
         $dumpflush;
@@ -474,6 +534,18 @@ module tb_register_opc_stage import bgpu_pkg::*; #(
 
         assert (insts_sent_to_eu > 0)
         else $error("No instructions were sent to the Execution Units during the simulation!");
+
+        for (int i = 0; i < DispatchWidth; i++) begin
+            $display("Dispatched %0d instructions on port %0d", dispatched_insts_per_port[i], i);
+            $display("Sent %0d instructions to Execution Units on port %0d",
+                insts_sent_to_eu_per_port[i], i);
+
+            assert (dispatched_insts_per_port[i] > 0)
+            else $warning("No instructions were dispatched on port %0d!", i);
+
+            assert (insts_sent_to_eu_per_port[i] > 0)
+            else $warning("No instructions were sent to Execution Units on port %0d!", i);
+        end
 
         dispatched_insts_sum = 0;
         insts_completed_insts_sum = 0;

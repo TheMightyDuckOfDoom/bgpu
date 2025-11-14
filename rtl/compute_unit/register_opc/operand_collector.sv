@@ -22,29 +22,31 @@ module operand_collector import bgpu_pkg::*; #(
     parameter int unsigned RegWidth = 32,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter int unsigned TagWidth    = $clog2(NumTags),
-    parameter int unsigned WidWidth    = NumWarps > 1 ? $clog2(NumWarps) : 1,
-    parameter type         wid_t       = logic [            WidWidth-1:0],
-    parameter type         reg_idx_t   = logic [         RegIdxWidth-1:0],
-    parameter type         pc_t        = logic [             PcWidth-1:0],
-    parameter type         act_mask_t  = logic [           WarpWidth-1:0],
-    parameter type         warp_data_t = logic [RegWidth * WarpWidth-1:0],
-    parameter type         iid_t       = logic [   TagWidth+WidWidth-1:0]
+    parameter int unsigned TagWidth     = $clog2(NumTags),
+    parameter int unsigned WidWidth     = NumWarps > 1 ? $clog2(NumWarps) : 1,
+    parameter type         wid_t        = logic     [            WidWidth-1:0],
+    parameter type         reg_idx_t    = logic     [         RegIdxWidth-1:0],
+    parameter type         pc_t         = logic     [             PcWidth-1:0],
+    parameter type         act_mask_t   = logic     [           WarpWidth-1:0],
+    parameter type         warp_data_t  = logic     [RegWidth * WarpWidth-1:0],
+    parameter type         iid_t        = logic     [   TagWidth+WidWidth-1:0],
+    parameter type         op_is_reg_t  = logic     [     OperandsPerInst-1:0],
+    parameter type         op_reg_idx_t = reg_idx_t [     OperandsPerInst-1:0]
 ) (
     // Clock and Reset
     input  logic clk_i,
     input  logic rst_ni,
 
     /// From Multi Warp Dispatcher
-    output logic      opc_ready_o,
-    input  logic      disp_valid_i,
-    input  iid_t      disp_tag_i,
-    input  pc_t       disp_pc_i,
-    input  act_mask_t disp_act_mask_i,
-    input  inst_t     disp_inst_i,
-    input  reg_idx_t  disp_dst_i,
-    input  logic      [OperandsPerInst-1:0] disp_src_required_i,
-    input  reg_idx_t  [OperandsPerInst-1:0] disp_src_i,
+    output logic        opc_ready_o,
+    input  logic        disp_valid_i,
+    input  iid_t        disp_tag_i,
+    input  pc_t         disp_pc_i,
+    input  act_mask_t   disp_act_mask_i,
+    input  inst_t       disp_inst_i,
+    input  reg_idx_t    disp_dst_i,
+    input  op_is_reg_t  disp_src_is_reg_i,
+    input  op_reg_idx_t disp_src_i,
 
     /// To Register File
     output logic     [OperandsPerInst-1:0] opc_read_req_valid_o,
@@ -132,9 +134,9 @@ module operand_collector import bgpu_pkg::*; #(
             // Insert new instruction |-> Handshake
             if (disp_valid_i && opc_ready_o) begin : new_instruction
                 // If we do not require the operand, we are ready and have already requested it
-                operand_d[i].requested = !disp_src_required_i[i];
-                operand_d[i].ready     = !disp_src_required_i[i];
-                if (disp_src_required_i[i])
+                operand_d[i].requested = !disp_src_is_reg_i[i];
+                operand_d[i].ready     = !disp_src_is_reg_i[i];
+                if (disp_src_is_reg_i[i])
                     operand_d[i].reg_idx = disp_src_i[i];
                 else begin : operands_not_required
                     // Store register index of operands in the data
