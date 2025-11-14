@@ -57,7 +57,7 @@ module bgpu_soc #(
     // Memory Block index width -> Memory request width is 2^BlockIdxBits bytes
     parameter int unsigned BlockIdxBits = 4,
     // Width of the id for load/store requests queue -> 2^OutstandingReqIdxWidth memory requests per CU
-    parameter int unsigned OutstandingReqIdxWidth = 1,
+    parameter int unsigned OutstandingReqIdxWidth = 2,
     // Number of cache lines in the instruction cache
     parameter int unsigned NumIClines = 8,
     // Number of bits for the instruction cache line index -> 2^IClineIdxBits instructions per line
