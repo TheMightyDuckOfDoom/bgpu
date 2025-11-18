@@ -8,8 +8,12 @@
 module compute_unit import bgpu_pkg::*; #(
     /// Number of instructions to fetch for the warp
     parameter int unsigned FetchWidth = 1,
-    /// Number of instructions that can write back simultaneously
-    parameter int unsigned WritebackWidth = 1,
+    /// Number of instructions to dispatch simultaneously
+    parameter int unsigned DispatchWidth = 1,
+    /// Should we have DispatchWidth Integer Units? Otherwise only one IU is instantiated.
+    parameter bit          MultiIU = 1'b1,
+    /// Should we have DispatchWidth Integer Units? Otherwise only one FPU is instantiated.
+    parameter bit          MultiFPU = 1'b1,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -128,20 +132,24 @@ module compute_unit import bgpu_pkg::*; #(
     localparam int unsigned TagWidth       =   NumTags > 1 ? $clog2(NumTags)   : 1;
     localparam int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
 
+    localparam int unsigned NumIUs  = MultiIU  ? DispatchWidth : 1;
+    localparam int unsigned NumFPUs = MultiFPU ? DispatchWidth : 1;
+
     // #######################################################################################
     // # Typedefs                                                                            #
     // #######################################################################################
 
     // Typedefs
-    typedef logic     [         RegIdxWidth-1:0] reg_idx_t;
-    typedef logic     [ WidWidth + TagWidth-1:0] iid_t;
-    typedef logic     [           WarpWidth-1:0] act_mask_t;
-    typedef logic     [RegWidth * WarpWidth-1:0] warp_data_t;
-    typedef logic     [            WidWidth-1:0] wid_t;
-    typedef logic     [      SubwarpIdWidth-1:0] subwarp_id_t;
-    typedef logic     [          FetchWidth-1:0] fetch_mask_t;
-    typedef logic     [     OperandsPerInst-1:0] op_is_reg_t;
-    typedef reg_idx_t [     OperandsPerInst-1:0] op_reg_idx_t;
+    typedef logic       [         RegIdxWidth-1:0] reg_idx_t;
+    typedef logic       [ WidWidth + TagWidth-1:0] iid_t;
+    typedef logic       [           WarpWidth-1:0] act_mask_t;
+    typedef logic       [RegWidth * WarpWidth-1:0] warp_data_t;
+    typedef logic       [            WidWidth-1:0] wid_t;
+    typedef logic       [      SubwarpIdWidth-1:0] subwarp_id_t;
+    typedef logic       [          FetchWidth-1:0] fetch_mask_t;
+    typedef logic       [     OperandsPerInst-1:0] op_is_reg_t;
+    typedef reg_idx_t   [     OperandsPerInst-1:0] op_reg_idx_t;
+    typedef warp_data_t [     OperandsPerInst-1:0] op_data_t;
 
     // Fetcher to Instruction Cache type
     typedef struct packed {
@@ -175,25 +183,14 @@ module compute_unit import bgpu_pkg::*; #(
         op_reg_idx_t [FetchWidth-1:0] operands;
     } dec_to_ib_data_t;
 
-    // Multi Warp Dispatcher to Register Operand Collector Stage type
+    // Register Operand Collector Stage to Execution Units type
     typedef struct packed {
         iid_t      tag;
         pc_t       pc;
         act_mask_t act_mask;
         inst_t     inst;
         reg_idx_t  dst;
-        logic      [OperandsPerInst-1:0] operands_is_reg;
-        reg_idx_t  [OperandsPerInst-1:0] operands;
-    } disp_to_opc_data_t;
-
-    // Register Operand Collector Stage to Execution Units type
-    typedef struct packed {
-        iid_t       tag;
-        pc_t        pc;
-        act_mask_t  act_mask;
-        inst_t      inst;
-        reg_idx_t   dst;
-        warp_data_t [OperandsPerInst-1:0] operands;
+        op_data_t  operands;
     } opc_to_eu_data_t;
 
     // Execution Units to Register Operand Collector Stage type
@@ -245,33 +242,58 @@ module compute_unit import bgpu_pkg::*; #(
     logic        [NumWarps-1:0] ib_all_instr_finished; // Are there any instructions in flight?
 
     // Multi Warp Dispatcher to Register Operand Collector Stage
-    logic disp_to_opc_valid, opc_to_disp_ready;
-    disp_to_opc_data_t disp_to_opc_data;
+    logic        [DispatchWidth-1:0] disp_to_opc_valid, opc_to_disp_ready;
+    iid_t        [DispatchWidth-1:0] disp_to_opc_tag;
+    pc_t         [DispatchWidth-1:0] disp_to_opc_pc;
+    act_mask_t   [DispatchWidth-1:0] disp_to_opc_act_mask;
+    inst_t       [DispatchWidth-1:0] disp_to_opc_inst;
+    reg_idx_t    [DispatchWidth-1:0] disp_to_opc_dst;
+    op_is_reg_t  [DispatchWidth-1:0] disp_to_opc_operands_is_reg;
+    op_reg_idx_t [DispatchWidth-1:0] disp_to_opc_operands;
 
     // Register Operand Collector Stage to Execution Units
-    logic opc_to_eu_valid_d, opc_to_eu_valid_q,  eu_to_opc_ready_d, eu_to_opc_ready_q;
-    logic opc_to_iu_valid,  iu_to_opc_ready;
-    logic opc_to_fpu_valid, fpu_to_opc_ready;
-    logic opc_to_lsu_valid, lsu_to_opc_ready;
-    logic opc_to_bru_valid, bru_to_opc_ready;
-    opc_to_eu_data_t opc_to_eu_data_q, opc_to_eu_data_d;
+    logic [DispatchWidth-1:0] opc_to_eu_valid_d, opc_to_eu_valid_q,  eu_to_opc_ready_d, eu_to_opc_ready_q;
+    logic [DispatchWidth-1:0] opc_to_iu_valid,   iu_to_opc_ready;
+    logic [DispatchWidth-1:0] opc_to_fpu_valid,  fpu_to_opc_ready;
+    logic [DispatchWidth-1:0] opc_to_lsu_valid,  lsu_to_opc_ready;
+    logic [DispatchWidth-1:0] opc_to_bru_valid,  bru_to_opc_ready;
+
+    logic            [NumIUs-1:0] iu_in_valid, iu_in_ready;
+    opc_to_eu_data_t [NumIUs-1:0] iu_in_data;
+
+    logic            [NumFPUs-1:0] fpu_in_valid, fpu_in_ready;
+    opc_to_eu_data_t [NumFPUs-1:0] fpu_in_data;
+
+    logic lsu_in_valid, lsu_in_ready;
+    opc_to_eu_data_t lsu_in_data;
+
+    logic bru_in_valid, bru_in_ready;
+    opc_to_eu_data_t bru_in_data;
+
+    iid_t            [DispatchWidth-1:0] opc_to_eu_tag_d;
+    pc_t             [DispatchWidth-1:0] opc_to_eu_pc_d;
+    act_mask_t       [DispatchWidth-1:0] opc_to_eu_act_mask_d;
+    inst_t           [DispatchWidth-1:0] opc_to_eu_inst_d;
+    reg_idx_t        [DispatchWidth-1:0] opc_to_eu_dst_d;
+    op_data_t        [DispatchWidth-1:0] opc_to_eu_operands_d;
+    opc_to_eu_data_t [DispatchWidth-1:0] opc_to_eu_data_q, opc_to_eu_data_d;
 
     // Execution Units to Register Operand Collector Stage
-    logic iu_to_rc_valid,  rc_to_iu_ready;
-    logic fpu_to_rc_valid, rc_to_fpu_ready;
-    logic lsu_to_rc_valid, rc_to_lsu_ready;
-    logic bru_to_rc_valid, rc_to_bru_ready;
-    eu_to_opc_data_t iu_to_rc_data, fpu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
+    logic [DispatchWidth-1:0] iu_to_rc_valid,  rc_to_iu_ready;
+    logic [DispatchWidth-1:0] fpu_to_rc_valid, rc_to_fpu_ready;
+    logic [DispatchWidth-1:0] lsu_to_rc_valid, rc_to_lsu_ready;
+    logic [DispatchWidth-1:0] bru_to_rc_valid, rc_to_bru_ready;
+    eu_to_opc_data_t [DispatchWidth-1:0] iu_to_rc_data, fpu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
 
     // Writeback from Execution Units to Register Operand Collector Stage
-    logic [WritebackWidth-1:0] opc_to_eu_ready_q, opc_to_eu_ready_d;
-    logic [WritebackWidth-1:0] eu_to_opc_valid_q, eu_to_opc_valid_d;
-    eu_to_opc_data_t [WritebackWidth-1:0] eu_to_opc_data_q,  eu_to_opc_data_d;
+    logic            [DispatchWidth-1:0] opc_to_eu_ready_q, opc_to_eu_ready_d;
+    logic            [DispatchWidth-1:0] eu_to_opc_valid_q, eu_to_opc_valid_d;
+    eu_to_opc_data_t [DispatchWidth-1:0] eu_to_opc_data_q,  eu_to_opc_data_d;
 
-    iid_t       [WritebackWidth-1:0] eu_to_opc_data_tags_q;
-    act_mask_t  [WritebackWidth-1:0] eu_to_opc_data_act_masks_q;
-    reg_idx_t   [WritebackWidth-1:0] eu_to_opc_data_dsts_q;
-    warp_data_t [WritebackWidth-1:0] eu_to_opc_data_data_q;
+    iid_t       [DispatchWidth-1:0] eu_to_opc_data_tags_q;
+    act_mask_t  [DispatchWidth-1:0] eu_to_opc_data_act_masks_q;
+    reg_idx_t   [DispatchWidth-1:0] eu_to_opc_data_dsts_q;
+    warp_data_t [DispatchWidth-1:0] eu_to_opc_data_data_q;
 
     // Branch Unit to Fetcher
     logic      bru_branch;
@@ -280,9 +302,8 @@ module compute_unit import bgpu_pkg::*; #(
     pc_t       bru_branch_pc;
 
     // Result Collector
-    rc_mask_t [WritebackWidth-1:0] eu_to_rc_valid;
-    rc_mask_t [WritebackWidth-1:0] rc_to_eu_ready;
-    rc_mask_t rc_to_eu_ready_comb;
+    rc_mask_t [DispatchWidth-1:0] eu_to_rc_valid;
+    rc_mask_t [DispatchWidth-1:0] rc_to_eu_ready;
 
     // #######################################################################################
     // # Fetcher                                                                             #
@@ -482,14 +503,15 @@ module compute_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     multi_warp_dispatcher #(
-        .WritebackWidth       ( WritebackWidth       ),
-        .FetchWidth           ( FetchWidth           ),
-        .NumTags              ( NumTags              ),
-        .PcWidth              ( PcWidth              ),
-        .NumWarps             ( NumWarps             ),
-        .WarpWidth            ( WarpWidth            ),
-        .RegIdxWidth          ( RegIdxWidth          ),
-        .OperandsPerInst      ( OperandsPerInst      )
+        .DispatchWidth  ( DispatchWidth   ),
+        .WritebackWidth ( DispatchWidth   ),
+        .FetchWidth     ( FetchWidth      ),
+        .NumTags        ( NumTags         ),
+        .PcWidth        ( PcWidth         ),
+        .NumWarps       ( NumWarps        ),
+        .WarpWidth      ( WarpWidth       ),
+        .RegIdxWidth    ( RegIdxWidth     ),
+        .OperandsPerInst( OperandsPerInst )
     ) i_warp_dispatcher (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
@@ -518,18 +540,18 @@ module compute_unit import bgpu_pkg::*; #(
         .dec_operands_is_reg_i ( dec_to_ib_data_q.operands_is_reg ),
         .dec_operands_i        ( dec_to_ib_data_q.operands        ),
 
-        .opc_ready_i           ( opc_to_disp_ready                ),
-        .disp_valid_o          ( disp_to_opc_valid                ),
-        .disp_tag_o            ( disp_to_opc_data.tag             ),
-        .disp_pc_o             ( disp_to_opc_data.pc              ),
-        .disp_act_mask_o       ( disp_to_opc_data.act_mask        ),
-        .disp_inst_o           ( disp_to_opc_data.inst            ),
-        .disp_dst_o            ( disp_to_opc_data.dst             ),
-        .disp_operands_is_reg_o( disp_to_opc_data.operands_is_reg ),
-        .disp_operands_o       ( disp_to_opc_data.operands        ),
+        .opc_ready_i           ( opc_to_disp_ready           ),
+        .disp_valid_o          ( disp_to_opc_valid           ),
+        .disp_tag_o            ( disp_to_opc_tag             ),
+        .disp_pc_o             ( disp_to_opc_pc              ),
+        .disp_act_mask_o       ( disp_to_opc_act_mask        ),
+        .disp_inst_o           ( disp_to_opc_inst            ),
+        .disp_dst_o            ( disp_to_opc_dst             ),
+        .disp_operands_is_reg_o( disp_to_opc_operands_is_reg ),
+        .disp_operands_o       ( disp_to_opc_operands        ),
 
-        .opc_eu_handshake_i( opc_to_eu_valid_d && eu_to_opc_ready_q ),
-        .opc_eu_tag_i      ( opc_to_eu_data_d.tag                   ),
+        .opc_eu_handshake_i( opc_to_eu_valid_d & eu_to_opc_ready_q ),
+        .opc_eu_tag_i      ( opc_to_eu_tag_d                       ),
 
         .eu_valid_i( eu_to_opc_valid_q & opc_to_eu_ready_d ),
         .eu_tag_i  ( eu_to_opc_data_tags_q                 )
@@ -540,7 +562,8 @@ module compute_unit import bgpu_pkg::*; #(
     // #######################################################################################
 
     register_opc_stage #(
-        .WritebackWidth       ( WritebackWidth        ),
+        .DispatchWidth        ( DispatchWidth         ),
+        .WritebackWidth       ( DispatchWidth         ),
         .NumTags              ( NumTags               ),
         .PcWidth              ( PcWidth               ),
         .NumWarps             ( NumWarps              ),
@@ -555,24 +578,24 @@ module compute_unit import bgpu_pkg::*; #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .opc_ready_o       ( opc_to_disp_ready                ),
-        .disp_valid_i      ( disp_to_opc_valid                ),
-        .disp_tag_i        ( disp_to_opc_data.tag             ),
-        .disp_pc_i         ( disp_to_opc_data.pc              ),
-        .disp_act_mask_i   ( disp_to_opc_data.act_mask        ),
-        .disp_inst_i       ( disp_to_opc_data.inst            ),
-        .disp_dst_i        ( disp_to_opc_data.dst             ),
-        .disp_src_is_reg_i ( disp_to_opc_data.operands_is_reg ),
-        .disp_src_i        ( disp_to_opc_data.operands        ),
+        .opc_ready_o       ( opc_to_disp_ready           ),
+        .disp_valid_i      ( disp_to_opc_valid           ),
+        .disp_tag_i        ( disp_to_opc_tag             ),
+        .disp_pc_i         ( disp_to_opc_pc              ),
+        .disp_act_mask_i   ( disp_to_opc_act_mask        ),
+        .disp_inst_i       ( disp_to_opc_inst            ),
+        .disp_dst_i        ( disp_to_opc_dst             ),
+        .disp_src_is_reg_i ( disp_to_opc_operands_is_reg ),
+        .disp_src_i        ( disp_to_opc_operands        ),
 
-        .eu_ready_i        ( eu_to_opc_ready_q         ),
-        .opc_valid_o       ( opc_to_eu_valid_d         ),
-        .opc_tag_o         ( opc_to_eu_data_d.tag      ),
-        .opc_pc_o          ( opc_to_eu_data_d.pc       ),
-        .opc_act_mask_o    ( opc_to_eu_data_d.act_mask ),
-        .opc_inst_o        ( opc_to_eu_data_d.inst     ),
-        .opc_dst_o         ( opc_to_eu_data_d.dst      ),
-        .opc_operand_data_o( opc_to_eu_data_d.operands ),
+        .eu_ready_i        ( eu_to_opc_ready_q    ),
+        .opc_valid_o       ( opc_to_eu_valid_d    ),
+        .opc_tag_o         ( opc_to_eu_tag_d      ),
+        .opc_pc_o          ( opc_to_eu_pc_d       ),
+        .opc_act_mask_o    ( opc_to_eu_act_mask_d ),
+        .opc_inst_o        ( opc_to_eu_inst_d     ),
+        .opc_dst_o         ( opc_to_eu_dst_d      ),
+        .opc_operand_data_o( opc_to_eu_operands_d ),
 
         .opc_to_eu_ready_o( opc_to_eu_ready_d          ),
         .eu_valid_i       ( eu_to_opc_valid_q          ),
@@ -585,112 +608,207 @@ module compute_unit import bgpu_pkg::*; #(
     // #######################################################################################
     // # Execution Unit Demux                                                                #
     // #######################################################################################
+     
+    for (genvar didx = 0; didx < DispatchWidth; didx++) begin
+        assign opc_to_eu_data_d[didx].tag      = opc_to_eu_tag_d     [didx];        
+        assign opc_to_eu_data_d[didx].pc       = opc_to_eu_pc_d      [didx];         
+        assign opc_to_eu_data_d[didx].act_mask = opc_to_eu_act_mask_d[didx]; 
+        assign opc_to_eu_data_d[didx].inst     = opc_to_eu_inst_d    [didx];       
+        assign opc_to_eu_data_d[didx].dst      = opc_to_eu_dst_d     [didx];        
+        assign opc_to_eu_data_d[didx].operands = opc_to_eu_operands_d[didx]; 
 
-    spill_register #(
-        .T( opc_to_eu_data_t )
-    ) i_opc_to_eu_reg (
-        .clk_i ( clk_i  ),
-        .rst_ni( rst_ni ),
+        spill_register #(
+            .T( opc_to_eu_data_t )
+        ) i_opc_to_eu_reg (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
 
-        .valid_i( opc_to_eu_valid_d ),
-        .ready_o( eu_to_opc_ready_q ),
-        .data_i ( opc_to_eu_data_d  ),
+            .valid_i( opc_to_eu_valid_d[didx] ),
+            .ready_o( eu_to_opc_ready_q[didx] ),
+            .data_i ( opc_to_eu_data_d [didx] ),
 
-        .valid_o( opc_to_eu_valid_q ),
-        .ready_i( eu_to_opc_ready_d ),
-        .data_o ( opc_to_eu_data_q  )
-    );
+            .valid_o( opc_to_eu_valid_q[didx] ),
+            .ready_i( eu_to_opc_ready_d[didx] ),
+            .data_o ( opc_to_eu_data_q [didx] )
+        );
 
-    stream_demux #(
-        .N_OUP(4)
-    ) i_eu_demux (
-        .inp_valid_i( opc_to_eu_valid_q ),
-        .inp_ready_o( eu_to_opc_ready_d ),
+        stream_demux #(
+            .N_OUP( 4 )
+        ) i_eu_demux (
+            .inp_valid_i( opc_to_eu_valid_q[didx] ),
+            .inp_ready_o( eu_to_opc_ready_d[didx] ),
 
-        .oup_sel_i( opc_to_eu_data_q.inst.eu ),
+            .oup_sel_i( opc_to_eu_data_q[didx].inst.eu ),
 
-        .oup_valid_o({ opc_to_fpu_valid, opc_to_bru_valid, opc_to_lsu_valid, opc_to_iu_valid }),
-        .oup_ready_i({ fpu_to_opc_ready, bru_to_opc_ready, lsu_to_opc_ready, iu_to_opc_ready })
-    );
+            .oup_valid_o({ opc_to_fpu_valid[didx], opc_to_bru_valid[didx], opc_to_lsu_valid[didx], opc_to_iu_valid[didx] }),
+            .oup_ready_i({ fpu_to_opc_ready[didx], bru_to_opc_ready[didx], lsu_to_opc_ready[didx], iu_to_opc_ready[didx] })
+        );
 
-    `ifndef SYNTHESIS
-        assert property (@(posedge clk_i) opc_to_eu_valid_q
-            |-> opc_to_eu_data_q.inst.eu inside {EU_IU, EU_LSU, EU_BRU, EU_FPU})
-            else $error("Invalid execution unit type: %0d", opc_to_eu_data_q.inst.eu);
-    `endif
+        `ifndef SYNTHESIS
+            assert property (@(posedge clk_i) opc_to_eu_valid_q[didx]
+                |-> opc_to_eu_data_q[didx].inst.eu inside {EU_IU, EU_LSU, EU_BRU, EU_FPU})
+                else $error("Disp %d: Invalid execution unit type: %0d", didx, opc_to_eu_data_q[didx].inst.eu);
+        `endif
+    end
 
     // #######################################################################################
     // # Execution Units                                                                     #
     // #######################################################################################
 
-    // Integer Unit
-    integer_unit #(
-        .NumTags        ( NumTags         ),
-        .NumWarps       ( NumWarps        ),
-        .RegWidth       ( RegWidth        ),
-        .WarpWidth      ( WarpWidth       ),
-        .OperandsPerInst( OperandsPerInst ),
-        .RegIdxWidth    ( RegIdxWidth     ),
-        .AddressWidth   ( AddressWidth    ),
-        .TblockIdxBits  ( TblockIdxBits   )
-    ) i_integer_unit (
+    /// Integer Unit
+    if (!MultiIU) begin : gen_single_iu
+        // We only have one IU, so we need to arbitrate the inputs
+        stream_arbiter #(
+            .DATA_T ( opc_to_eu_data_t ),
+            .N_INP  ( DispatchWidth    ),
+            .ARBITER( "prio"           )
+        ) i_fpu_arbiter (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .inp_data_i ( opc_to_eu_data_q ),
+            .inp_valid_i( opc_to_iu_valid  ),
+            .inp_ready_o( iu_to_opc_ready  ),
+
+            .oup_data_o ( iu_in_data  ),
+            .oup_valid_o( iu_in_valid ),
+            .oup_ready_i( iu_in_ready )
+        );
+
+        // We only have one IU, tie off the rest of the writeback ports
+        for (genvar didx = 1; didx < DispatchWidth; didx++) begin : gen_iu_wb
+            assign iu_to_rc_valid[didx] = 1'b0;
+            assign iu_to_rc_data [didx] = '0;
+        end : gen_iu_wb
+    end : gen_single_iu
+    else begin : gen_multi_iu
+        // We have multiple IUs, so we can connect them directly
+        assign iu_in_valid     = opc_to_iu_valid;
+        assign iu_to_opc_ready = iu_in_ready;
+        assign iu_in_data      = opc_to_eu_data_q;
+    end : gen_multi_iu
+
+    for (genvar iu = 0; iu < NumIUs; iu++) begin : gen_iu
+        integer_unit #(
+            .NumTags        ( NumTags         ),
+            .NumWarps       ( NumWarps        ),
+            .RegWidth       ( RegWidth        ),
+            .WarpWidth      ( WarpWidth       ),
+            .OperandsPerInst( OperandsPerInst ),
+            .RegIdxWidth    ( RegIdxWidth     ),
+            .AddressWidth   ( AddressWidth    ),
+            .TblockIdxBits  ( TblockIdxBits   )
+        ) i_integer_unit (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .testmode_i( testmode_i ),
+
+            .fe_to_iu_warp_dp_addr_i   ( fe_to_iu_warp_dp_addr    ),
+            .fe_to_iu_warp_tblock_idx_i( fe_to_iu_warp_tblock_idx ),
+
+            .eu_to_opc_ready_o   ( iu_in_ready[iu]                 ),
+            .opc_to_eu_valid_i   ( iu_in_valid[iu]                 ),
+            .opc_to_eu_act_mask_i( iu_in_data [iu].act_mask        ),
+            .opc_to_eu_tag_i     ( iu_in_data [iu].tag             ),
+            .opc_to_eu_inst_sub_i( iu_in_data [iu].inst.subtype.iu ),
+            .opc_to_eu_dst_i     ( iu_in_data [iu].dst             ),
+            .opc_to_eu_operands_i( iu_in_data [iu].operands        ),
+
+            .rc_to_eu_ready_i   ( rc_to_iu_ready[iu]          ),
+            .eu_to_rc_valid_o   ( iu_to_rc_valid[iu]          ),
+            .eu_to_rc_act_mask_o( iu_to_rc_data [iu].act_mask ),
+            .eu_to_rc_tag_o     ( iu_to_rc_data [iu].tag      ),
+            .eu_to_rc_dst_o     ( iu_to_rc_data [iu].dst      ),
+            .eu_to_rc_data_o    ( iu_to_rc_data [iu].data     )
+        );
+    end : gen_iu
+
+    /// Floating Point Unit
+    if (!MultiFPU) begin : gen_single_fpu
+        // We only have one FPU, so we need to arbitrate the inputs
+        stream_arbiter #(
+            .DATA_T ( opc_to_eu_data_t ),
+            .N_INP  ( DispatchWidth    ),
+            .ARBITER( "prio"           )
+        ) i_fpu_arbiter (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .inp_data_i ( opc_to_eu_data_q ),
+            .inp_valid_i( opc_to_fpu_valid ),
+            .inp_ready_o( fpu_to_opc_ready ),
+
+            .oup_data_o ( fpu_in_data  ),
+            .oup_valid_o( fpu_in_valid ),
+            .oup_ready_i( fpu_in_ready )
+        );
+
+        // We only have one FPU, tie off the rest of the writeback ports
+        for (genvar didx = 1; didx < DispatchWidth; didx++) begin : gen_fpu_wb
+            assign fpu_to_rc_valid[didx] = 1'b0;
+            assign fpu_to_rc_data [didx] = '0;
+        end : gen_fpu_wb
+    end : gen_single_fpu
+    else begin : gen_multi_fpu
+        // We have multiple FPUs, so we can connect them directly
+        assign fpu_in_valid     = opc_to_fpu_valid;
+        assign fpu_to_opc_ready = fpu_in_ready;
+        assign fpu_in_data      = opc_to_eu_data_q;
+    end : gen_multi_fpu
+
+    for (genvar fpu = 0; fpu < NumFPUs; fpu++) begin : gen_fpu
+        floating_point_unit #(
+            .NumTags        ( NumTags         ),
+            .NumWarps       ( NumWarps        ),
+            .RegWidth       ( RegWidth        ),
+            .WarpWidth      ( WarpWidth       ),
+            .OperandsPerInst( OperandsPerInst ),
+            .RegIdxWidth    ( RegIdxWidth     ),
+            .AddressWidth   ( AddressWidth    ),
+            .TblockIdxBits  ( TblockIdxBits   )
+        ) i_floating_point_unit (
+            .clk_i ( clk_i  ),
+            .rst_ni( rst_ni ),
+
+            .testmode_i( testmode_i ),
+
+            .eu_to_opc_ready_o   ( fpu_in_ready[fpu]                  ),
+            .opc_to_eu_valid_i   ( fpu_in_valid[fpu]                  ),
+            .opc_to_eu_act_mask_i( fpu_in_data [fpu].act_mask         ),
+            .opc_to_eu_tag_i     ( fpu_in_data [fpu].tag              ),
+            .opc_to_eu_inst_sub_i( fpu_in_data [fpu].inst.subtype.fpu ),
+            .opc_to_eu_dst_i     ( fpu_in_data [fpu].dst              ),
+            .opc_to_eu_operands_i( fpu_in_data [fpu].operands         ),
+
+            .rc_to_eu_ready_i   ( rc_to_fpu_ready[fpu]          ),
+            .eu_to_rc_valid_o   ( fpu_to_rc_valid[fpu]          ),
+            .eu_to_rc_act_mask_o( fpu_to_rc_data [fpu].act_mask ),
+            .eu_to_rc_tag_o     ( fpu_to_rc_data [fpu].tag      ),
+            .eu_to_rc_dst_o     ( fpu_to_rc_data [fpu].dst      ),
+            .eu_to_rc_data_o    ( fpu_to_rc_data [fpu].data     )
+        );
+    end : gen_fpu
+
+    /// Load Store Unit
+    // We only have one LSU, so we need to arbitrate the inputs
+    stream_arbiter #(
+        .DATA_T ( opc_to_eu_data_t ),
+        .N_INP  ( DispatchWidth    ),
+        .ARBITER( "prio"           )
+    ) i_lsu_arbiter (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .testmode_i( testmode_i ),
+        .inp_data_i ( opc_to_eu_data_q ),
+        .inp_valid_i( opc_to_lsu_valid ),
+        .inp_ready_o( lsu_to_opc_ready ),
 
-        .fe_to_iu_warp_dp_addr_i   ( fe_to_iu_warp_dp_addr    ),
-        .fe_to_iu_warp_tblock_idx_i( fe_to_iu_warp_tblock_idx ),
-
-        .eu_to_opc_ready_o   ( iu_to_opc_ready                  ),
-        .opc_to_eu_valid_i   ( opc_to_iu_valid                  ),
-        .opc_to_eu_act_mask_i( opc_to_eu_data_q.act_mask        ),
-        .opc_to_eu_tag_i     ( opc_to_eu_data_q.tag             ),
-        .opc_to_eu_inst_sub_i( opc_to_eu_data_q.inst.subtype.iu ),
-        .opc_to_eu_dst_i     ( opc_to_eu_data_q.dst             ),
-        .opc_to_eu_operands_i( opc_to_eu_data_q.operands        ),
-
-        .rc_to_eu_ready_i   ( rc_to_iu_ready         ),
-        .eu_to_rc_valid_o   ( iu_to_rc_valid         ),
-        .eu_to_rc_act_mask_o( iu_to_rc_data.act_mask ),
-        .eu_to_rc_tag_o     ( iu_to_rc_data.tag      ),
-        .eu_to_rc_dst_o     ( iu_to_rc_data.dst      ),
-        .eu_to_rc_data_o    ( iu_to_rc_data.data     )
+        .oup_data_o ( lsu_in_data  ),
+        .oup_valid_o( lsu_in_valid ),
+        .oup_ready_i( lsu_in_ready )
     );
 
-    // Floating Point Unit
-    floating_point_unit #(
-        .NumTags        ( NumTags         ),
-        .NumWarps       ( NumWarps        ),
-        .RegWidth       ( RegWidth        ),
-        .WarpWidth      ( WarpWidth       ),
-        .OperandsPerInst( OperandsPerInst ),
-        .RegIdxWidth    ( RegIdxWidth     ),
-        .AddressWidth   ( AddressWidth    ),
-        .TblockIdxBits  ( TblockIdxBits   )
-    ) i_floating_point_unit (
-        .clk_i ( clk_i  ),
-        .rst_ni( rst_ni ),
-
-        .testmode_i( testmode_i ),
-
-        .eu_to_opc_ready_o   ( fpu_to_opc_ready                  ),
-        .opc_to_eu_valid_i   ( opc_to_fpu_valid                  ),
-        .opc_to_eu_act_mask_i( opc_to_eu_data_q.act_mask         ),
-        .opc_to_eu_tag_i     ( opc_to_eu_data_q.tag              ),
-        .opc_to_eu_inst_sub_i( opc_to_eu_data_q.inst.subtype.fpu ),
-        .opc_to_eu_dst_i     ( opc_to_eu_data_q.dst              ),
-        .opc_to_eu_operands_i( opc_to_eu_data_q.operands         ),
-
-        .rc_to_eu_ready_i   ( rc_to_fpu_ready         ),
-        .eu_to_rc_valid_o   ( fpu_to_rc_valid         ),
-        .eu_to_rc_act_mask_o( fpu_to_rc_data.act_mask ),
-        .eu_to_rc_tag_o     ( fpu_to_rc_data.tag      ),
-        .eu_to_rc_dst_o     ( fpu_to_rc_data.dst      ),
-        .eu_to_rc_data_o    ( fpu_to_rc_data.data     )
-    );
-
-    // Load Store Unit
     load_store_unit #(
         .RegWidth              ( RegWidth               ),
         .WarpWidth             ( WarpWidth              ),
@@ -706,20 +824,20 @@ module compute_unit import bgpu_pkg::*; #(
 
         .testmode_i( testmode_i ),
 
-        .eu_to_opc_ready_o   ( lsu_to_opc_ready                  ),
-        .opc_to_eu_valid_i   ( opc_to_lsu_valid                  ),
-        .opc_to_eu_tag_i     ( opc_to_eu_data_q.tag              ),
-        .opc_to_eu_inst_sub_i( opc_to_eu_data_q.inst.subtype.lsu ),
-        .opc_to_eu_act_mask_i( opc_to_eu_data_q.act_mask         ),
-        .opc_to_eu_dst_i     ( opc_to_eu_data_q.dst              ),
-        .opc_to_eu_operands_i( opc_to_eu_data_q.operands         ),
+        .eu_to_opc_ready_o   ( lsu_in_ready                 ),
+        .opc_to_eu_valid_i   ( lsu_in_valid                 ),
+        .opc_to_eu_tag_i     ( lsu_in_data.tag              ),
+        .opc_to_eu_inst_sub_i( lsu_in_data.inst.subtype.lsu ),
+        .opc_to_eu_act_mask_i( lsu_in_data.act_mask         ),
+        .opc_to_eu_dst_i     ( lsu_in_data.dst              ),
+        .opc_to_eu_operands_i( lsu_in_data.operands         ),
 
-        .rc_to_eu_ready_i   ( rc_to_lsu_ready         ),
-        .eu_to_rc_valid_o   ( lsu_to_rc_valid         ),
-        .eu_to_rc_act_mask_o( lsu_to_rc_data.act_mask ),
-        .eu_to_rc_tag_o     ( lsu_to_rc_data.tag      ),
-        .eu_to_rc_dst_o     ( lsu_to_rc_data.dst      ),
-        .eu_to_rc_data_o    ( lsu_to_rc_data.data     ),
+        .rc_to_eu_ready_i   ( rc_to_lsu_ready[0]          ),
+        .eu_to_rc_valid_o   ( lsu_to_rc_valid[0]          ),
+        .eu_to_rc_act_mask_o( lsu_to_rc_data [0].act_mask ),
+        .eu_to_rc_tag_o     ( lsu_to_rc_data [0].tag      ),
+        .eu_to_rc_dst_o     ( lsu_to_rc_data [0].dst      ),
+        .eu_to_rc_data_o    ( lsu_to_rc_data [0].data     ),
 
         .mem_ready_i      ( mem_ready_i       ),
         .mem_req_valid_o  ( mem_req_valid_o   ),
@@ -733,7 +851,31 @@ module compute_unit import bgpu_pkg::*; #(
         .mem_rsp_data_i   ( mem_rsp_data_i    )
     );
 
+    // We only have one LSU, tie off the rest of the writeback ports
+    for (genvar didx = 1; didx < DispatchWidth; didx++) begin : gen_lsu_wb
+        assign lsu_to_rc_valid[didx] = 1'b0;
+        assign lsu_to_rc_data [didx] = '0;
+    end : gen_lsu_wb
+
     // Branch Unit
+    // We only have one BRU, so we need to arbitrate the inputs
+    stream_arbiter #(
+        .DATA_T ( opc_to_eu_data_t ),
+        .N_INP  ( DispatchWidth    ),
+        .ARBITER( "prio"           )
+    ) i_bru_arbiter (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
+
+        .inp_data_i ( opc_to_eu_data_q ),
+        .inp_valid_i( opc_to_bru_valid ),
+        .inp_ready_o( bru_to_opc_ready ),
+
+        .oup_data_o ( bru_in_data  ),
+        .oup_valid_o( bru_in_valid ),
+        .oup_ready_i( bru_in_ready )
+    );
+
     branch_unit #(
         .NumTags        ( NumTags         ),
         .NumWarps       ( NumWarps        ),
@@ -749,21 +891,21 @@ module compute_unit import bgpu_pkg::*; #(
 
         .testmode_i( testmode_i ),
 
-        .eu_to_opc_ready_o   ( bru_to_opc_ready                  ),
-        .opc_to_eu_valid_i   ( opc_to_bru_valid                  ),
-        .opc_to_eu_act_mask_i( opc_to_eu_data_q.act_mask         ),
-        .opc_to_eu_tag_i     ( opc_to_eu_data_q.tag              ),
-        .opc_to_eu_pc_i      ( opc_to_eu_data_q.pc               ),
-        .opc_to_eu_inst_sub_i( opc_to_eu_data_q.inst.subtype.bru ),
-        .opc_to_eu_dst_i     ( opc_to_eu_data_q.dst              ),
-        .opc_to_eu_operands_i( opc_to_eu_data_q.operands         ),
+        .eu_to_opc_ready_o   ( bru_in_ready                 ),
+        .opc_to_eu_valid_i   ( bru_in_valid                 ),
+        .opc_to_eu_act_mask_i( bru_in_data.act_mask         ),
+        .opc_to_eu_tag_i     ( bru_in_data.tag              ),
+        .opc_to_eu_pc_i      ( bru_in_data.pc               ),
+        .opc_to_eu_inst_sub_i( bru_in_data.inst.subtype.bru ),
+        .opc_to_eu_dst_i     ( bru_in_data.dst              ),
+        .opc_to_eu_operands_i( bru_in_data.operands         ),
 
-        .rc_to_eu_ready_i   ( rc_to_bru_ready         ),
-        .eu_to_rc_valid_o   ( bru_to_rc_valid         ),
-        .eu_to_rc_act_mask_o( bru_to_rc_data.act_mask ),
-        .eu_to_rc_tag_o     ( bru_to_rc_data.tag      ),
-        .eu_to_rc_dst_o     ( bru_to_rc_data.dst      ),
-        .eu_to_rc_data_o    ( bru_to_rc_data.data     ),
+        .rc_to_eu_ready_i   ( rc_to_bru_ready[0]          ),
+        .eu_to_rc_valid_o   ( bru_to_rc_valid[0]          ),
+        .eu_to_rc_act_mask_o( bru_to_rc_data [0].act_mask ),
+        .eu_to_rc_tag_o     ( bru_to_rc_data [0].tag      ),
+        .eu_to_rc_dst_o     ( bru_to_rc_data [0].dst      ),
+        .eu_to_rc_data_o    ( bru_to_rc_data [0].data     ),
 
         .bru_branch_o        ( bru_branch         ),
         .bru_branch_wid_o    ( bru_branch_wid     ),
@@ -771,34 +913,27 @@ module compute_unit import bgpu_pkg::*; #(
         .bru_branch_pc_o     ( bru_branch_pc      )
     );
 
+    // We only have one BRU, tie off the rest of the writeback ports
+    for (genvar didx = 1; didx < DispatchWidth; didx++) begin : gen_bru_wb
+        assign bru_to_rc_valid[didx] = 1'b0;
+        assign bru_to_rc_data [didx] = '0;
+    end : gen_bru_wb
+
     // #######################################################################################
     // # Execution Unit Result Collector                                                     #
     // #######################################################################################
 
-    // Combine ready signals from all writeback ports
-    always_comb begin : combine_rc_ready_signals
-        rc_to_eu_ready_comb = '0;
-        for (int wb = 0; wb < WritebackWidth; wb++) begin
-            rc_to_eu_ready_comb = rc_to_eu_ready_comb | rc_to_eu_ready[wb];
-        end
-    end : combine_rc_ready_signals
-
-    // Extract ready signals for each execution unit
-    assign rc_to_bru_ready = rc_to_eu_ready_comb[0];
-    assign rc_to_lsu_ready = rc_to_eu_ready_comb[1];
-    assign rc_to_iu_ready  = rc_to_eu_ready_comb[2];
-    assign rc_to_fpu_ready = rc_to_eu_ready_comb[3];
-
     // Generate writeback ports
-    for (genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_writeback
+    for (genvar wb = 0; wb < DispatchWidth; wb++) begin : gen_writeback
         // Valid signals
-        // Port 0: take directly from EUs
-        // Port N: only valid if previous port was not ready
-        if (wb == 0)
-            assign eu_to_rc_valid[wb] = {fpu_to_rc_valid, iu_to_rc_valid, lsu_to_rc_valid,
-                                         bru_to_rc_valid};
-        else
-            assign eu_to_rc_valid[wb] = eu_to_rc_valid[wb-1] & (~rc_to_eu_ready[wb-1]);
+        assign eu_to_rc_valid[wb] = {fpu_to_rc_valid[wb], iu_to_rc_valid[wb], lsu_to_rc_valid[wb],
+                                         bru_to_rc_valid[wb]};
+
+        // Extract ready signals for each execution unit
+        assign rc_to_bru_ready[wb] = rc_to_eu_ready[wb][0];
+        assign rc_to_lsu_ready[wb] = rc_to_eu_ready[wb][1];
+        assign rc_to_iu_ready [wb] = rc_to_eu_ready[wb][2];
+        assign rc_to_fpu_ready[wb] = rc_to_eu_ready[wb][3];
 
         stream_arbiter #(
             .DATA_T ( eu_to_opc_data_t ),
@@ -808,7 +943,7 @@ module compute_unit import bgpu_pkg::*; #(
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
 
-            .inp_data_i ({ fpu_to_rc_data, iu_to_rc_data, lsu_to_rc_data, bru_to_rc_data }),
+            .inp_data_i ({ fpu_to_rc_data[wb], iu_to_rc_data[wb], lsu_to_rc_data[wb], bru_to_rc_data[wb] }),
             .inp_valid_i( eu_to_rc_valid[wb] ),
             .inp_ready_o( rc_to_eu_ready[wb] ),
 
@@ -850,19 +985,21 @@ module compute_unit import bgpu_pkg::*; #(
 
         while (1) begin
             @(posedge clk_i);
-            if (disp_to_opc_valid && opc_to_disp_ready) begin
-                data = $sformatf("%t: Tag: %0d, Pc: %0x, Inst: %0d, Warp: %0d, AM: %b, Dst: r%0d,",
-                    $time(), disp_to_opc_data.tag, disp_to_opc_data.pc, disp_to_opc_data.inst,
-                    disp_to_opc_data.tag[WidWidth-1:0], disp_to_opc_data.act_mask,
-                    disp_to_opc_data.dst);
+            for (int didx = 0; didx < DispatchWidth; didx++) begin
+                if (disp_to_opc_valid[didx] && opc_to_disp_ready[didx]) begin
+                    data = $sformatf("%t: Didx: %d Tag: %0d, Pc: %0x, Inst: %0d, Warp: %0d, AM: %b, Dst: r%0d,",
+                        $time(), didx, disp_to_opc_tag[didx], disp_to_opc_pc[didx], disp_to_opc_inst[didx],
+                        disp_to_opc_tag[didx][WidWidth-1:0], disp_to_opc_act_mask[didx],
+                        disp_to_opc_dst[didx]);
 
-                data = {data, $sformatf(" OpIsReg: %b", disp_to_opc_data.operands_is_reg)};
+                    data = {data, $sformatf(" OpIsReg: %b", disp_to_opc_operands_is_reg[didx])};
 
-                for (int i = 0; i < OperandsPerInst; i++) begin
-                    data = {data, $sformatf(", Operand%0d: %0d", i, disp_to_opc_data.operands[i])};
+                    for (int i = 0; i < OperandsPerInst; i++) begin
+                        data = {data, $sformatf(", Operand%0d: %0d", i, disp_to_opc_operands[didx][i])};
+                    end
+                    $fwrite(f, "%s\n", data);
+                    $fflush(f);
                 end
-                $fwrite(f, "%s\n", data);
-                $fflush(f);
             end
         end
     end : disp_dumper
@@ -876,21 +1013,23 @@ module compute_unit import bgpu_pkg::*; #(
 
         while (1) begin
             @(posedge clk_i);
-            if (opc_to_iu_valid && iu_to_opc_ready) begin
-                data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
-                    $time(), opc_to_eu_data_q.tag, opc_to_eu_data_q.inst.subtype,
-                    opc_to_eu_data_q.tag[WidWidth-1:0], opc_to_eu_data_q.act_mask,
-                    opc_to_eu_data_q.dst);
+            for (int iu = 0; iu < NumIUs; iu++) begin
+                if (iu_in_valid[iu] && iu_in_ready[iu]) begin
+                    data = $sformatf("%t: IU: %0d Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
+                        $time(), iu, iu_in_data[iu].tag, iu_in_data[iu].inst.subtype,
+                        iu_in_data[iu].tag[WidWidth-1:0], iu_in_data[iu].act_mask,
+                        iu_in_data[iu].dst);
 
-                for (int i = 0; i < OperandsPerInst; i++) begin
-                    data = {data, $sformatf(", Operand%0d:", i)};
-                    for (int thread = 0; thread < WarpWidth; thread++) begin
-                        data = {data, $sformatf(" (t%0d: 0x%h)", thread,
-                            opc_to_eu_data_q.operands[i][thread * RegWidth +: RegWidth])};
+                    for (int i = 0; i < OperandsPerInst; i++) begin
+                        data = {data, $sformatf(", Operand%0d:", i)};
+                        for (int thread = 0; thread < WarpWidth; thread++) begin
+                            data = {data, $sformatf(" (t%0d: 0x%h)", thread,
+                                iu_in_data[iu].operands[i][thread * RegWidth +: RegWidth])};
+                        end
                     end
+                    $fwrite(f, "%s\n", data);
+                    $fflush(f);
                 end
-                $fwrite(f, "%s\n", data);
-                $fflush(f);
             end
         end
     end : iu_dumper
@@ -904,21 +1043,23 @@ module compute_unit import bgpu_pkg::*; #(
 
         while (1) begin
             @(posedge clk_i);
-            if (opc_to_fpu_valid && fpu_to_opc_ready) begin
-                data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
-                    $time(), opc_to_eu_data_q.tag, opc_to_eu_data_q.inst.subtype,
-                    opc_to_eu_data_q.tag[WidWidth-1:0], opc_to_eu_data_q.act_mask,
-                    opc_to_eu_data_q.dst);
+            for (int fpu = 0; fpu < NumFPUs; fpu++) begin
+                if (fpu_in_valid[fpu] & fpu_in_ready[fpu]) begin
+                    data = $sformatf("%t: FPU: %0d Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
+                        $time(), fpu, fpu_in_data[fpu].tag, fpu_in_data[fpu].inst.subtype,
+                        fpu_in_data[fpu].tag[WidWidth-1:0], fpu_in_data[fpu].act_mask,
+                        fpu_in_data[fpu].dst);
 
-                for (int i = 0; i < OperandsPerInst; i++) begin
-                    data = {data, $sformatf(", Operand%0d:", i)};
-                    for (int thread = 0; thread < WarpWidth; thread++) begin
-                        data = {data, $sformatf(" (t%0d: 0x%h)", thread,
-                            opc_to_eu_data_q.operands[i][thread * RegWidth +: RegWidth])};
+                    for (int i = 0; i < OperandsPerInst; i++) begin
+                        data = {data, $sformatf(", Operand%0d:", i)};
+                        for (int thread = 0; thread < WarpWidth; thread++) begin
+                            data = {data, $sformatf(" (t%0d: 0x%h)", thread,
+                                fpu_in_data[fpu].operands[i][thread * RegWidth +: RegWidth])};
+                        end
                     end
+                    $fwrite(f, "%s\n", data);
+                    $fflush(f);
                 end
-                $fwrite(f, "%s\n", data);
-                $fflush(f);
             end
         end
     end : fpu_dumper
@@ -932,17 +1073,17 @@ module compute_unit import bgpu_pkg::*; #(
 
         while (1) begin
             @(posedge clk_i);
-            if (opc_to_lsu_valid && lsu_to_opc_ready) begin
+            if (lsu_in_valid && lsu_in_ready) begin
                 data = $sformatf("%t: Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
-                    $time(), opc_to_eu_data_q.tag, opc_to_eu_data_q.inst.subtype,
-                    opc_to_eu_data_q.tag[WidWidth-1:0], opc_to_eu_data_q.act_mask,
-                    opc_to_eu_data_q.dst);
+                    $time(), lsu_in_data.tag, lsu_in_data.inst.subtype,
+                    lsu_in_data.tag[WidWidth-1:0], lsu_in_data.act_mask,
+                    lsu_in_data.dst);
 
                 for (int i = 0; i < OperandsPerInst; i++) begin
                     data = {data, $sformatf(", Operand%0d:", i)};
                     for (int thread = 0; thread < WarpWidth; thread++) begin
                         data = {data, $sformatf(" (t%0d: 0x%h)", thread,
-                            opc_to_eu_data_q.operands[i][thread * RegWidth +: RegWidth])};
+                            lsu_in_data.operands[i][thread * RegWidth +: RegWidth])};
                     end
                 end
                 $fwrite(f, "%s\n", data);
@@ -960,10 +1101,10 @@ module compute_unit import bgpu_pkg::*; #(
 
         while (1) begin
             @(posedge clk_i);
-            for (int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
+            for (int wb = 0; wb < DispatchWidth; wb++) begin : loop_writeback_ports
                 if (eu_to_opc_valid_q[wb] && opc_to_eu_ready_d[wb]) begin
-                    data = $sformatf("%t: Tag: %0d, Warp: %0d, ActMask: %b, Dst: r%0d, Data: ",
-                        $time(), eu_to_opc_data_q[wb].tag, eu_to_opc_data_q[wb].tag[WidWidth-1:0],
+                    data = $sformatf("%t: WB: %0d Tag: %0d, Warp: %0d, ActMask: %b, Dst: r%0d, Data: ",
+                        $time(), wb, eu_to_opc_data_q[wb].tag, eu_to_opc_data_q[wb].tag[WidWidth-1:0],
                         eu_to_opc_data_q[wb].act_mask, eu_to_opc_data_q[wb].dst);
 
                     for (int thread = 0; thread < WarpWidth; thread++) begin

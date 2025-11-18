@@ -5,9 +5,13 @@
 /// Testbench for Compute Unit
 module tb_compute_unit import bgpu_pkg::*; #(
     /// Number of instructions to fetch for the warp
-    parameter int unsigned FetchWidth = 1,
-    /// Number of instructions that can write back simultaneously
-    parameter int unsigned WritebackWidth = 1,
+    parameter int unsigned FetchWidth = 2,
+    /// Number of instructions to dispatch simultaneously
+    parameter int unsigned DispatchWidth = 2,
+    /// Should we have multiple Integer Units?
+    parameter bit          MultiIU = 1'b1,
+    /// Should we have multiple Floating Point Units?
+    parameter bit          MultiFPU = 1'b1,
     /// Width of the Program Counter
     parameter int unsigned PcWidth = 16,
     /// Number of warps
@@ -232,7 +236,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
     compute_unit #(
     `ifndef TARGET_POST_SYNTH
         .FetchWidth            ( FetchWidth             ),
-        .WritebackWidth        ( WritebackWidth         ),
+        .DispatchWidth         ( DispatchWidth          ),
+        .MultiIU               ( MultiIU                ),
+        .MultiFPU              ( MultiFPU               ),
         .PcWidth               ( PcWidth                ),
         .NumWarps              ( NumWarps               ),
         .WarpWidth             ( WarpWidth              ),
@@ -658,160 +664,160 @@ module tb_compute_unit import bgpu_pkg::*; #(
         end
     end : gen_display_dispatcher
 
-    initial begin : kanata_format
-        int fd;
-        logic [(PcWidth + WarpWidth + WidWidth)-1:0] insn_id_in_sim;
+    // initial begin : kanata_format
+    //     int fd;
+    //     logic [(PcWidth + WarpWidth + WidWidth)-1:0] insn_id_in_sim;
 
-        // Hashmap for sim id to file id
-        int insn_id_in_file;
-        int insn_id_in_file_counter;
-        int insn_id_in_file_map[logic[(PcWidth + WarpWidth + WidWidth)-1:0]];
+    //     // Hashmap for sim id to file id
+    //     int insn_id_in_file;
+    //     int insn_id_in_file_counter;
+    //     int insn_id_in_file_map[logic[(PcWidth + WarpWidth + WidWidth)-1:0]];
 
-        // OPC tag to file id
-        int opc_insn_id_in_file[iid_t];
-        int retire_id;
-        retire_id = 0;
+    //     // OPC tag to file id
+    //     int opc_insn_id_in_file[iid_t];
+    //     int retire_id;
+    //     retire_id = 0;
 
-        insn_id_in_file_counter = 0;
+    //     insn_id_in_file_counter = 0;
 
-        fd = $fopen("pipeline.out", "w");
+    //     fd = $fopen("pipeline.out", "w");
 
-        // Header
-        $fwrite(fd, "Kanata\t0004\n");
-        // Start time
-        $fwrite(fd, "C=\t0\n");
+    //     // Header
+    //     $fwrite(fd, "Kanata\t0004\n");
+    //     // Start time
+    //     $fwrite(fd, "C=\t0\n");
 
-        while (!stop) begin
-            @(posedge clk);
-            #AcqDelay;
-            // Cycle
-            $fwrite(fd, "C\t1\n");
+    //     while (!stop) begin
+    //         @(posedge clk);
+    //         #AcqDelay;
+    //         // Cycle
+    //         $fwrite(fd, "C\t1\n");
 
-            // Fetcher
-            if (i_cu.fe_to_ic_valid_d && i_cu.ic_to_fe_ready_q) begin
-                insn_id_in_sim[PcWidth-1:0] = i_cu.fe_to_ic_data_d.pc;
-                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.fe_to_ic_data_d.act_mask;
-                insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
-                    i_cu.fe_to_ic_data_d.warp_id;
+    //         // Fetcher
+    //         if (i_cu.fe_to_ic_valid_d && i_cu.ic_to_fe_ready_q) begin
+    //             insn_id_in_sim[PcWidth-1:0] = i_cu.fe_to_ic_data_d.pc;
+    //             insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.fe_to_ic_data_d.act_mask;
+    //             insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
+    //                 i_cu.fe_to_ic_data_d.warp_id;
 
-                // Add to hashmap
-                assert(insn_id_in_file_map[insn_id_in_sim] == 0)
-                else $warning("Instruction %0d already exists in file.", insn_id_in_sim);
+    //             // Add to hashmap
+    //             assert(insn_id_in_file_map[insn_id_in_sim] == 0)
+    //             else $warning("Instruction %0d already exists in file.", insn_id_in_sim);
 
-                insn_id_in_file_map[insn_id_in_sim] = insn_id_in_file_counter;
-                insn_id_in_file = insn_id_in_file_counter;
-                insn_id_in_file_counter++;
+    //             insn_id_in_file_map[insn_id_in_sim] = insn_id_in_file_counter;
+    //             insn_id_in_file = insn_id_in_file_counter;
+    //             insn_id_in_file_counter++;
 
-                // New instruction
-                $fwrite(fd, "I\t%0d\t%0d\t%0d\n",
-                    insn_id_in_file,
-                    insn_id_in_sim,
-                    i_cu.fe_to_ic_data_d.warp_id);
+    //             // New instruction
+    //             $fwrite(fd, "I\t%0d\t%0d\t%0d\n",
+    //                 insn_id_in_file,
+    //                 insn_id_in_sim,
+    //                 i_cu.fe_to_ic_data_d.warp_id);
 
-                // Instruction Info
-                $fwrite(fd, "L\t%0d\t0\tWarp %0d PC: %0d\n",
-                    insn_id_in_file,
-                    i_cu.fe_to_ic_data_d.warp_id,
-                    i_cu.fe_to_ic_data_d.pc);
+    //             // Instruction Info
+    //             $fwrite(fd, "L\t%0d\t0\tWarp %0d PC: %0d\n",
+    //                 insn_id_in_file,
+    //                 i_cu.fe_to_ic_data_d.warp_id,
+    //                 i_cu.fe_to_ic_data_d.pc);
 
-                // Fetch Stage
-                $fwrite(fd, "S\t%0d\t0\tF\n",
-                    insn_id_in_file);
-            end
+    //             // Fetch Stage
+    //             $fwrite(fd, "S\t%0d\t0\tF\n",
+    //                 insn_id_in_file);
+    //         end
 
-            // Instruction Cache
-            if (i_cu.fe_to_ic_valid_q && i_cu.ic_to_fe_ready_d) begin
-                // Get the instruction ID from the hashmap
-                insn_id_in_sim[PcWidth-1:0] = i_cu.fe_to_ic_data_q.pc;
-                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.fe_to_ic_data_q.act_mask;
-                insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
-                    i_cu.fe_to_ic_data_q.warp_id;
-                insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
+    //         // Instruction Cache
+    //         if (i_cu.fe_to_ic_valid_q && i_cu.ic_to_fe_ready_d) begin
+    //             // Get the instruction ID from the hashmap
+    //             insn_id_in_sim[PcWidth-1:0] = i_cu.fe_to_ic_data_q.pc;
+    //             insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.fe_to_ic_data_q.act_mask;
+    //             insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
+    //                 i_cu.fe_to_ic_data_q.warp_id;
+    //             insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
 
-                // Instruction Cache Stage
-                $fwrite(fd, "S\t%0d\t0\tIC\n",
-                    insn_id_in_file);
-            end
+    //             // Instruction Cache Stage
+    //             $fwrite(fd, "S\t%0d\t0\tIC\n",
+    //                 insn_id_in_file);
+    //         end
 
-            // Decoder
-            // TODO: Multiple instructions
-            if ((|i_cu.ic_to_dec_valid) && i_cu.dec_to_ic_ready) begin
-                // Get the instruction ID from the hashmap
-                insn_id_in_sim[PcWidth-1:0] = i_cu.ic_to_dec_data.pc;
-                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.ic_to_dec_data.act_mask;
-                insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
-                    i_cu.ic_to_dec_data.warp_id;
-                insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
+    //         // Decoder
+    //         // TODO: Multiple instructions
+    //         if ((|i_cu.ic_to_dec_valid) && i_cu.dec_to_ic_ready) begin
+    //             // Get the instruction ID from the hashmap
+    //             insn_id_in_sim[PcWidth-1:0] = i_cu.ic_to_dec_data.pc;
+    //             insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.ic_to_dec_data.act_mask;
+    //             insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
+    //                 i_cu.ic_to_dec_data.warp_id;
+    //             insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
 
-                // Decoder Stage
-                $fwrite(fd, "S\t%0d\t0\tD\n",
-                    insn_id_in_file);
+    //             // Decoder Stage
+    //             $fwrite(fd, "S\t%0d\t0\tD\n",
+    //                 insn_id_in_file);
 
-                // Control Instruction -> Retire this instruction
-                if (|i_cu.dec_to_fetch_decoded_unused_ibe) begin
-                    // Retire
-                    $fwrite(fd, "R\t%0d\t%0d\t0\n",
-                        insn_id_in_file, retire_id);
-                    retire_id++;
-                end
-            end
+    //             // Control Instruction -> Retire this instruction
+    //             if (|i_cu.dec_to_fetch_decoded_unused_ibe) begin
+    //                 // Retire
+    //                 $fwrite(fd, "R\t%0d\t%0d\t0\n",
+    //                     insn_id_in_file, retire_id);
+    //                 retire_id++;
+    //             end
+    //         end
 
-            // Start Dispatcher Stage
-            if (i_cu.dec_to_ib_valid_q && i_cu.ib_to_dec_ready_d) begin
-                // Get the instruction ID from the hashmap
-                insn_id_in_sim[PcWidth-1:0] = i_cu.dec_to_ib_data_q.pc;
-                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.dec_to_ib_data_q.act_mask;
-                insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
-                    i_cu.dec_to_ib_data_q.warp_id;
-                insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
+    //         // Start Dispatcher Stage
+    //         if (i_cu.dec_to_ib_valid_q && i_cu.ib_to_dec_ready_d) begin
+    //             // Get the instruction ID from the hashmap
+    //             insn_id_in_sim[PcWidth-1:0] = i_cu.dec_to_ib_data_q.pc;
+    //             insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.dec_to_ib_data_q.act_mask;
+    //             insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
+    //                 i_cu.dec_to_ib_data_q.warp_id;
+    //             insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
 
-                // Dispatcher Stage
-                $fwrite(fd, "S\t%0d\t0\tIB\n",
-                    insn_id_in_file);
-            end
+    //             // Dispatcher Stage
+    //             $fwrite(fd, "S\t%0d\t0\tIB\n",
+    //                 insn_id_in_file);
+    //         end
 
-            // Start OPC Stage
-            if (i_cu.disp_to_opc_valid && i_cu.opc_to_disp_ready) begin
-                // Get the instruction ID from the hashmap
-                insn_id_in_sim[PcWidth-1:0] = i_cu.disp_to_opc_data.pc;
-                insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.disp_to_opc_data.act_mask;
-                insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
-                    i_cu.disp_to_opc_data.tag[WidWidth-1:0];
-                insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
+    //         // Start OPC Stage
+    //         if (i_cu.disp_to_opc_valid && i_cu.opc_to_disp_ready) begin
+    //             // Get the instruction ID from the hashmap
+    //             insn_id_in_sim[PcWidth-1:0] = i_cu.disp_to_opc_data.pc;
+    //             insn_id_in_sim[PcWidth + WarpWidth - 1:PcWidth] = i_cu.disp_to_opc_data.act_mask;
+    //             insn_id_in_sim[PcWidth + WarpWidth + WidWidth - 1:PcWidth + WarpWidth] =
+    //                 i_cu.disp_to_opc_data.tag[WidWidth-1:0];
+    //             insn_id_in_file = insn_id_in_file_map[insn_id_in_sim];
 
-                opc_insn_id_in_file[i_cu.disp_to_opc_data.tag] = insn_id_in_file;
+    //             opc_insn_id_in_file[i_cu.disp_to_opc_data.tag] = insn_id_in_file;
 
-                // OPC Stage
-                $fwrite(fd, "S\t%0d\t0\tOpC\n",
-                    insn_id_in_file);
-            end
+    //             // OPC Stage
+    //             $fwrite(fd, "S\t%0d\t0\tOpC\n",
+    //                 insn_id_in_file);
+    //         end
 
-            // Execute Stage
-            if (i_cu.opc_to_eu_valid_q && i_cu.eu_to_opc_ready_d) begin
-                // Get the instruction ID from the hashmap
-                insn_id_in_file = opc_insn_id_in_file[i_cu.opc_to_eu_data_q.tag];
+    //         // Execute Stage
+    //         if (i_cu.opc_to_eu_valid_q && i_cu.eu_to_opc_ready_d) begin
+    //             // Get the instruction ID from the hashmap
+    //             insn_id_in_file = opc_insn_id_in_file[i_cu.opc_to_eu_data_q.tag];
 
-                // Execute Stage
-                $fwrite(fd, "S\t%0d\t0\tEu\n",
-                    insn_id_in_file);
-            end
+    //             // Execute Stage
+    //             $fwrite(fd, "S\t%0d\t0\tEu\n",
+    //                 insn_id_in_file);
+    //         end
 
-            // Retire
-            for (int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
-                if (i_cu.eu_to_opc_valid_q[wb] && i_cu.opc_to_eu_ready_d[wb]) begin
-                    insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data_q[wb].tag];
+    //         // Retire
+    //         for (int wb = 0; wb < WritebackWidth; wb++) begin : loop_writeback_ports
+    //             if (i_cu.eu_to_opc_valid_q[wb] && i_cu.opc_to_eu_ready_d[wb]) begin
+    //                 insn_id_in_file = opc_insn_id_in_file[i_cu.eu_to_opc_data_q[wb].tag];
 
-                    // Retire
-                    $fwrite(fd, "R\t%0d\t%0d\t0\n",
-                        insn_id_in_file, retire_id);
-                    retire_id++;
-                end
-            end : loop_writeback_ports
-        end
+    //                 // Retire
+    //                 $fwrite(fd, "R\t%0d\t%0d\t0\n",
+    //                     insn_id_in_file, retire_id);
+    //                 retire_id++;
+    //             end
+    //         end : loop_writeback_ports
+    //     end
 
-        // Close file
-        $fclose(fd);
-    end : kanata_format
+    //     // Close file
+    //     $fclose(fd);
+    // end : kanata_format
     `endif
 
     // Max simulation cycles

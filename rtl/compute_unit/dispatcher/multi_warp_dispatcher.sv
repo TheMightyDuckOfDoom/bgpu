@@ -183,8 +183,10 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         opc_eu_handshake_warp = '0;
         opc_eu_tag = '0;
         for (int didx = 0; didx < DispatchWidth; didx++) begin
-            opc_eu_handshake_warp[opc_eu_tag_i[didx][WidWidth-1:0]] = opc_eu_handshake_i[didx];
-            opc_eu_tag[opc_eu_tag_i[didx][WidWidth-1:0]] = opc_eu_tag_i[didx][WidWidth+:TagWidth];
+            if (opc_eu_handshake_i[didx]) begin
+                opc_eu_handshake_warp[opc_eu_tag_i[didx][WidWidth-1:0]] = 1'b1;
+                opc_eu_tag[opc_eu_tag_i[didx][WidWidth-1:0]] = opc_eu_tag_i[didx][WidWidth+:TagWidth];
+            end
         end
     end
 
@@ -314,7 +316,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
 
                     // Check that no two dispatch outputs dispatch to the same warp in the same cycle
                     assert property (@(posedge clk_i) disable iff (!rst_ni)
-                        (disp_valid_o[didx] && disp_valid_o[other_didx]
+                        (disp_valid_o[didx] && opc_ready_i[didx] && disp_valid_o[other_didx] && opc_ready_i[other_didx]
                         -> arb_gnt[didx] != arb_gnt[other_didx]))
                     else $error("Two outputs dispatching to the same warp in the same cycle!");
                 end : gen_diff_didx
