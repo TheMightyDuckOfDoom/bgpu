@@ -27,7 +27,21 @@
 The Architecture of BGPU is most similar to NVIDIA GPUs starting from the Fermi-Microarchitecture.
 We implement a form of Independent-Thread-Scheduling (ITS) similiar to the NVIDIA Volta Architecture.
 
-TODO: As with all projects, documentation is still a work-in-progress...
+Please have a look at [`BGPU Architecture`](docs/arch.md)
+
+## Quickstart
+
+To run some simple tests on different levels of hierarchy use the following targets:
+```bash
+make tb_compute_unit
+make tb_compute_cluster
+make tb_bgpu_soc
+```
+
+To see what is executed have a look at:
+- [`test/tb_compute_unit.sv`](test/tb_compute_unit.sv)
+- [`test/tb_compute_cluster.sv`](test/tb_compute_cluster.sv)
+- [`test/tb_bgpu_soc.sv`](test/tb_bgpu_soc.sv)
 
 ## Helpfull References
 
