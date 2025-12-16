@@ -252,7 +252,8 @@ module compute_unit import bgpu_pkg::*; #(
     op_reg_idx_t [DispatchWidth-1:0] disp_to_opc_operands;
 
     // Register Operand Collector Stage to Execution Units
-    logic [DispatchWidth-1:0] opc_to_eu_valid_d, opc_to_eu_valid_q,  eu_to_opc_ready_d, eu_to_opc_ready_q;
+    logic [DispatchWidth-1:0] opc_to_eu_valid_d, opc_to_eu_valid_q;
+    logic [DispatchWidth-1:0] eu_to_opc_ready_d, eu_to_opc_ready_q;
     logic [DispatchWidth-1:0] opc_to_iu_valid,   iu_to_opc_ready;
     logic [DispatchWidth-1:0] opc_to_fpu_valid,  fpu_to_opc_ready;
     logic [DispatchWidth-1:0] opc_to_lsu_valid,  lsu_to_opc_ready;
@@ -283,7 +284,8 @@ module compute_unit import bgpu_pkg::*; #(
     logic [DispatchWidth-1:0] fpu_to_rc_valid, rc_to_fpu_ready;
     logic [DispatchWidth-1:0] lsu_to_rc_valid, rc_to_lsu_ready;
     logic [DispatchWidth-1:0] bru_to_rc_valid, rc_to_bru_ready;
-    eu_to_opc_data_t [DispatchWidth-1:0] iu_to_rc_data, fpu_to_rc_data, lsu_to_rc_data, bru_to_rc_data;
+    eu_to_opc_data_t [DispatchWidth-1:0] iu_to_rc_data, fpu_to_rc_data;
+    eu_to_opc_data_t [DispatchWidth-1:0] lsu_to_rc_data, bru_to_rc_data;
 
     // Writeback from Execution Units to Register Operand Collector Stage
     logic            [DispatchWidth-1:0] opc_to_eu_ready_q, opc_to_eu_ready_d;
@@ -608,14 +610,14 @@ module compute_unit import bgpu_pkg::*; #(
     // #######################################################################################
     // # Execution Unit Demux                                                                #
     // #######################################################################################
-     
-    for (genvar didx = 0; didx < DispatchWidth; didx++) begin
-        assign opc_to_eu_data_d[didx].tag      = opc_to_eu_tag_d     [didx];        
-        assign opc_to_eu_data_d[didx].pc       = opc_to_eu_pc_d      [didx];         
-        assign opc_to_eu_data_d[didx].act_mask = opc_to_eu_act_mask_d[didx]; 
-        assign opc_to_eu_data_d[didx].inst     = opc_to_eu_inst_d    [didx];       
-        assign opc_to_eu_data_d[didx].dst      = opc_to_eu_dst_d     [didx];        
-        assign opc_to_eu_data_d[didx].operands = opc_to_eu_operands_d[didx]; 
+
+    for (genvar didx = 0; didx < DispatchWidth; didx++) begin : gen_eu_demux
+        assign opc_to_eu_data_d[didx].tag      = opc_to_eu_tag_d     [didx];
+        assign opc_to_eu_data_d[didx].pc       = opc_to_eu_pc_d      [didx];
+        assign opc_to_eu_data_d[didx].act_mask = opc_to_eu_act_mask_d[didx];
+        assign opc_to_eu_data_d[didx].inst     = opc_to_eu_inst_d    [didx];
+        assign opc_to_eu_data_d[didx].dst      = opc_to_eu_dst_d     [didx];
+        assign opc_to_eu_data_d[didx].operands = opc_to_eu_operands_d[didx];
 
         spill_register #(
             .T( opc_to_eu_data_t )
@@ -640,16 +642,19 @@ module compute_unit import bgpu_pkg::*; #(
 
             .oup_sel_i( opc_to_eu_data_q[didx].inst.eu ),
 
-            .oup_valid_o({ opc_to_fpu_valid[didx], opc_to_bru_valid[didx], opc_to_lsu_valid[didx], opc_to_iu_valid[didx] }),
-            .oup_ready_i({ fpu_to_opc_ready[didx], bru_to_opc_ready[didx], lsu_to_opc_ready[didx], iu_to_opc_ready[didx] })
+            .oup_valid_o({ opc_to_fpu_valid[didx], opc_to_bru_valid[didx], opc_to_lsu_valid[didx],
+                           opc_to_iu_valid[didx] }),
+            .oup_ready_i({ fpu_to_opc_ready[didx], bru_to_opc_ready[didx], lsu_to_opc_ready[didx],
+                           iu_to_opc_ready[didx] })
         );
 
         `ifndef SYNTHESIS
             assert property (@(posedge clk_i) opc_to_eu_valid_q[didx]
                 |-> opc_to_eu_data_q[didx].inst.eu inside {EU_IU, EU_LSU, EU_BRU, EU_FPU})
-                else $error("Disp %d: Invalid execution unit type: %0d", didx, opc_to_eu_data_q[didx].inst.eu);
+                else $error("Disp %d: Invalid execution unit type: %0d", didx,
+                    opc_to_eu_data_q[didx].inst.eu);
         `endif
-    end
+    end : gen_eu_demux
 
     // #######################################################################################
     // # Execution Units                                                                     #
@@ -943,7 +948,8 @@ module compute_unit import bgpu_pkg::*; #(
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
 
-            .inp_data_i ({ fpu_to_rc_data[wb], iu_to_rc_data[wb], lsu_to_rc_data[wb], bru_to_rc_data[wb] }),
+            .inp_data_i ({ fpu_to_rc_data[wb], iu_to_rc_data[wb], lsu_to_rc_data[wb],
+                           bru_to_rc_data[wb] }),
             .inp_valid_i( eu_to_rc_valid[wb] ),
             .inp_ready_o( rc_to_eu_ready[wb] ),
 
@@ -987,15 +993,18 @@ module compute_unit import bgpu_pkg::*; #(
             @(posedge clk_i);
             for (int didx = 0; didx < DispatchWidth; didx++) begin
                 if (disp_to_opc_valid[didx] && opc_to_disp_ready[didx]) begin
-                    data = $sformatf("%t: Didx: %d Tag: %0d, Pc: %0x, Inst: %0d, Warp: %0d, AM: %b, Dst: r%0d,",
-                        $time(), didx, disp_to_opc_tag[didx], disp_to_opc_pc[didx], disp_to_opc_inst[didx],
-                        disp_to_opc_tag[didx][WidWidth-1:0], disp_to_opc_act_mask[didx],
-                        disp_to_opc_dst[didx]);
+                    data =
+                    $sformatf("%t: Didx: %d Tag: %0d, Pc: %0x, Inst: %0d, Warp: %0d, ActMask: %b",
+                        $time(), didx, disp_to_opc_tag[didx], disp_to_opc_pc[didx],
+                        disp_to_opc_inst[didx], disp_to_opc_tag[didx][WidWidth-1:0],
+                        disp_to_opc_act_mask[didx]);
+                    data = {data, $sformatf(", Dst: r%0d", disp_to_opc_dst[didx])};
 
                     data = {data, $sformatf(" OpIsReg: %b", disp_to_opc_operands_is_reg[didx])};
 
                     for (int i = 0; i < OperandsPerInst; i++) begin
-                        data = {data, $sformatf(", Operand%0d: %0d", i, disp_to_opc_operands[didx][i])};
+                        data = {data, $sformatf(", Operand%0d: %0d", i,
+                                disp_to_opc_operands[didx][i])};
                     end
                     $fwrite(f, "%s\n", data);
                     $fflush(f);
@@ -1015,10 +1024,11 @@ module compute_unit import bgpu_pkg::*; #(
             @(posedge clk_i);
             for (int iu = 0; iu < NumIUs; iu++) begin
                 if (iu_in_valid[iu] && iu_in_ready[iu]) begin
-                    data = $sformatf("%t: IU: %0d Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
+                    data = $sformatf("%t: IU: %0d Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b",
                         $time(), iu, iu_in_data[iu].tag, iu_in_data[iu].inst.subtype,
-                        iu_in_data[iu].tag[WidWidth-1:0], iu_in_data[iu].act_mask,
-                        iu_in_data[iu].dst);
+                        iu_in_data[iu].tag[WidWidth-1:0], iu_in_data[iu].act_mask);
+
+                    data = {data, $sformatf(" Dst: r%0d", iu_in_data[iu].dst)};
 
                     for (int i = 0; i < OperandsPerInst; i++) begin
                         data = {data, $sformatf(", Operand%0d:", i)};
@@ -1045,10 +1055,11 @@ module compute_unit import bgpu_pkg::*; #(
             @(posedge clk_i);
             for (int fpu = 0; fpu < NumFPUs; fpu++) begin
                 if (fpu_in_valid[fpu] & fpu_in_ready[fpu]) begin
-                    data = $sformatf("%t: FPU: %0d Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b, Dst: r%0d",
+                    data = $sformatf("%t: FPU: %0d Tag: %0d, Subtype: %0d, Warp: %0d, ActMask: %b",
                         $time(), fpu, fpu_in_data[fpu].tag, fpu_in_data[fpu].inst.subtype,
-                        fpu_in_data[fpu].tag[WidWidth-1:0], fpu_in_data[fpu].act_mask,
-                        fpu_in_data[fpu].dst);
+                        fpu_in_data[fpu].tag[WidWidth-1:0], fpu_in_data[fpu].act_mask);
+
+                    data = {data, $sformatf(" Dst: r%0d", fpu_in_data[fpu].dst)};
 
                     for (int i = 0; i < OperandsPerInst; i++) begin
                         data = {data, $sformatf(", Operand%0d:", i)};
@@ -1103,9 +1114,11 @@ module compute_unit import bgpu_pkg::*; #(
             @(posedge clk_i);
             for (int wb = 0; wb < DispatchWidth; wb++) begin : loop_writeback_ports
                 if (eu_to_opc_valid_q[wb] && opc_to_eu_ready_d[wb]) begin
-                    data = $sformatf("%t: WB: %0d Tag: %0d, Warp: %0d, ActMask: %b, Dst: r%0d, Data: ",
-                        $time(), wb, eu_to_opc_data_q[wb].tag, eu_to_opc_data_q[wb].tag[WidWidth-1:0],
-                        eu_to_opc_data_q[wb].act_mask, eu_to_opc_data_q[wb].dst);
+                    data = $sformatf("%t: WB: %0d Tag: %0d, Warp: %0d, ActMask: %b,",
+                        $time(), wb, eu_to_opc_data_q[wb].tag,
+                        eu_to_opc_data_q[wb].tag[WidWidth-1:0], eu_to_opc_data_q[wb].act_mask);
+
+                    data = {data, $sformatf(" Dst: r%od, Data:", eu_to_opc_data_q[wb].dst)};
 
                     for (int thread = 0; thread < WarpWidth; thread++) begin
                         data = {data, $sformatf(" (t%0d: 0x%h)", thread,
