@@ -11,8 +11,12 @@
 module compute_cluster #(
     /// Number of instructions to fetch for the warp
     parameter int unsigned FetchWidth = 1,
-    /// Number of instructions that can write back simultaneously
-    parameter int unsigned WritebackWidth = 1,
+    /// Number of instructions to dispatch simultaneously
+    parameter int unsigned DispatchWidth = 1,
+    /// Should we have DispatchWidth Integer Units? Otherwise only one IU is instantiated.
+    parameter bit          MultiIU = 1'b1,
+    /// Should we have DispatchWidth Integer Units? Otherwise only one FPU is instantiated.
+    parameter bit          MultiFPU = 1'b1,
     /// Number of Compute Units in the cluster
     parameter int unsigned ComputeUnits = 1,
     /// Width of the Program Counter
@@ -453,7 +457,9 @@ module compute_cluster #(
     for (genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_compute_units
         compute_unit #(
             .FetchWidth            ( FetchWidth             ),
-            .WritebackWidth        ( WritebackWidth         ),
+            .DispatchWidth         ( DispatchWidth          ),
+            .MultiIU               ( MultiIU                ),
+            .MultiFPU              ( MultiFPU               ),
             .PcWidth               ( PcWidth                ),
             .NumWarps              ( NumWarps               ),
             .WarpWidth             ( WarpWidth              ),

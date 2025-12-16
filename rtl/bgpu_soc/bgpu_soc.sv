@@ -24,8 +24,12 @@ module bgpu_soc #(
 
     /// Number of instructions to fetch for the warp
     parameter int unsigned FetchWidth = 1,
-    /// Number of instructions that can write back simultaneously
-    parameter int unsigned WritebackWidth = 1,
+    /// Number of instructions to dispatch simultaneously
+    parameter int unsigned DispatchWidth = 1,
+    /// Should we have DispatchWidth Integer Units? Otherwise only one IU is instantiated.
+    parameter bit          MultiIU = 1'b1,
+    /// Should we have DispatchWidth Integer Units? Otherwise only one FPU is instantiated.
+    parameter bit          MultiFPU = 1'b1,
     /// Number of Compute Clusters
     parameter int unsigned ComputeClusters = 1,
     /// Number of Compute Units per Cluster
@@ -360,7 +364,9 @@ module bgpu_soc #(
     for (genvar i = 0; i < ComputeClusters; i++) begin : gen_compute_clusters
         compute_cluster #(
             .FetchWidth            ( FetchWidth             ),
-            .WritebackWidth        ( WritebackWidth         ),
+            .DispatchWidth         ( DispatchWidth          ),
+            .MultiIU               ( MultiIU                ),
+            .MultiFPU              ( MultiFPU               ),
             .ComputeUnits          ( ComputeUnitsPerCluster ),
             .PcWidth               ( PcWidth                ),
             .NumWarps              ( NumWarps               ),
