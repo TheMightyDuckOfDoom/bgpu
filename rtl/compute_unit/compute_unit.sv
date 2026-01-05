@@ -1114,11 +1114,13 @@ module compute_unit import bgpu_pkg::*; #(
             @(posedge clk_i);
             for (int wb = 0; wb < DispatchWidth; wb++) begin : loop_writeback_ports
                 if (eu_to_opc_valid_q[wb] && opc_to_eu_ready_d[wb]) begin
-                    data = $sformatf("%t: WB: %0d Tag: %0d, Warp: %0d, ActMask: %b,",
+                    data = $sformatf("%t: WB: %0d TagWid: %0d, Warp: %0d, Tag: %0d, ActMask: %b,",
                         $time(), wb, eu_to_opc_data_q[wb].tag,
-                        eu_to_opc_data_q[wb].tag[WidWidth-1:0], eu_to_opc_data_q[wb].act_mask);
+                        eu_to_opc_data_q[wb].tag[WidWidth-1:0],
+                        eu_to_opc_data_q[wb].tag[WidWidth+:TagWidth],
+                        eu_to_opc_data_q[wb].act_mask);
 
-                    data = {data, $sformatf(" Dst: r%od, Data:", eu_to_opc_data_q[wb].dst)};
+                    data = {data, $sformatf(" Dst: r%0d, Data:", eu_to_opc_data_q[wb].dst)};
 
                     for (int thread = 0; thread < WarpWidth; thread++) begin
                         data = {data, $sformatf(" (t%0d: 0x%h)", thread,

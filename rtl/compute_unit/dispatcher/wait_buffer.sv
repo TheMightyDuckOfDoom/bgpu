@@ -8,6 +8,8 @@
 module wait_buffer import bgpu_pkg::*; #(
     /// Number of instructions to fetch for the warp
     parameter int unsigned FetchWidth = 1,
+    /// Number of instructions to dispatch simultaneously
+    parameter int unsigned DispatchWidth = 1,
     /// Number of instructions that can write back simultaneously
     parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions
@@ -71,8 +73,8 @@ module wait_buffer import bgpu_pkg::*; #(
     output op_reg_idx_t disp_operands_o,
 
     /// From Operand Collector -> instruction has read its operands
-    input logic opc_eu_handshake_i,
-    input tag_t opc_eu_tag_i,
+    input logic [DispatchWidth-1:0] opc_eu_handshake_i,
+    input tag_t [DispatchWidth-1:0] opc_eu_tag_i,
 
     /// From Execution Units
     input logic [WritebackWidth-1:0] eu_valid_i,
@@ -291,15 +293,17 @@ module wait_buffer import bgpu_pkg::*; #(
     always_comb begin : build_remove_mask
         remove_mask = '0;
 
-        if (opc_eu_handshake_i) begin
-            for (int i = 0; i < NumTags; i++) begin : gen_remove_mask
-                if (wait_buffer_valid_q[i]
-                  && wait_buffer_dispatched_q[i]
-                  && wait_buffer_q[i].tag == opc_eu_tag_i) begin
-                    remove_mask[i] = 1'b1;
-                end
-            end : gen_remove_mask
-        end
+        for (int didx = 0; didx < DispatchWidth; didx++) begin : loop_remove_mask
+            if (opc_eu_handshake_i[didx]) begin
+                for (int i = 0; i < NumTags; i++) begin : gen_remove_mask
+                    if (wait_buffer_valid_q[i]
+                    && wait_buffer_dispatched_q[i]
+                    && wait_buffer_q[i].tag == opc_eu_tag_i[didx]) begin
+                        remove_mask[i] = 1'b1;
+                    end
+                end : gen_remove_mask
+            end
+        end : loop_remove_mask
     end : build_remove_mask
 
     // Wait Buffer Entry Logic
@@ -434,10 +438,18 @@ module wait_buffer import bgpu_pkg::*; #(
             |-> |arb_gnt)
         else $error("No instruction selected for dispatch");
 
-        // Remove mask can only have one or no bits set
-        assert property (@(posedge clk_i) disable iff(!rst_ni)
-            (remove_mask == '0 || $onehot(remove_mask)))
-        else $error("Remove mask has more than one bit set");
+        // OPC handshake must only have unique tags
+        for (genvar didx = 0; didx < DispatchWidth; didx++) begin : gen_assert_unique_opc_tags
+            for (genvar didx2 = 0; didx2 < DispatchWidth; didx2++) begin : gen_check_unique_opc_tags
+                if (didx != didx2) begin : gen_check_different_dispatch_indices
+                    assert property (@(posedge clk_i) disable iff(!rst_ni)
+                        !(opc_eu_handshake_i[didx] && opc_eu_handshake_i[didx2]
+                        && opc_eu_tag_i[didx] == opc_eu_tag_i[didx2]))
+                    else $error("OPC EU handshake has non-unique tags: %0d and %0d have tag %0d",
+                        didx, didx2, opc_eu_tag_i[didx]);
+                end : gen_check_different_dispatch_indices
+            end : gen_check_unique_opc_tags
+        end : gen_assert_unique_opc_tags
 
         // Dispatch mask can only have one or no bits set
         assert property (@(posedge clk_i) disable iff(!rst_ni)

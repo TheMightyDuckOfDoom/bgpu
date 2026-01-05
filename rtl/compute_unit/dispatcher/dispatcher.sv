@@ -18,6 +18,8 @@
 module dispatcher import bgpu_pkg::*; #(
     /// Number of instructions to fetch for the warp
     parameter int unsigned FetchWidth = 1,
+    /// Number of instructions to dispatch simultaneously
+    parameter int unsigned DispatchWidth = 1,
     /// Number of instructions that can write back simultaneously
     parameter int unsigned WritebackWidth = 1,
     /// Number of inflight instructions per warp
@@ -86,8 +88,8 @@ module dispatcher import bgpu_pkg::*; #(
     output op_reg_idx_t disp_operands_o,
 
     /// From Operand Collector -> instruction has read its operands
-    input logic opc_eu_handshake_i,
-    input tag_t opc_eu_tag_i,
+    input logic [DispatchWidth-1:0] opc_eu_handshake_i,
+    input tag_t [DispatchWidth-1:0] opc_eu_tag_i,
 
     /// From Execution Units
     input  logic [WritebackWidth-1:0] eu_valid_i,
@@ -187,13 +189,14 @@ module dispatcher import bgpu_pkg::*; #(
     // #######################################################################################
 
     wait_buffer #(
-        .FetchWidth           ( FetchWidth            ),
-        .WritebackWidth       ( WritebackWidth        ),
-        .NumTags              ( NumTags               ),
-        .PcWidth              ( PcWidth               ),
-        .WarpWidth            ( WarpWidth             ),
-        .RegIdxWidth          ( RegIdxWidth           ),
-        .OperandsPerInst      ( OperandsPerInst       )
+        .FetchWidth     ( FetchWidth      ),
+        .DispatchWidth  ( DispatchWidth   ),
+        .WritebackWidth ( WritebackWidth  ),
+        .NumTags        ( NumTags         ),
+        .PcWidth        ( PcWidth         ),
+        .WarpWidth      ( WarpWidth       ),
+        .RegIdxWidth    ( RegIdxWidth     ),
+        .OperandsPerInst( OperandsPerInst )
     ) i_wait_buffer (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),

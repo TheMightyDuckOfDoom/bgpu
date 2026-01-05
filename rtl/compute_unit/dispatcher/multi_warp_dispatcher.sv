@@ -112,6 +112,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     } disp_data_t;
 
     typedef logic [WritebackWidth-1:0] eu_valid_vec_t;
+    typedef logic [ DispatchWidth-1:0] opc_valid_vec_t;
 
     // #######################################################################################
     // # Signals                                                                             #
@@ -136,8 +137,8 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     fetch_mask_t [NumWarps-1:0] dec_decoded_unused_ibe;
 
     // OPC EU Handshake Demultiplexer
-    warp_mask_t opc_eu_handshake_warp;
-    tag_t [NumWarps-1:0] opc_eu_tag;
+    opc_valid_vec_t [     NumWarps-1:0] opc_eu_handshake_warp;
+    tag_t           [DispatchWidth-1:0] opc_eu_tag;
 
     // #######################################################################################
     // # Dispatcher per warp                                                                 #
@@ -181,15 +182,19 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // OPC EU Handshake Demultiplexer
     always_comb begin
         opc_eu_handshake_warp = '0;
-        opc_eu_tag = '0;
-        for (int didx = 0; didx < DispatchWidth; didx++) begin
-            if (opc_eu_handshake_i[didx]) begin
-                opc_eu_handshake_warp[opc_eu_tag_i[didx][WidWidth-1:0]] = 1'b1;
-                opc_eu_tag[opc_eu_tag_i[didx][WidWidth-1:0]] =
-                    opc_eu_tag_i[didx][WidWidth+:TagWidth];
+        for (int warp = 0; warp < NumWarps; warp++) begin
+            for (int didx = 0; didx < DispatchWidth; didx++) begin
+                opc_eu_handshake_warp[warp][didx] =
+                    opc_eu_handshake_i[didx]
+                    && (opc_eu_tag_i[didx][WidWidth-1:0] == warp[WidWidth-1:0]);
             end
         end
     end
+
+    // Extract OPC EU Tags
+    for (genvar didx = 0; didx < DispatchWidth; didx++) begin : gen_opc_eu_tags
+        assign opc_eu_tag[didx] = opc_eu_tag_i[didx][WidWidth+:TagWidth];
+    end : gen_opc_eu_tags
 
     // Extract EU Tags
     for (genvar wb = 0; wb < WritebackWidth; wb++) begin : gen_eu_tags
@@ -207,13 +212,14 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
     // Dispatcher per Warp
     for (genvar warp = 0; warp < NumWarps; warp++) begin : gen_dispatcher
         dispatcher #(
-            .FetchWidth           ( FetchWidth            ),
-            .WritebackWidth       ( WritebackWidth        ),
-            .NumTags              ( NumTags               ),
-            .PcWidth              ( PcWidth               ),
-            .WarpWidth            ( WarpWidth             ),
-            .RegIdxWidth          ( RegIdxWidth           ),
-            .OperandsPerInst      ( OperandsPerInst       )
+            .FetchWidth     ( FetchWidth      ),
+            .DispatchWidth  ( DispatchWidth   ),
+            .WritebackWidth ( WritebackWidth  ),
+            .NumTags        ( NumTags         ),
+            .PcWidth        ( PcWidth         ),
+            .WarpWidth      ( WarpWidth       ),
+            .RegIdxWidth    ( RegIdxWidth     ),
+            .OperandsPerInst( OperandsPerInst )
         ) i_dispatcher (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
@@ -248,7 +254,7 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             .disp_operands_o       ( arb_in_data  [warp].operands        ),
 
             .opc_eu_handshake_i( opc_eu_handshake_warp[warp] ),
-            .opc_eu_tag_i      ( opc_eu_tag           [warp] ),
+            .opc_eu_tag_i      ( opc_eu_tag                  ),
 
             .eu_valid_i( eu_valid[warp] ),
             .eu_tag_i  ( eu_tag         )
@@ -267,10 +273,10 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
         rr_arb_tree #(
             .DataType ( disp_data_t ),
             .NumIn    ( NumWarps    ),
-            .ExtPrio  ( 1'b0 ),
-            .AxiVldRdy( 1'b0 ),
-            .LockIn   ( 1'b0 ),
-            .FairArb  ( 1'b1 )
+            .ExtPrio  ( 1'b0        ),
+            .AxiVldRdy( 1'b0        ),
+            .LockIn   ( 1'b0        ),
+            .FairArb  ( 1'b1        )
         ) i_rr_arb (
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
@@ -308,13 +314,6 @@ module multi_warp_dispatcher import bgpu_pkg::*; #(
             for (genvar other_didx = 0; other_didx < DispatchWidth; other_didx++)
             begin : gen_out_asserts_inner
                 if (didx != other_didx) begin : gen_diff_didx
-                    // Check for OPC EU Handshake for the same warp received on multiple dispatch outputs
-                    assert property (@(posedge clk_i) disable iff (!rst_ni)
-                        (opc_eu_handshake_i[didx] && opc_eu_handshake_i[other_didx]
-                        -> opc_eu_tag_i[didx][WidWidth-1:0]
-                            != opc_eu_tag_i[other_didx][WidWidth-1:0]))
-                    else $error("OPC EU Handshake for the same warp received!");
-
                     // Check that no two dispatch outputs dispatch to the same warp in the same cycle
                     assert property (@(posedge clk_i) disable iff (!rst_ni)
                         (disp_valid_o[didx] && opc_ready_i[didx] && disp_valid_o[other_didx]
