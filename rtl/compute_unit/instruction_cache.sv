@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -394,7 +394,11 @@ module instruction_cache #(
     tc_sram #(
         .NumWords   ( NumCachelines      ),
         .DataWidth  ( $bits(cache_tag_t) ),
+    `ifdef TARGET_VIVADO
         .ByteWidth  ( $bits(cache_tag_t) ),
+    `else
+        .ByteWidth  ( 1                  ),
+    `endif
         .NumPorts   ( 1                  ),
         .Latency    ( 1                  ),
         .SimInit    ( "zeros"            ),
@@ -404,9 +408,9 @@ module instruction_cache #(
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .req_i  ( cache_req    ),
-        .we_i   ( cache_we     ),
-        .addr_i ( cache_select ),
+        .req_i  ( cache_req       ),
+        .we_i   ( cache_we        ),
+        .addr_i ( cache_select    ),
         .wdata_i( write_cache_tag ),
 
         .rdata_o( cache_tag_q ),
