@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -80,6 +80,9 @@ module bgpu_wrapper (
     // Should BGPU use the DDR3 Memory Controller?
     localparam bit UseMctrl = 1'b1;
 
+    // Superscalarity
+    localparam int unsigned SuperscalarWidth = 2;
+
 `ifdef BOARD_STLV
     localparam int unsigned ComputeClusters        = 1;
     localparam int unsigned ComputeUnitsPerCluster = 4;
@@ -93,11 +96,6 @@ module bgpu_wrapper (
     localparam int unsigned MctrlWidth             = 512;
 `endif
 `ifdef BOARD_TESTER
-    // 1cc with 8cu works
-    // 4cc with 4cu works
-    // 4cc with 6cu fails when assigning SLRs -2ns slack
-    // 4cc with 6cu fails with -1.4ns slack 64.70% LUT
-    // 4cc with 8cu fails with -2.1ns slack 85.79% LUT
     localparam int unsigned ComputeClusters        = 4;
     localparam int unsigned ComputeUnitsPerCluster = 4;
     localparam int unsigned MctrlAddressWidth      = 28;
@@ -195,6 +193,10 @@ module bgpu_wrapper (
     bgpu_soc #(
         .MctrlWidth       ( MctrlWidth        ),
         .MctrlAddressWidth( MctrlAddressWidth ),
+        
+        .FetchWidth   ( SuperscalarWidth ),
+        .DispatchWidth( SuperscalarWidth ),
+        .MultiFPU     ( 1'b0             ), // Multiple FPUs are too huge
 
         .WarpWidth             ( WarpWidth              ),
         .ComputeUnitsPerCluster( ComputeUnitsPerCluster ),
@@ -234,7 +236,7 @@ module bgpu_wrapper (
         assign led_o[1] = !soc_rst_n; // Lit when not in reset
         assign led_o[2] = sys_rst_ni; // Lit when reset button is pressed
     `endif
-    `ifdef BOARD_STLV
+    `ifdef BOARD_YPCB
         // LEDs are active high
         assign led_o[0] = mctrl_init_calib_complete; // Lit when memory controller is ready
         assign led_o[1] = soc_rst_n; // Lit when not in reset
