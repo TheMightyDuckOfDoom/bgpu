@@ -71,7 +71,7 @@ jobs:
   # Main testbench for compute unit
   tb_compute_unit:
     runs-on: self-hosted
-    needs: [tb_instruction_cache, tb_tag_queue, tb_operand_collector, tb_register_opc_stage, tb_load_store_unit]
+    needs: [tb_instruction_cache, tb_tag_queue, tb_operand_collector, tb_register_opc_stage, tb_load_store_unit, tb_fop_tmux]
     steps:
       - name: Checkout
         uses: actions/checkout@master
@@ -84,6 +84,22 @@ jobs:
             key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
       - name: Simulate
         run: make PROCESSORS=8 tb_compute_unit
+
+  # Floating-Point Operation Time-Multiplexing
+  tb_fop_tmux:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Restore .bender from cache
+        uses: actions/cache@v4
+        with:
+            path: |
+                .bender
+                vendor
+            key: bender-cache-${{ hashFiles('Bender.yml', 'Bender.local', 'Bender.lock') }}
+      - name: Simulate
+        run: make PROCESSORS=8 tb_fop_tmux
 
   # Instruction Cache Testbench
   tb_instruction_cache:

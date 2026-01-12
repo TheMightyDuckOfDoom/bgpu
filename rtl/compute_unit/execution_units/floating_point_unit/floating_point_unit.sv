@@ -34,6 +34,9 @@ module floating_point_unit import bgpu_pkg::*; #(
     /// Latency of the FP2INT Unit
     parameter int unsigned Fp2IntLatency = 1,
 
+    /// Number of Divider Units
+    parameter int unsigned NumDivUnits = 1,
+
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned TagWidth    = $clog2(NumTags),
     parameter int unsigned WidWidth = NumWarps > 1 ? $clog2(NumWarps) : 1,
@@ -127,6 +130,8 @@ module floating_point_unit import bgpu_pkg::*; #(
     reg_data_t        [WarpWidth-1:0] fma_result;
 
     // Divider Signals
+    logic                             fdiv_selected;
+    logic                             fdiv_ready;
     logic             [WarpWidth-1:0] fdiv_valid_in;
     reg_data_t        [WarpWidth-1:0] fdiv_operand_a, fdiv_operand_b;
     logic             [WarpWidth-1:0] fdiv_valid_out;
@@ -164,6 +169,7 @@ module floating_point_unit import bgpu_pkg::*; #(
         fma_negate_c = 1'b0;
 
         // Default: op1 / op2
+        fdiv_selected  = 1'b0;
         fdiv_operand_a = operands[0];
         fdiv_operand_b = operands[1];
 
@@ -192,10 +198,12 @@ module floating_point_unit import bgpu_pkg::*; #(
                 fma_operand_c = {WarpWidth{32'h00000000}}; // 0.0f
             end
             FPU_DIV: begin
+                fdiv_selected = 1'b1;
                 if (opc_to_eu_valid_i && eu_to_opc_ready_o)
                     fdiv_valid_in = opc_to_eu_act_mask_i;
             end
             FPU_RECIP: begin
+                fdiv_selected = 1'b1;
                 if (opc_to_eu_valid_i && eu_to_opc_ready_o)
                     fdiv_valid_in = opc_to_eu_act_mask_i;
 
@@ -225,8 +233,20 @@ module floating_point_unit import bgpu_pkg::*; #(
         assign fpu_station_ready[i] = fpu_stations_valid_q[i] && (&fpu_stations_q[i].result_ready);
     end : gen_fpu_station_ready
 
-    // We are ready for a new operations, if not all stations are valid
-    assign eu_to_opc_ready_o = !(&fpu_stations_valid_q);
+    // We are ready unless:
+    // - All stations are full
+    // - Divider is not requested, but not ready
+    always_comb begin : ready_logic
+        eu_to_opc_ready_o = 1'b1;
+        
+        // All stations are full
+        if (&fpu_station_ready)
+            eu_to_opc_ready_o = 1'b0;
+        
+        // Divider selected, but not ready
+        if (fdiv_selected && (!fdiv_ready))
+            eu_to_opc_ready_o = 1'b0;
+    end : ready_logic
 
     // Waiting station logic
     always_comb begin : waiting_station_logic
@@ -360,30 +380,30 @@ module floating_point_unit import bgpu_pkg::*; #(
     end : gen_fma_units
 
     // #######################################################################################
-    // # Divider Units                                                                       #
+    // # Time-Multiplexed Divider                                                            #
     // #######################################################################################
 
-    for (genvar i = 0; i < WarpWidth; i++) begin : gen_div_units
-        // Instantiate one Divider per thread in the warp
-        fop #(
-            .DataWidth( RegWidth          ),
-            .Operation( "DIV"             ),
-            .Latency  ( DivLatency        ),
-            .tag_t    ( fpu_station_idx_t )
-        ) i_div (
-            .clk_i ( clk_i  ),
-            .rst_ni( rst_ni ),
+    fop_tmux #(
+        .WarpWidth  ( WarpWidth         ),
+        .NumFopUnits( NumDivUnits       ),
+        .DataWidth  ( RegWidth          ),
+        .Operation  ( "DIV"             ),
+        .Latency    ( DivLatency        ),
+        .tag_t      ( fpu_station_idx_t )
+    ) i_div (
+        .clk_i ( clk_i  ),
+        .rst_ni( rst_ni ),
 
-            .valid_i    ( fdiv_valid_in[i]  ),
-            .tag_i      ( fpu_tag_in        ),
-            .operand_a_i( fdiv_operand_a[i] ),
-            .operand_b_i( fdiv_operand_b[i] ),
+        .tag_i      ( fpu_tag_in     ),
+        .ready_o    ( fdiv_ready     ),
+        .valid_i    ( fdiv_valid_in  ),
+        .operand_a_i( fdiv_operand_a ),
+        .operand_b_i( fdiv_operand_b ),
 
-            .valid_o ( fdiv_valid_out[i] ),
-            .tag_o   ( fdiv_tag_out  [i] ),
-            .result_o( fdiv_result   [i] )
-        );
-    end : gen_div_units
+        .valid_o ( fdiv_valid_out ),
+        .tag_o   ( fdiv_tag_out   ),
+        .result_o( fdiv_result    )
+    );
 
     // #######################################################################################
     // # Int to FP Units                                                                     #
