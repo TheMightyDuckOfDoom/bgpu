@@ -23,6 +23,8 @@ module control_domain #(
     parameter int unsigned AddressWidth = 32,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
+    // How many bits are used to specify the size of a thread block?
+    parameter int unsigned TblockSizeBits = 4,
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
@@ -31,10 +33,11 @@ module control_domain #(
     parameter type axi_resp_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
-    parameter type tgroup_id_t  = logic [ TgroupIdBits-1:0],
-    parameter type addr_t       = logic [ AddressWidth-1:0],
-    parameter type pc_t         = logic [      PcWidth-1:0]
+    parameter type tblock_size_t = logic [TblockSizeBits-1:0],
+    parameter type tblock_idx_t  = logic [ TblockIdxBits-1:0],
+    parameter type tgroup_id_t   = logic [  TgroupIdBits-1:0],
+    parameter type addr_t        = logic [  AddressWidth-1:0],
+    parameter type pc_t          = logic [       PcWidth-1:0]
 )(
     // Clock and reset
     input  logic clk_i,
@@ -62,12 +65,13 @@ module control_domain #(
     output logic flush_ic_o,
 
     // Interface to start a new thread block -> to compute clusters
-    input  logic        warp_free_i, // The is atleas one free warp that can start a new block
-    output logic        allocate_warp_o,
-    output pc_t         allocate_pc_o,
-    output addr_t       allocate_dp_addr_o, // Data / Parameter address
-    output tblock_idx_t allocate_tblock_idx_o, // Block index -> used to calculate the thread id
-    output tgroup_id_t  allocate_tgroup_id_o, // Block id -> unique identifier for the block
+    input  logic         warp_free_i, // The is atleas one free warp that can start a new block
+    output logic         allocate_warp_o,
+    output pc_t          allocate_pc_o,
+    output addr_t        allocate_dp_addr_o, // Data / Parameter address
+    output tblock_size_t allocate_tblock_size_o, // Size of the thread block
+    output tblock_idx_t  allocate_tblock_idx_o, // Block index -> used to calculate the thread id
+    output tgroup_id_t   allocate_tgroup_id_o, // Block id -> unique identifier for the block
 
     // Thread block completion
     output logic       tblock_done_ready_o,
@@ -270,13 +274,14 @@ module control_domain #(
     // #######################################################################################
 
     obi_thread_engine #(
-        .PcWidth      ( PcWidth        ),
-        .AddressWidth ( AddressWidth   ),
-        .TblockIdxBits( TblockIdxBits  ),
-        .TgroupIdBits ( TgroupIdBits   ),
-        .ObiCfg       ( XDwnObiCfg     ),
-        .obi_req_t    ( xdwn_obi_req_t ),
-        .obi_rsp_t    ( xdwn_obi_rsp_t )
+        .PcWidth       ( PcWidth        ),
+        .AddressWidth  ( AddressWidth   ),
+        .TblockIdxBits ( TblockIdxBits  ),
+        .TblockSizeBits( TblockSizeBits ),
+        .TgroupIdBits  ( TgroupIdBits   ),
+        .ObiCfg        ( XDwnObiCfg     ),
+        .obi_req_t     ( xdwn_obi_req_t ),
+        .obi_rsp_t     ( xdwn_obi_rsp_t )
     ) i_thread_engine (
         .clk_i ( clk_o  ),
         .rst_ni( rst_no ),
@@ -288,12 +293,13 @@ module control_domain #(
 
         .inorder_execution_o( inorder_execution_o ),
 
-        .warp_free_i          ( warp_free_i           ),
-        .allocate_warp_o      ( allocate_warp_o       ),
-        .allocate_pc_o        ( allocate_pc_o         ),
-        .allocate_dp_addr_o   ( allocate_dp_addr_o    ),
-        .allocate_tblock_idx_o( allocate_tblock_idx_o ),
-        .allocate_tgroup_id_o ( allocate_tgroup_id_o  ),
+        .warp_free_i           ( warp_free_i            ),
+        .allocate_warp_o       ( allocate_warp_o        ),
+        .allocate_pc_o         ( allocate_pc_o          ),
+        .allocate_dp_addr_o    ( allocate_dp_addr_o     ),
+        .allocate_tblock_size_o( allocate_tblock_size_o ),
+        .allocate_tblock_idx_o ( allocate_tblock_idx_o  ),
+        .allocate_tgroup_id_o  ( allocate_tgroup_id_o   ),
 
         .tblock_done_ready_o( tblock_done_ready_o ),
         .tblock_done_i      ( tblock_done_i       ),

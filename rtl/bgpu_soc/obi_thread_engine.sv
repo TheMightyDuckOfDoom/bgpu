@@ -13,6 +13,8 @@ module obi_thread_engine #(
     parameter int unsigned AddressWidth = 32,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
+    // How many bits are used to specify the size of a thread block?
+    parameter int unsigned TblockSizeBits = 4,
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
@@ -22,10 +24,11 @@ module obi_thread_engine #(
     parameter type               obi_rsp_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
-    parameter type tgroup_id_t  = logic [ TgroupIdBits-1:0],
-    parameter type addr_t       = logic [ AddressWidth-1:0],
-    parameter type pc_t         = logic [      PcWidth-1:0]
+    parameter type tblock_size_t = logic [TblockSizeBits-1:0],
+    parameter type tblock_idx_t  = logic [ TblockIdxBits-1:0],
+    parameter type tgroup_id_t   = logic [  TgroupIdBits-1:0],
+    parameter type addr_t        = logic [  AddressWidth-1:0],
+    parameter type pc_t          = logic [       PcWidth-1:0]
 )(
     // Clock and reset
     input logic clk_i,
@@ -42,12 +45,13 @@ module obi_thread_engine #(
     output logic inorder_execution_o,
 
     // Interface to start a new thread block -> to compute clusters
-    input  logic        warp_free_i, // The is atleas one free warp that can start a new block
-    output logic        allocate_warp_o,
-    output pc_t         allocate_pc_o,
-    output addr_t       allocate_dp_addr_o, // Data / Parameter address
-    output tblock_idx_t allocate_tblock_idx_o, // Block index -> used to calculate the thread id
-    output tgroup_id_t  allocate_tgroup_id_o, // Block id -> unique identifier for the block
+    input  logic         warp_free_i, // The is atleas one free warp that can start a new block
+    output logic         allocate_warp_o,
+    output pc_t          allocate_pc_o,
+    output addr_t        allocate_dp_addr_o, // Data / Parameter address
+    output tblock_size_t allocate_tblock_size_o, // Size of the thread block (in threads)
+    output tblock_idx_t  allocate_tblock_idx_o, // Block index -> used to calculate the thread id
+    output tgroup_id_t   allocate_tgroup_id_o, // Block id -> unique identifier for the block
 
     // Thread block completion
     output logic       tblock_done_ready_o,
@@ -81,10 +85,11 @@ module obi_thread_engine #(
     logic inorder_execution_q, inorder_execution_d;
 
     // Configuration
-    pc_t         pc_d,                pc_q;
-    addr_t       dp_addr_d,           dp_addr_q;
-    tblock_idx_t number_of_tblocks_d, number_of_tblocks_q;
-    tgroup_id_t  tgroup_id_d,         tgroup_id_q;
+    pc_t          pc_d,                pc_q;
+    addr_t        dp_addr_d,           dp_addr_q;
+    tblock_idx_t  number_of_tblocks_d, number_of_tblocks_q;
+    tgroup_id_t   tgroup_id_d,         tgroup_id_q;
+    tblock_size_t tblock_size_d,       tblock_size_q;
 
     // Obi response signals
     logic      obi_rvalid_q;
@@ -154,7 +159,15 @@ module obi_thread_engine #(
                         obi_rdata_d[TgroupIdBits-1:0] = tgroup_id_q;
                     end
                 end : tgroup_id_reg
-                'd4: begin : status_reg
+                'd4: begin : tblock_size_reg
+                    if (obi_req_i.a.we) begin
+                        if (!running_q)
+                            tblock_size_d = tblock_size_t'(obi_req_i.a.wdata);
+                    end else begin
+                        obi_rdata_d = obi_data_t'(tblock_size_q);
+                    end
+                end : tblock_size_reg
+                'd5: begin : status_reg
                     if (obi_req_i.a.we) begin
                         if (!running_q) begin
                             // Write to status register triggers a start
@@ -229,27 +242,29 @@ module obi_thread_engine #(
     // #######################################################################################
 
     thread_dispatcher #(
-        .PcWidth      ( PcWidth       ),
-        .AddressWidth ( AddressWidth  ),
-        .TblockIdxBits( TblockIdxBits ),
-        .TgroupIdBits ( TgroupIdBits  )
+        .PcWidth       ( PcWidth        ),
+        .AddressWidth  ( AddressWidth   ),
+        .TblockIdxBits ( TblockIdxBits  ),
+        .TblockSizeBits( TblockSizeBits )
     ) i_thread_dispatcher (
         .clk_i ( clk_i  ),
         .rst_ni( rst_ni ),
 
-        .ready_o             ( dispatcher_ready    ),
-        .start_i             ( start_dispatch_q    ),
-        .pc_i                ( pc_q                ),
-        .dp_addr_i           ( dp_addr_q           ),
-        .number_of_tblocks_i ( number_of_tblocks_q ),
-        .tgroup_id_i         ( tgroup_id_q         ),
+        .ready_o            ( dispatcher_ready    ),
+        .start_i            ( start_dispatch_q    ),
+        .pc_i               ( pc_q                ),
+        .dp_addr_i          ( dp_addr_q           ),
+        .number_of_tblocks_i( number_of_tblocks_q ),
+        .tgroup_id_i        ( tgroup_id_q         ),
+        .tblock_size_i      ( tblock_size_q       ),
 
-        .warp_free_i          ( warp_free_i          ),
-        .allocate_warp_o      ( allocate_warp_o      ),
-        .allocate_pc_o        ( allocate_pc_o        ),
-        .allocate_dp_addr_o   ( allocate_dp_addr_o   ),
-        .allocate_tblock_idx_o( allocate_tblock_idx_o),
-        .allocate_tgroup_id_o ( allocate_tgroup_id_o ),
+        .warp_free_i           ( warp_free_i          ),
+        .allocate_warp_o       ( allocate_warp_o      ),
+        .allocate_pc_o         ( allocate_pc_o        ),
+        .allocate_dp_addr_o    ( allocate_dp_addr_o   ),
+        .allocate_tblock_size_o( allocate_tblock_size_o),
+        .allocate_tblock_idx_o ( allocate_tblock_idx_o),
+        .allocate_tgroup_id_o  ( allocate_tgroup_id_o ),
 
         .dispatched_tblocks_o( dispatched_tblocks )
     );
@@ -270,6 +285,7 @@ module obi_thread_engine #(
     `FF(dp_addr_q,           dp_addr_d,           '0, clk_i, rst_ni)
     `FF(number_of_tblocks_q, number_of_tblocks_d, '0, clk_i, rst_ni)
     `FF(tgroup_id_q,         tgroup_id_d,         '0, clk_i, rst_ni)
+    `FF(tblock_size_q,       tblock_size_d,       '0, clk_i, rst_ni)
 
     // OBI response
     `FF(obi_rvalid_q, obi_req_i.req,   1'b0, clk_i, rst_ni)

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: SHL-0.51
 
 `ifndef BENCHMARK
-    `define BENCHMARK "add_4"
+    `define BENCHMARK "add_2"
 `endif
 
 /// BGPU SoC top-level module testbench
@@ -141,21 +141,6 @@ module tb_bgpu_soc #(
         input bit wait_sba = 0
     );
         jtag_dbg.write_dmi(addr, data);
-        // if (wait_cmd) begin
-        //     dm::abstractcs_t acs;
-        //     do begin
-        //         jtag_dbg.read_dmi_exp_backoff(dm::AbstractCS, acs);
-        //         if (acs.cmderr != '0) $fatal(1, "[JTAG] Abstract command error!");
-        //     end while (acs.busy);
-        // end
-        // if (wait_sba) begin
-        //     dm::sbcs_t sbcs;
-        //     do begin
-        //         jtag_dbg.read_dmi_exp_backoff(dm::SBCS, sbcs);
-        //         // if (sbcs.sberror != '0) $error("[JTAG] System bus error!");
-        //         // if ((sbcs.sberror != '0) || sbcs.sbbusyerror) $error("[JTAG] System bus error!");
-        //     end while (sbcs.sbbusy);
-        // end
     endtask
 
     task automatic jtag_read_reg32(
@@ -212,6 +197,7 @@ module tb_bgpu_soc #(
     task automatic dispatch_threads(
         input int unsigned pc,
         input int unsigned dp_addr,
+        input int unsigned tblock_size,
         input int unsigned number_of_tblocks,
         input int unsigned tgroup_id
     );
@@ -219,9 +205,10 @@ module tb_bgpu_soc #(
         jtag_write_reg32('hFFFFFF04, dp_addr, 1'b1);
         jtag_write_reg32('hFFFFFF08, number_of_tblocks, 1'b1);
         jtag_write_reg32('hFFFFFF0C, tgroup_id, 1'b1);
+        jtag_write_reg32('hFFFFFF10, tblock_size, 1'b1);
 
         // Start dispatch
-        jtag_write_reg32('hFFFFFF10, InorderExecution ? 1 : 0, 1'b0);
+        jtag_write_reg32('hFFFFFF14, InorderExecution ? 1 : 0, 1'b0);
     endtask
 
     task automatic dispatch_status(
@@ -229,7 +216,7 @@ module tb_bgpu_soc #(
     );
         logic [31:0] status;
 
-        jtag_read_reg32('hFFFFFF10, status);
+        jtag_read_reg32('hFFFFFF14, status);
 
         $display("@%t | [DISPATCH] Status: Start Dispatch: %d Running: %d Finished %d Inorder %d",
             $time, status[0], status[1], status[2], status[3]);
@@ -242,51 +229,65 @@ module tb_bgpu_soc #(
     endtask
 
     int TblocksToLaunch;
+    int TblockSize;
     int DataPerMatrix;
     int unsigned prog [$];
 
     if (Benchmark == "add_2") begin : gen_add_2
-        // 2x2 matrix addition, 1 tblock
+        // 2x2 matrix addition, 1 tblock, 1 thread per tblock
         initial begin
             TblocksToLaunch = 1;
+            TblockSize = 1;
             DataPerMatrix = 2 ** 2;
             prog = {
-                'h04000000,
-                'h42010000,
-                'h0c020004,
-                'h42020200,
-                'h0c000008,
-                'h42000000,
-                'h0c030200,
-                'h42030300,
-                'h0c040204,
-                'h42040400,
-                'h0c050208,
-                'h42050500,
-                'h0c02020c,
-                'h42020200,
-                'h0c060000,
-                'h42060600,
-                'h0c070004,
-                'h42070700,
-                'h0c080008,
-                'h42080800,
-                'h0c00000c,
-                'h42000000,
-                'h0c090100,
-                'h0c0a0104,
-                'h0c0b0108,
-                'h0c01010c,
-                'h05030306,
-                'h45090903,
-                'h05030407,
-                'h450a0a03,
-                'h05030508,
-                'h450b0b03,
-                'h05000200,
-                'h45010100,
-                'hff000000,
-                'hff000000
+                'h46000000,
+                'h46010001,
+                'h46020002,
+                'h0C030000,
+                'h0C040001,
+                'h0C050002,
+                'h0C060003,
+                'h12070302,
+                'h04070107,
+                'h42080707,
+                'h12070402,
+                'h04070107,
+                'h42090707,
+                'h12070502,
+                'h04070107,
+                'h420A0707,
+                'h12070602,
+                'h04070107,
+                'h42010707,
+                'h12070302,
+                'h04070207,
+                'h420B0707,
+                'h12070402,
+                'h04070207,
+                'h420C0707,
+                'h12070502,
+                'h04070207,
+                'h420D0707,
+                'h12070602,
+                'h04070207,
+                'h42020707,
+                'h12070302,
+                'h04070007,
+                'h12030402,
+                'h04030003,
+                'h12040502,
+                'h04040004,
+                'h12050602,
+                'h04050005,
+                'h0400080B,
+                'h0406090C,
+                'h04080A0D,
+                'h04090102,
+                'h45070700,
+                'h45030306,
+                'h45040408,
+                'h45050509,
+                'hBF000000
             };
         end
     end : gen_add_2
@@ -527,7 +528,7 @@ module tb_bgpu_soc #(
         offset += 4;
 
         // Dispatch some threads
-        dispatch_threads('h0, (prog.size() + DataPerMatrix * 3) * 4, TblocksToLaunch, 'h2);
+        dispatch_threads('h0, (prog.size() + DataPerMatrix * 3) * 4, TblockSize, TblocksToLaunch, 'h2);
 
         while (1) begin
             dispatch_status(finished);

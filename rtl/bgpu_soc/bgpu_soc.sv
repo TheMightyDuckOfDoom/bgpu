@@ -114,6 +114,9 @@ module bgpu_soc #(
     // Width of the thread idx inside a warp
     localparam int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
 
+    // Width of the thread block size -> for now threadblocks can be of max size WarpWidth
+    localparam int unsigned TblockSizeWidth = ThreadIdxWidth + 1;
+
     // Width of the memory axi id for the Compute Clusters
     localparam int unsigned MemCcAxiIdWidth = $clog2(ComputeUnitsPerCluster)
                                                 + OutstandingReqIdxWidth + ThreadIdxWidth;
@@ -131,10 +134,11 @@ module bgpu_soc #(
     // # Typedefs                                                                            #
     // #######################################################################################
 
-    typedef logic [ AddressWidth-1:0] addr_t;
-    typedef logic [      PcWidth-1:0] pc_t;
-    typedef logic [TblockIdxBits-1:0] tblock_idx_t;
-    typedef logic [ TgroupIdBits-1:0] tgroup_id_t;
+    typedef logic [   AddressWidth-1:0] addr_t;
+    typedef logic [        PcWidth-1:0] pc_t;
+    typedef logic [  TblockIdxBits-1:0] tblock_idx_t;
+    typedef logic [TblockSizeWidth-1:0] tblock_size_t;
+    typedef logic [   TgroupIdBits-1:0] tgroup_id_t;
 
     // Data Memory Types
     typedef logic [     BlockWidth-1:0] block_mask_t;
@@ -222,6 +226,7 @@ module bgpu_soc #(
     logic [ComputeClusters-1:0] cc_allocate_warp, cc_warp_free;
     pc_t                        cc_allocate_pc;
     addr_t                      cc_allocate_dp_addr;
+    tblock_size_t               cc_allocate_tblock_size;
     tblock_idx_t                cc_allocate_tblock_idx;
     tgroup_id_t                 cc_allocate_tgroup_id;
 
@@ -248,12 +253,13 @@ module bgpu_soc #(
     // #######################################################################################
 
     control_domain #(
-        .CtrlWidth    ( CtrlWidth     ),
-        .AxiIdWidth   ( MemAxiIdWidth ),
-        .PcWidth      ( PcWidth       ),
-        .AddressWidth ( AddressWidth  ),
-        .TblockIdxBits( TblockIdxBits ),
-        .TgroupIdBits ( TgroupIdBits  ),
+        .CtrlWidth     ( CtrlWidth        ),
+        .AxiIdWidth    ( MemAxiIdWidth    ),
+        .PcWidth       ( PcWidth          ),
+        .AddressWidth  ( AddressWidth     ),
+        .TblockSizeBits( ThreadIdxWidth+1 ),
+        .TblockIdxBits ( TblockIdxBits    ),
+        .TgroupIdBits  ( TgroupIdBits     ),
 
         .axi_req_t ( ctrl_axi_req_t  ),
         .axi_resp_t( ctrl_axi_resp_t )
@@ -277,12 +283,13 @@ module bgpu_soc #(
         .jtag_tms_i  ( jtag_tms_i   ),
         .jtag_trst_ni( jtag_trst_ni ),
 
-        .warp_free_i          ( warp_free              ),
-        .allocate_warp_o      ( allocate_warp          ),
-        .allocate_pc_o        ( cc_allocate_pc         ),
-        .allocate_dp_addr_o   ( cc_allocate_dp_addr    ),
-        .allocate_tblock_idx_o( cc_allocate_tblock_idx ),
-        .allocate_tgroup_id_o ( cc_allocate_tgroup_id  ),
+        .warp_free_i           ( warp_free               ),
+        .allocate_warp_o       ( allocate_warp           ),
+        .allocate_pc_o         ( cc_allocate_pc          ),
+        .allocate_dp_addr_o    ( cc_allocate_dp_addr     ),
+        .allocate_tblock_idx_o ( cc_allocate_tblock_idx  ),
+        .allocate_tblock_size_o( cc_allocate_tblock_size ),
+        .allocate_tgroup_id_o  ( cc_allocate_tgroup_id   ),
 
         .tblock_done_ready_o( tblock_done_ready ),
         .tblock_done_i      ( tblock_done       ),
