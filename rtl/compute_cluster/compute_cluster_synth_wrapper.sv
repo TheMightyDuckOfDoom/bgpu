@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -51,6 +51,8 @@ module compute_cluster_synth_wrapper #(
     parameter int unsigned IClineIdxBits = 2,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
+    // How many bits are used to identify the size of a thread block?
+    parameter int unsigned TblockSizeBits = WarpWidth > 1 ? $clog2(WarpWidth) + 1 : 1,
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
@@ -71,10 +73,11 @@ module compute_cluster_synth_wrapper #(
     parameter type block_data_t = logic [BlockWidth * 8 - 1:0],
     parameter type block_mask_t = logic [BlockWidth     - 1:0],
 
-    parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
-    parameter type tgroup_id_t  = logic [ TgroupIdBits-1:0],
-    parameter type addr_t       = logic [ AddressWidth-1:0],
-    parameter type pc_t         = logic [      PcWidth-1:0]
+    parameter type tblock_size_t = logic [TblockSizeBits-1:0],
+    parameter type tblock_idx_t  = logic [ TblockIdxBits-1:0],
+    parameter type tgroup_id_t   = logic [  TgroupIdBits-1:0],
+    parameter type addr_t        = logic [  AddressWidth-1:0],
+    parameter type pc_t          = logic [       PcWidth-1:0]
 ) (
     /// Clock and reset
     input  logic clk_i,
@@ -90,12 +93,13 @@ module compute_cluster_synth_wrapper #(
     input  logic flush_ic_i,
 
     // Interface to start a new thread block on this compute cluster
-    output logic        warp_free_o, // The is atleas one free warp that can start a new block
-    input  logic        allocate_warp_i,
-    input  pc_t         allocate_pc_i,
-    input  addr_t       allocate_dp_addr_i, // Data / Parameter address
-    input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
-    input  tgroup_id_t  allocate_tgroup_id_i,  // Block id -> unique identifier for the block
+    output logic         warp_free_o, // The is atleas one free warp that can start a new block
+    input  logic         allocate_warp_i,
+    input  pc_t          allocate_pc_i,
+    input  addr_t        allocate_dp_addr_i, // Data / Parameter address
+    input  tblock_size_t allocate_tblock_size_i, // Size of the thread block to allocate
+    input  tblock_idx_t  allocate_tblock_idx_i, // Block index -> used to calculate the thread id
+    input  tgroup_id_t   allocate_tgroup_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
     input  logic       tblock_done_ready_i,
@@ -336,6 +340,7 @@ module compute_cluster_synth_wrapper #(
         .NumIClines            ( NumIClines             ),
         .IClineIdxBits         ( IClineIdxBits          ),
         .TblockIdxBits         ( TblockIdxBits          ),
+        .TblockSizeBits        ( TblockSizeBits         ),
         .TgroupIdBits          ( TgroupIdBits           ),
 
         .imem_axi_req_t ( imem_axi_req_t  ),
@@ -353,12 +358,13 @@ module compute_cluster_synth_wrapper #(
 
         .flush_ic_i( flush_ic_i ),
 
-        .warp_free_o          ( warp_free_o           ),
-        .allocate_warp_i      ( allocate_warp_i       ),
-        .allocate_pc_i        ( allocate_pc_i         ),
-        .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
-        .allocate_tblock_idx_i( allocate_tblock_idx_i ),
-        .allocate_tgroup_id_i ( allocate_tgroup_id_i  ),
+        .warp_free_o           ( warp_free_o            ),
+        .allocate_warp_i       ( allocate_warp_i        ),
+        .allocate_pc_i         ( allocate_pc_i          ),
+        .allocate_dp_addr_i    ( allocate_dp_addr_i     ),
+        .allocate_tblock_idx_i ( allocate_tblock_idx_i  ),
+        .allocate_tblock_size_i( allocate_tblock_size_i ),
+        .allocate_tgroup_id_i  ( allocate_tgroup_id_i   ),
 
         .tblock_done_ready_i( tblock_done_ready_i ),
         .tblock_done_o      ( tblock_done_o       ),

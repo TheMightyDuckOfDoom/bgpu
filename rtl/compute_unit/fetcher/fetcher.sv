@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -21,6 +21,8 @@ module fetcher #(
     parameter int unsigned WarpWidth = 32,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 4,
+    // How many bits are used to identify the size of a thread block?
+    parameter int unsigned TblockSizeBits = WarpWidth > 1 ? $clog2(WarpWidth) + 1 : 1,
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 4,
     // Memory Address width in bits
@@ -29,26 +31,28 @@ module fetcher #(
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned WidWidth       =  NumWarps > 1 ? $clog2(NumWarps)  : 1,
     parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
-    parameter type tblock_idx_t = logic [ TblockIdxBits-1:0],
-    parameter type tgroup_id_t  = logic [  TgroupIdBits-1:0],
-    parameter type addr_t       = logic [  AddressWidth-1:0],
-    parameter type wid_t        = logic [      WidWidth-1:0],
-    parameter type pc_t         = logic [       PcWidth-1:0],
-    parameter type act_mask_t   = logic [     WarpWidth-1:0],
-    parameter type subwarp_id_t = logic [SubwarpIdWidth-1:0],
-    parameter type fetch_mask_t = logic [    FetchWidth-1:0]
+    parameter type tblock_size_t = logic [TblockSizeBits-1:0],
+    parameter type tblock_idx_t  = logic [ TblockIdxBits-1:0],
+    parameter type tgroup_id_t   = logic [  TgroupIdBits-1:0],
+    parameter type addr_t        = logic [  AddressWidth-1:0],
+    parameter type wid_t         = logic [      WidWidth-1:0],
+    parameter type pc_t          = logic [       PcWidth-1:0],
+    parameter type act_mask_t    = logic [     WarpWidth-1:0],
+    parameter type subwarp_id_t  = logic [SubwarpIdWidth-1:0],
+    parameter type fetch_mask_t  = logic [    FetchWidth-1:0]
 ) (
     /// Clock and reset
     input logic clk_i,
     input logic rst_ni,
 
     // Interface to start a new thread block on this compute unit
-    output logic        warp_free_o, // The is atleas one free warp that can start a new block
-    input  logic        allocate_warp_i,
-    input  pc_t         allocate_pc_i,
-    input  addr_t       allocate_dp_addr_i, // Data / Parameter address
-    input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
-    input  tgroup_id_t  allocate_tgroup_id_i,  // Block id -> unique identifier for the block
+    output logic         warp_free_o, // The is atleas one free warp that can start a new block
+    input  logic         allocate_warp_i,
+    input  pc_t          allocate_pc_i,
+    input  addr_t        allocate_dp_addr_i, // Data / Parameter address
+    input  tblock_idx_t  allocate_tblock_idx_i, // Block index -> used to calculate the thread id
+    input  tblock_size_t allocate_tblock_size_i, // Block size -> number of threads in the block
+    input  tgroup_id_t   allocate_tgroup_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
     input  logic       tblock_done_ready_i,
@@ -178,12 +182,13 @@ module fetcher #(
 
         .ib_all_instr_finished_i( ib_all_instr_finished_i ),
 
-        .warp_free_o          ( warp_free_o           ),
-        .allocate_warp_i      ( allocate_warp_i       ),
-        .allocate_pc_i        ( allocate_pc_i         ),
-        .allocate_dp_addr_i   ( allocate_dp_addr_i    ),
-        .allocate_tblock_idx_i( allocate_tblock_idx_i ),
-        .allocate_tgroup_id_i ( allocate_tgroup_id_i  ),
+        .warp_free_o           ( warp_free_o            ),
+        .allocate_warp_i       ( allocate_warp_i        ),
+        .allocate_pc_i         ( allocate_pc_i          ),
+        .allocate_dp_addr_i    ( allocate_dp_addr_i     ),
+        .allocate_tblock_idx_i ( allocate_tblock_idx_i  ),
+        .allocate_tblock_size_i( allocate_tblock_size_i ),
+        .allocate_tgroup_id_i  ( allocate_tgroup_id_i   ),
 
         .tblock_done_ready_i( tblock_done_ready_i ),
         .tblock_done_o      ( tblock_done_o       ),

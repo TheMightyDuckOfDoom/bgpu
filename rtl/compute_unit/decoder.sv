@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -140,11 +140,14 @@ module decoder import bgpu_pkg::*; #(
 
                 // Load Store Unit
                 else if (dec_inst_o[fidx].eu == EU_LSU) begin : decode_lsu
-                    // LSU instructions always have two operands register operands
-                    // Operand 1 is the address
-                    // Operand 0 is the data to store
-                    dec_operands_is_reg_o[fidx][0] = dec_inst_o[fidx].subtype inside `INST_STORE;
-                    dec_operands_is_reg_o[fidx][1] = 1'b1; // Address
+                    if (dec_inst_o[fidx].subtype != LSU_LOAD_PARAM) begin
+                        // LSU instructions always have two operands register operands
+                        // Operand 1 is the address
+                        // Operand 0 is the data to store
+                        dec_operands_is_reg_o[fidx][0] = dec_inst_o[fidx].subtype inside
+                            `INST_STORE;
+                        dec_operands_is_reg_o[fidx][1] = 1'b1; // Address
+                    end
                 end : decode_lsu
 
                 // Branch Unit

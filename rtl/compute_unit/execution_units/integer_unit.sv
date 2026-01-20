@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -100,9 +100,9 @@ module integer_unit import bgpu_pkg::*; #(
 
             // Check instruction subtype and perform operation
             case (opc_to_eu_inst_sub_i)
-                IU_TID:  result[i] = i; // Thread ID
-                IU_WID:  result[i][WidWidth-1:0] = opc_to_eu_tag_i[WidWidth-1:0]; // Warp ID
-                IU_BID:  result[i][TblockIdxBits-1:0]
+                IU_TID: result[i] = i; // Thread ID
+                IU_WID: result[i][WidWidth-1:0] = opc_to_eu_tag_i[WidWidth-1:0]; // Warp ID
+                IU_BID: result[i][TblockIdxBits-1:0]
                     = fe_to_iu_warp_tblock_idx_i[opc_to_eu_tag_i[WidWidth-1:0]]; // Block ID
 
                 // Thread ID inside thread block: BID * Width + TID
@@ -114,8 +114,10 @@ module integer_unit import bgpu_pkg::*; #(
 
                 IU_LDI, IU_OR:  result[i] = operands[1][i] | operands[0][i]; // Load immediate
 
-                IU_AND:  result[i] = operands[1][i] & operands[0][i]; // AND
-                IU_XOR:  result[i] = operands[1][i] ^ operands[0][i]; // XOR
+                IU_AND: result[i] = operands[1][i] & operands[0][i]; // AND
+                IU_XOR: result[i] = operands[1][i] ^ operands[0][i]; // XOR
+
+                IU_MUL: result[i] = operands[1][i] * operands[0][i]; // Multiply
 
                 // Shift left logical, immediate
                 IU_SHL, IU_SHLI: result[i] = operands[1][i] << operands[0][i];

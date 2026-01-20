@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -53,6 +53,8 @@ module compute_cluster #(
     parameter int unsigned IClineIdxBits = 2,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
+    // How many bits are used to identify the size of a thread block?
+    parameter int unsigned TblockSizeBits = WarpWidth > 1 ? $clog2(WarpWidth) + 1 : 1,
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
@@ -68,10 +70,11 @@ module compute_cluster #(
     parameter type mem_axi_resp_t = logic,
 
     /// Dependent parameter, do **not** overwrite.
-    parameter type tblock_idx_t = logic [TblockIdxBits-1:0],
-    parameter type tgroup_id_t  = logic [ TgroupIdBits-1:0],
-    parameter type addr_t       = logic [ AddressWidth-1:0],
-    parameter type pc_t         = logic [      PcWidth-1:0]
+    parameter type tblock_size_t = logic [TblockSizeBits-1:0],
+    parameter type tblock_idx_t  = logic [TblockIdxBits-1:0],
+    parameter type tgroup_id_t   = logic [ TgroupIdBits-1:0],
+    parameter type addr_t        = logic [ AddressWidth-1:0],
+    parameter type pc_t          = logic [      PcWidth-1:0]
 ) (
     /// Clock and reset
     input  logic clk_i,
@@ -87,12 +90,13 @@ module compute_cluster #(
     input  logic flush_ic_i,
 
     // Interface to start a new thread block on this compute cluster
-    output logic        warp_free_o, // The is atleas one free warp that can start a new block
-    input  logic        allocate_warp_i,
-    input  pc_t         allocate_pc_i,
-    input  addr_t       allocate_dp_addr_i, // Data / Parameter address
-    input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
-    input  tgroup_id_t  allocate_tgroup_id_i,  // Block id -> unique identifier for the block
+    output logic         warp_free_o, // The is atleas one free warp that can start a new block
+    input  logic         allocate_warp_i,
+    input  pc_t          allocate_pc_i,
+    input  addr_t        allocate_dp_addr_i, // Data / Parameter address
+    input  tblock_idx_t  allocate_tblock_idx_i, // Block index -> used to calculate the thread id
+    input  tblock_size_t allocate_tblock_size_i, // Size of the thread block to allocate
+    input  tgroup_id_t   allocate_tgroup_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
     input  logic       tblock_done_ready_i,
@@ -159,10 +163,11 @@ module compute_cluster #(
     `AXI_TYPEDEF_ALL(cc_mem_axi, addr_t, mem_cc_axi_id_t, block_data_t, block_mask_t, logic)
 
     typedef struct packed {
-        pc_t         pc;
-        addr_t       dp_addr;
-        tblock_idx_t tblock_idx;
-        tgroup_id_t  tgroup_id;
+        pc_t          pc;
+        addr_t        dp_addr;
+        tblock_idx_t  tblock_idx;
+        tblock_size_t tblock_size;
+        tgroup_id_t   tgroup_id;
     } allocate_data_t;
 
     // #######################################################################################
@@ -391,10 +396,11 @@ module compute_cluster #(
     end : distribute_thread_block
 
     assign cu_allocate_data_d = '{
-        pc        : allocate_pc_i,
-        dp_addr   : allocate_dp_addr_i,
-        tblock_idx: allocate_tblock_idx_i,
-        tgroup_id : allocate_tgroup_id_i
+        pc         : allocate_pc_i,
+        dp_addr    : allocate_dp_addr_i,
+        tblock_idx : allocate_tblock_idx_i,
+        tblock_size: allocate_tblock_size_i,
+        tgroup_id  : allocate_tgroup_id_i
     };
 
     for (genvar cu = 0; cu < ComputeUnits; cu++) begin : gen_allocate_reg
@@ -476,6 +482,7 @@ module compute_cluster #(
             .NumIClines            ( NumIClines             ),
             .IClineIdxBits         ( IClineIdxBits          ),
             .TblockIdxBits         ( TblockIdxBits          ),
+            .TblockSizeBits        ( TblockSizeBits         ),
             .TgroupIdBits          ( TgroupIdBits           ),
             .ClusterId             ( ClusterId              ),
             .ComputeUnitId         ( cu                     )
@@ -489,12 +496,13 @@ module compute_cluster #(
 
             .flush_ic_i( flush_ic_i ),
 
-            .warp_free_o          ( cu_warp_free_d    [cu]            ),
-            .allocate_warp_i      ( cu_allocate_q     [cu]            ),
-            .allocate_pc_i        ( cu_allocate_data_q[cu].pc         ),
-            .allocate_dp_addr_i   ( cu_allocate_data_q[cu].dp_addr    ),
-            .allocate_tblock_idx_i( cu_allocate_data_q[cu].tblock_idx ),
-            .allocate_tgroup_id_i ( cu_allocate_data_q[cu].tgroup_id  ),
+            .warp_free_o           ( cu_warp_free_d    [cu]             ),
+            .allocate_warp_i       ( cu_allocate_q     [cu]             ),
+            .allocate_pc_i         ( cu_allocate_data_q[cu].pc          ),
+            .allocate_dp_addr_i    ( cu_allocate_data_q[cu].dp_addr     ),
+            .allocate_tblock_idx_i ( cu_allocate_data_q[cu].tblock_idx  ),
+            .allocate_tblock_size_i( cu_allocate_data_q[cu].tblock_size ),
+            .allocate_tgroup_id_i  ( cu_allocate_data_q[cu].tgroup_id   ),
 
             .tblock_done_ready_i( cu_done_ready[cu] ),
             .tblock_done_o      ( cu_done      [cu] ),

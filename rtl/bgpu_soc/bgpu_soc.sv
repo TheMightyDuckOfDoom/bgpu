@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -115,7 +115,7 @@ module bgpu_soc #(
     localparam int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
 
     // Width of the thread block size -> for now threadblocks can be of max size WarpWidth
-    localparam int unsigned TblockSizeWidth = ThreadIdxWidth + 1;
+    localparam int unsigned TblockSizeBits = ThreadIdxWidth + 1;
 
     // Width of the memory axi id for the Compute Clusters
     localparam int unsigned MemCcAxiIdWidth = $clog2(ComputeUnitsPerCluster)
@@ -134,11 +134,11 @@ module bgpu_soc #(
     // # Typedefs                                                                            #
     // #######################################################################################
 
-    typedef logic [   AddressWidth-1:0] addr_t;
-    typedef logic [        PcWidth-1:0] pc_t;
-    typedef logic [  TblockIdxBits-1:0] tblock_idx_t;
-    typedef logic [TblockSizeWidth-1:0] tblock_size_t;
-    typedef logic [   TgroupIdBits-1:0] tgroup_id_t;
+    typedef logic [  AddressWidth-1:0] addr_t;
+    typedef logic [       PcWidth-1:0] pc_t;
+    typedef logic [ TblockIdxBits-1:0] tblock_idx_t;
+    typedef logic [TblockSizeBits-1:0] tblock_size_t;
+    typedef logic [  TgroupIdBits-1:0] tgroup_id_t;
 
     // Data Memory Types
     typedef logic [     BlockWidth-1:0] block_mask_t;
@@ -392,6 +392,7 @@ module bgpu_soc #(
             .NumIClines            ( NumIClines             ),
             .IClineIdxBits         ( IClineIdxBits          ),
             .TblockIdxBits         ( TblockIdxBits          ),
+            .TblockSizeBits        ( TblockSizeBits         ),
             .TgroupIdBits          ( TgroupIdBits           ),
             .ClusterId             ( i                      ),
 
@@ -410,12 +411,13 @@ module bgpu_soc #(
 
             .flush_ic_i( flush_ic ),
 
-            .warp_free_o          ( cc_warp_free    [i]    ),
-            .allocate_warp_i      ( cc_allocate_warp[i]    ),
-            .allocate_pc_i        ( cc_allocate_pc         ),
-            .allocate_dp_addr_i   ( cc_allocate_dp_addr    ),
-            .allocate_tblock_idx_i( cc_allocate_tblock_idx ),
-            .allocate_tgroup_id_i ( cc_allocate_tgroup_id  ),
+            .warp_free_o           ( cc_warp_free    [i]     ),
+            .allocate_warp_i       ( cc_allocate_warp[i]     ),
+            .allocate_pc_i         ( cc_allocate_pc          ),
+            .allocate_dp_addr_i    ( cc_allocate_dp_addr     ),
+            .allocate_tblock_idx_i ( cc_allocate_tblock_idx  ),
+            .allocate_tblock_size_i( cc_allocate_tblock_size ),
+            .allocate_tgroup_id_i  ( cc_allocate_tgroup_id   ),
 
             .tblock_done_ready_i( cc_done_ready[i] ),
             .tblock_done_o      ( cc_done      [i] ),

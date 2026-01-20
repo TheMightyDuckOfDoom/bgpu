@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -44,6 +44,8 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     parameter int unsigned IClineIdxBits = 2,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 8,
+    // How many bits are used to identify the size of a thread block?
+    parameter int unsigned TblockSizeBits = WarpWidth > 1 ? $clog2(WarpWidth) + 1 : 1,
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 8,
 
@@ -89,6 +91,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     typedef logic [  BlockWidth * 8 -1:0] block_data_t;
     typedef logic [     AddressWidth-1:0] addr_t;
     typedef logic [    TblockIdxBits-1:0] tblock_idx_t;
+    typedef logic [   TblockSizeBits-1:0] tblock_size_t;
     typedef logic [     TgroupIdBits-1:0] tgroup_id_t;
     typedef logic [OutstandingReqIdxWidth+ThreadIdxWidth-1:0] req_id_t;
 
@@ -104,10 +107,11 @@ module tb_compute_cluster import bgpu_pkg::*; #(
     typedef logic [$bits(enc_inst_t) * (1 << IClineIdxBits)    -1:0] imem_data_t;
 
     typedef struct packed {
-        pc_t pc;
-        addr_t dp_addr;
-        tblock_idx_t tblock_idx;
-        tgroup_id_t  tgroup_id;
+        pc_t          pc;
+        addr_t        dp_addr;
+        tblock_idx_t  tblock_idx;
+        tblock_size_t tblock_size;
+        tgroup_id_t   tgroup_id;
     } warp_insert_t;
 
     typedef logic [ImemAxiIdWidth-1:0] imem_axi_id_t;
@@ -201,6 +205,7 @@ module tb_compute_cluster import bgpu_pkg::*; #(
         .NumIClines            ( NumIClines             ),
         .IClineIdxBits         ( IClineIdxBits          ),
         .TblockIdxBits         ( TblockIdxBits          ),
+        .TblockSizeBits        ( TblockSizeBits         ),
         .TgroupIdBits          ( TgroupIdBits           ),
 
         .imem_axi_req_t ( imem_axi_req_t  ),
@@ -218,12 +223,13 @@ module tb_compute_cluster import bgpu_pkg::*; #(
 
         .flush_ic_i( flush_ic ),
 
-        .warp_free_o          ( warp_free              ),
-        .allocate_warp_i      ( allocate_warp          ),
-        .allocate_pc_i        ( warp_insert.pc         ),
-        .allocate_dp_addr_i   ( warp_insert.dp_addr    ),
-        .allocate_tblock_idx_i( warp_insert.tblock_idx ),
-        .allocate_tgroup_id_i ( warp_insert.tgroup_id  ),
+        .warp_free_o           ( warp_free               ),
+        .allocate_warp_i       ( allocate_warp           ),
+        .allocate_pc_i         ( warp_insert.pc          ),
+        .allocate_dp_addr_i    ( warp_insert.dp_addr     ),
+        .allocate_tblock_idx_i ( warp_insert.tblock_idx  ),
+        .allocate_tblock_size_i( warp_insert.tblock_size ),
+        .allocate_tgroup_id_i  ( warp_insert.tgroup_id   ),
 
         .tblock_done_ready_i( 1'b1           ),
         .tblock_done_o      ( tblock_done    ),
@@ -246,12 +252,13 @@ module tb_compute_cluster import bgpu_pkg::*; #(
 
         .flush_ic_i( flush_ic ),
 
-        .warp_free_o          ( warp_free              ),
-        .allocate_warp_i      ( allocate_warp          ),
-        .allocate_pc_i        ( warp_insert.pc         ),
-        .allocate_dp_addr_i   ( warp_insert.dp_addr    ),
-        .allocate_tblock_idx_i( warp_insert.tblock_idx ),
-        .allocate_tgroup_id_i ( warp_insert.tgroup_id  ),
+        .warp_free_o           ( warp_free               ),
+        .allocate_warp_i       ( allocate_warp           ),
+        .allocate_pc_i         ( warp_insert.pc          ),
+        .allocate_dp_addr_i    ( warp_insert.dp_addr     ),
+        .allocate_tblock_idx_i ( warp_insert.tblock_idx  ),
+        .allocate_tblock_size_i( warp_insert.tblock_size ),
+        .allocate_tgroup_id_i  ( warp_insert.tgroup_id   ),
 
         .tblock_done_ready_i( 1'b1           ),
         .tblock_done_o      ( tblock_done    ),
@@ -378,11 +385,12 @@ module tb_compute_cluster import bgpu_pkg::*; #(
             // Flush IC if it is the first threadblock
             flush_ic = (tblocks_launched == 0);
 
-            allocate_warp          = 1'b1;
-            warp_insert.pc         = '0;
-            warp_insert.dp_addr    =       addr_t'(tblocks_launched);
-            warp_insert.tblock_idx = tblock_idx_t'(tblocks_launched);
-            warp_insert.tgroup_id  =  tgroup_id_t'(tblocks_launched);
+            allocate_warp           = 1'b1;
+            warp_insert.pc          = '0;
+            warp_insert.dp_addr     =       addr_t'(tblocks_launched);
+            warp_insert.tblock_idx  = tblock_idx_t'(tblocks_launched);
+            warp_insert.tgroup_id   =  tgroup_id_t'(tblocks_launched);
+            warp_insert.tblock_size = tblock_size_t'(WarpWidth);
 
             if (warp_free) begin
                 $display("Launching thread block %0d at address %0h.", tblocks_launched,

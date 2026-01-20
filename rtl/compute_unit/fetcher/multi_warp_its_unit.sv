@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -14,6 +14,8 @@ module multi_warp_its_unit #(
     parameter int unsigned WarpWidth = 32,
     // How many bits are used to index thread blocks inside a thread group?
     parameter int unsigned TblockIdxBits = 4,
+    // How many bits are used to identify the size of a thread block?
+    parameter int unsigned TblockSizeBits = WarpWidth > 1 ? $clog2(WarpWidth) + 1 : 1,
     // How many bits are used to identify a thread group?
     parameter int unsigned TgroupIdBits = 4,
     // Memory Address width in bits
@@ -22,25 +24,27 @@ module multi_warp_its_unit #(
     /// Dependent parameter, do **not** overwrite.
     parameter int unsigned WidWidth        = NumWarps > 1 ? $clog2(NumWarps)  : 1,
     parameter int unsigned SubwarpIdWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
-    parameter type tblock_idx_t = logic [ TblockIdxBits-1:0],
-    parameter type tgroup_id_t  = logic [  TgroupIdBits-1:0],
-    parameter type addr_t       = logic [  AddressWidth-1:0],
-    parameter type wid_t        = logic [      WidWidth-1:0],
-    parameter type pc_t         = logic [       PcWidth-1:0],
-    parameter type act_mask_t   = logic [     WarpWidth-1:0],
-    parameter type subwarp_id_t = logic [SubwarpIdWidth-1:0]
+    parameter type tblock_size_t = logic [TblockSizeBits-1:0],
+    parameter type tblock_idx_t  = logic [ TblockIdxBits-1:0],
+    parameter type tgroup_id_t   = logic [  TgroupIdBits-1:0],
+    parameter type addr_t        = logic [  AddressWidth-1:0],
+    parameter type wid_t         = logic [      WidWidth-1:0],
+    parameter type pc_t          = logic [       PcWidth-1:0],
+    parameter type act_mask_t    = logic [     WarpWidth-1:0],
+    parameter type subwarp_id_t  = logic [SubwarpIdWidth-1:0]
 ) (
     /// Clock and reset
     input logic clk_i,
     input logic rst_ni,
 
     // Interface to start a new thread block on this compute unit
-    output logic        warp_free_o, // The is atleas one free warp that can start a new block
-    input  logic        allocate_warp_i,
-    input  pc_t         allocate_pc_i,
-    input  addr_t       allocate_dp_addr_i, // Data / Parameter address
-    input  tblock_idx_t allocate_tblock_idx_i, // Block index -> used to calculate the thread id
-    input  tgroup_id_t  allocate_tgroup_id_i,  // Block id -> unique identifier for the block
+    output logic         warp_free_o, // The is atleas one free warp that can start a new block
+    input  logic         allocate_warp_i,
+    input  pc_t          allocate_pc_i,
+    input  addr_t        allocate_dp_addr_i, // Data / Parameter address
+    input  tblock_idx_t  allocate_tblock_idx_i, // Block index -> used to calculate the thread id
+    input  tblock_size_t allocate_tblock_size_i, // Block size -> number of threads in the block
+    input  tgroup_id_t   allocate_tgroup_id_i,  // Block id -> unique identifier for the block
 
     // Thread block completion
     input  logic       tblock_done_ready_i,
@@ -83,10 +87,11 @@ module multi_warp_its_unit #(
 
     // Data per warp
     typedef struct packed {
-        logic        occupied;
-        addr_t       dp_addr;    // Data / Parameter address
-        tblock_idx_t tblock_idx; // Block index -> used to calculate the thread id
-        tgroup_id_t  tblock_id;  // Unique identifier for the block
+        logic         occupied;
+        addr_t        dp_addr;     // Data / Parameter address
+        tblock_idx_t  tblock_idx;  // Block index -> used to calculate the thread id
+        tblock_size_t tblock_size; // Block size -> number of threads in the block
+        tgroup_id_t   tblock_id;   // Unique identifier for the block
     } warp_data_t;
 
     // #######################################################################################
@@ -101,6 +106,8 @@ module multi_warp_its_unit #(
     logic [NumWarps-1:0] allocate_warp;
     logic [NumWarps-1:0] warp_ready;
 
+    act_mask_t allocate_mask; // Theads to allocate
+
     // #######################################################################################
     // # Combinatorial Logic                                                                 #
     // #######################################################################################
@@ -114,6 +121,7 @@ module multi_warp_its_unit #(
         tblock_done_id_o = '0;
 
         allocate_warp = '0;
+        allocate_mask = '0;
 
         // Allocate a new warp
         if (allocate_warp_i && warp_free_o) begin : allocate_new_warp
@@ -123,11 +131,18 @@ module multi_warp_its_unit #(
                     // Allocate the warp
                     allocate_warp[i] = 1'b1;
 
+                    for (int j = 0; j < WarpWidth; j++) begin
+                        if (j < allocate_tblock_size_i) begin
+                            allocate_mask[j] = 1'b1;
+                        end
+                    end
+
                     // Set the initial values
-                    warp_data_d[i].occupied   = 1'b1;
-                    warp_data_d[i].tblock_idx = allocate_tblock_idx_i;
-                    warp_data_d[i].tblock_id  = allocate_tgroup_id_i;
-                    warp_data_d[i].dp_addr    = allocate_dp_addr_i;
+                    warp_data_d[i].occupied    = 1'b1;
+                    warp_data_d[i].tblock_idx  = allocate_tblock_idx_i;
+                    warp_data_d[i].tblock_id   = allocate_tgroup_id_i;
+                    warp_data_d[i].tblock_size = allocate_tblock_size_i;
+                    warp_data_d[i].dp_addr     = allocate_dp_addr_i;
                     break;
                 end
             end : find_free_warp
@@ -179,8 +194,9 @@ module multi_warp_its_unit #(
             .clk_i ( clk_i  ),
             .rst_ni( rst_ni ),
 
-            .init_i   ( allocate_warp[warp] ),
-            .init_pc_i( allocate_pc_i       ),
+            .init_i         ( allocate_warp[warp] ),
+            .init_act_mask_i( allocate_mask       ),
+            .init_pc_i      ( allocate_pc_i       ),
 
             // From decode stage
             .instruction_decoded_i( instruction_decoded_i && (decode_wid_i == warp) ),
@@ -243,6 +259,11 @@ module multi_warp_its_unit #(
             else $error("Warp was selected for fetching, but active mask is zero: %0d", i);
 
         end : gen_asserts
+
+        // Thread block size cannot be greater than warp size
+        assert property (@(posedge clk_i) disable iff (!rst_ni)
+            !allocate_warp_i || (int'(allocate_tblock_size_i) <= WarpWidth))
+        else $error("Thread block size is greater than warp size");
 
         // // A warp cannot be selected and be decoded at the same time
         // assert property (@(posedge clk_i) disable iff (!rst_ni)

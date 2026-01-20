@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -25,8 +25,9 @@ module warp_its_unit #(
     input logic rst_ni,
 
     // Initialization
-    input logic init_i,
-    input pc_t  init_pc_i,
+    input logic      init_i,
+    input act_mask_t init_act_mask_i,
+    input pc_t       init_pc_i,
 
     // To / From Fetcher
     input  logic        selected_for_fetch_i,
@@ -114,7 +115,7 @@ module warp_its_unit #(
             // Single PC for all threads
             valid_pc_d   [0]             = 1'b1;
             pc_act_mask_d[0].pc          = init_pc_i;
-            pc_act_mask_d[0].active_mask = '1;
+            pc_act_mask_d[0].active_mask = init_act_mask_i;
             pc_ready_d   [0]             = 1'b1;
         end : init_pcs
         else begin : normal_operation

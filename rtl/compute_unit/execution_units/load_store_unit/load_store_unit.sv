@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -191,6 +191,7 @@ module load_store_unit import bgpu_pkg::*; #(
         always_comb begin : build_address
             // Load parameter
             if (opc_to_eu_inst_sub_i == LSU_LOAD_PARAM) begin : param_load
+                // build offset out of {op0, op1}
                 opc_to_eu_addr[i] = fe_to_lsu_warp_dp_addr_i[opc_to_eu_tag_i[WidWidth-1:0]] +
                     opc_to_eu_operands_i[1][i*RegWidth +: AddressWidth] * addr_t'(RegWidthInBytes);
             end : param_load
