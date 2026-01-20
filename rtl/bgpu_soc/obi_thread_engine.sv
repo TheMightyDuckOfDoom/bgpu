@@ -116,6 +116,7 @@ module obi_thread_engine #(
         finished_d          = finished_q;
         finished_tblocks_d  = finished_tblocks_q;
         inorder_execution_d = inorder_execution_q;
+        tblock_size_d       = tblock_size_q;
 
         pc_d                = pc_q;
         dp_addr_d           = dp_addr_q;
