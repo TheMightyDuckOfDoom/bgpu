@@ -14,6 +14,8 @@
 // Operand 0 is the address for load/store operations
 // Operand 1 is the data for store operations
 module load_store_unit import bgpu_pkg::*; #(
+    // Number of Warps per compute unit
+    parameter int unsigned NumWarps = 8,
     // Width of the registers
     parameter int unsigned RegWidth = 32,
     // Number of threads in a warp
@@ -36,6 +38,7 @@ module load_store_unit import bgpu_pkg::*; #(
     parameter int unsigned BlockWidth      = 1 << BlockIdxBits, // In bytes
     parameter int unsigned BlockAddrWidth  = AddressWidth - BlockIdxBits,
     parameter int unsigned ThreadIdxWidth  = WarpWidth > 1 ? $clog2(WarpWidth) : 1,
+    parameter type addr_t       = logic  [        AddressWidth-1:0],
     parameter type warp_data_t  = logic  [RegWidth * WarpWidth-1:0],
     parameter type reg_idx_t    = logic  [         RegIdxWidth-1:0],
     parameter type block_addr_t = logic  [      BlockAddrWidth-1:0],
@@ -52,6 +55,9 @@ module load_store_unit import bgpu_pkg::*; #(
 
     /// Testmode
     input logic testmode_i,
+
+    /// From Fetcher
+    input addr_t [NumWarps-1:0] fe_to_lsu_warp_dp_addr_i, // Data / Parameter address
 
     /// Memory Request
     input  logic        mem_ready_i,
@@ -92,12 +98,12 @@ module load_store_unit import bgpu_pkg::*; #(
     localparam int unsigned RegWidthInBytes = RegWidth / 8;
     localparam int unsigned WidthBits       = RegWidthInBytes > 1 ? $clog2(RegWidthInBytes) : 1;
     localparam int unsigned OutstandingReqs = 1 << OutstandingReqIdxWidth;
+    localparam int unsigned WidWidth        = NumWarps > 1 ? $clog2(NumWarps) : 1;
 
     // #######################################################################################
     // # Type Definitions                                                                    #
     // #######################################################################################
 
-    typedef logic       [AddressWidth-1:0] addr_t;
     typedef addr_t      [   WarpWidth-1:0] req_addr_t;
     typedef block_idx_t [   WarpWidth-1:0] offsets_t;
 
@@ -182,7 +188,16 @@ module load_store_unit import bgpu_pkg::*; #(
     // Operand 1 is the address for load/store operations
     // Truncate to address width
     for (genvar i = 0; i < WarpWidth; i++) begin : gen_addr
-        assign opc_to_eu_addr[i] = opc_to_eu_operands_i[1][i*RegWidth +: AddressWidth];
+        always_comb begin : build_address
+            // Load parameter
+            if (opc_to_eu_inst_sub_i == LSU_LOAD_PARAM) begin : param_load
+                opc_to_eu_addr[i] = fe_to_lsu_warp_dp_addr_i[opc_to_eu_tag_i[WidWidth-1:0]] +
+                    opc_to_eu_operands_i[1][i*RegWidth +: AddressWidth] * addr_t'(RegWidthInBytes);
+            end : param_load
+            else begin : normal_load_store
+                opc_to_eu_addr[i] = opc_to_eu_operands_i[1][i*RegWidth +: AddressWidth];
+            end : normal_load_store
+        end : build_address
     end : gen_addr
 
     // Check if the instruction is a write

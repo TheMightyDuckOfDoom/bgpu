@@ -108,12 +108,6 @@ module decoder import bgpu_pkg::*; #(
                 // Default is to increment the pc to the next instruction
                 dec_decoded_next_pc_o = dec_decoded_next_pc_o + 'd1;
 
-                // Stop the warp if the instruction is a stop instruction
-                if (ic_inst_i[fidx][31:24] == '1) begin : decode_stop_inst
-                    dec_stop_warp_o                = 1'b1;
-                    dec_decoded_unused_ibe_o[fidx] = 1'b1;
-                end : decode_stop_inst
-
                 // Integer Unit
                 if (dec_inst_o[fidx].eu == EU_IU) begin : decode_iu
                     // Two register operands
@@ -155,7 +149,12 @@ module decoder import bgpu_pkg::*; #(
 
                 // Branch Unit
                 else if (dec_inst_o[fidx].eu == EU_BRU) begin : decode_bru
-                    if (dec_inst_o[fidx].subtype == BRU_JMP) begin : jump_instruction
+                    // Stop the warp if the instruction is a stop instruction
+                    if (dec_inst_o[fidx].subtype == BRU_STOP) begin : decode_stop_inst
+                        dec_stop_warp_o                = 1'b1;
+                        dec_decoded_unused_ibe_o[fidx] = 1'b1;
+                    end : decode_stop_inst
+                    else if (dec_inst_o[fidx].subtype == BRU_JMP) begin : jump_instruction
                         // Both operands are immediate values forming the offset
 
                         // Sign extend the offset and add it to the PC

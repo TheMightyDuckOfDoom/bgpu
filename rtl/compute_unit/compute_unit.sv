@@ -213,8 +213,10 @@ module compute_unit import bgpu_pkg::*; #(
     logic ic_to_fe_ready_d, ic_to_fe_ready_q;
     fe_to_ic_data_t fe_to_ic_data_d, fe_to_ic_data_q;
 
+    /// Fetcher to Load Store Unit -> Constants per Warp
+    addr_t [NumWarps-1:0] fe_to_lsu_warp_dp_addr; // Data / Parameter address
+
     // Fetcher to Integer Unit -> Constants per Warp
-    addr_t       [NumWarps-1:0] fe_to_iu_warp_dp_addr;    // Data / Parameter address
     tblock_idx_t [NumWarps-1:0] fe_to_iu_warp_tblock_idx; // Block index
 
     /// Instruction Cache to Decoder
@@ -353,7 +355,7 @@ module compute_unit import bgpu_pkg::*; #(
         .dec_decoded_subwarp_id_i( dec_to_fetch_decoded_subwarp_id_q ),
         .dec_decoded_next_pc_i   ( dec_to_fetch_decoded_next_pc_q    ),
 
-        .warp_dp_addr_o   ( fe_to_iu_warp_dp_addr    ),
+        .warp_dp_addr_o   ( fe_to_lsu_warp_dp_addr   ),
         .warp_tblock_idx_o( fe_to_iu_warp_tblock_idx ),
 
         .bru_branch_i        ( bru_branch         ),
@@ -709,7 +711,6 @@ module compute_unit import bgpu_pkg::*; #(
 
             .testmode_i( testmode_i ),
 
-            .fe_to_iu_warp_dp_addr_i   ( fe_to_iu_warp_dp_addr    ),
             .fe_to_iu_warp_tblock_idx_i( fe_to_iu_warp_tblock_idx ),
 
             .eu_to_opc_ready_o   ( iu_in_ready[iu]                 ),
@@ -815,6 +816,7 @@ module compute_unit import bgpu_pkg::*; #(
     );
 
     load_store_unit #(
+        .NumWarps              ( NumWarps               ),
         .RegWidth              ( RegWidth               ),
         .WarpWidth             ( WarpWidth              ),
         .OperandsPerInst       ( OperandsPerInst        ),
@@ -828,6 +830,8 @@ module compute_unit import bgpu_pkg::*; #(
         .rst_ni( rst_ni ),
 
         .testmode_i( testmode_i ),
+
+        .fe_to_lsu_warp_dp_addr_i( fe_to_lsu_warp_dp_addr ),
 
         .eu_to_opc_ready_o   ( lsu_in_ready                 ),
         .opc_to_eu_valid_i   ( lsu_in_valid                 ),

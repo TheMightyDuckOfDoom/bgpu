@@ -42,8 +42,7 @@ module integer_unit import bgpu_pkg::*; #(
     input logic testmode_i,
 
     // From Fetcher
-    input  addr_t       [NumWarps-1:0] fe_to_iu_warp_dp_addr_i, // Data / Parameter address
-    input  tblock_idx_t [NumWarps-1:0] fe_to_iu_warp_tblock_idx_i, // Block index
+    input tblock_idx_t [NumWarps-1:0] fe_to_iu_warp_tblock_idx_i, // Block index
 
     // From Operand Collector
     output logic        eu_to_opc_ready_o,

@@ -152,10 +152,6 @@ module tb_compute_unit import bgpu_pkg::*; #(
         // Subtract address from data
         '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 1, op2: 1}, // reg2 = reg1 - reg0
 
-        // '{eu: EU_IU,  subtype: IU_BID,         dst: 3, op1: 0, op2: 0}, // reg3 = block ID
-
-        // '{eu: EU_IU,  subtype: IU_ADD,         dst: 4, op1: 2, op2: 3}, // reg4 = reg2 + reg3
-
         // Store result back to memory
         '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 5, op1: 2, op2: 0}, // [reg0] = reg4
 
@@ -168,38 +164,9 @@ module tb_compute_unit import bgpu_pkg::*; #(
         '{eu: EU_FPU, subtype: FPU_RECIP,      dst: 12, op1: 11, op2: 11},
         '{eu: EU_FPU, subtype: FPU_FP_TO_INT,  dst: 13, op1: 12, op2: 12},
 
-        // NOPs
-        '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}  // STOP thread
+        // Stop thread
+        '{eu: EU_BRU, subtype: BRU_STOP, dst: 0, op1: 0, op2: 0} // STOP thread
     };
-    // enc_inst_t test_program [14] = {
-    //     // Calculate byte offset from thread ID and warp ID
-    //     '{eu: EU_IU,  subtype: IU_TBID,        dst: 0, op1: 0, op2: 0}, // reg0 = thread ID in tblk
-    //     '{eu: EU_BRU, subtype: BRU_SYNC,       dst: 0, op1: 0, op2: 0}, // Sync threads in warp
-
-    //     // Load data from memory
-    //     '{eu: EU_LSU, subtype: LSU_LOAD_BYTE,  dst: 1, op1: 0, op2: 0}, // reg1 = [reg0]
-
-    //     // Subtract address from data
-    //     '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 1, op2: 0}, // reg2 = reg1 - reg0
-    //     '{eu: EU_IU,  subtype: IU_LDI,         dst: 3, op1: 1, op2: 0}, // reg3 = 1
-    //     '{eu: EU_IU,  subtype: IU_ADD,         dst: 2, op1: 2, op2: 3}, // reg2 = reg3 + reg2
-    //     '{eu: EU_IU,  subtype: IU_AND,         dst: 3, op1: 3, op2: 0}, // reg3 = reg3 & reg2
-
-    //     '{eu: EU_BRU, subtype: BRU_BEZ,        dst: 6, op1: 1, op2: 3}, // Jump if reg3 == 0
-    //     // '{eu: EU_IU,  subtype: IU_SUB,         dst: 2, op1: 2, op2: 0}, // reg2 = reg2 - reg0
-    //     '{eu: EU_IU,  subtype: IU_LDI,         dst: 2, op1: 255, op2: 0}, // reg2 = 255
-
-    //     '{eu: EU_BRU, subtype: BRU_SYNC,       dst: 0, op1: 0, op2: 0}, // Sync threads in warp
-    //     '{eu: EU_IU,  subtype: IU_BID,         dst: 3, op1: 0, op2: 0}, // reg3 = block ID
-
-    //     '{eu: EU_IU,  subtype: IU_ADD,         dst: 4, op1: 2, op2: 3}, // reg4 = reg2 + reg3
-
-    //     // Store result back to memory
-    //     '{eu: EU_LSU, subtype: LSU_STORE_BYTE, dst: 5, op1: 0, op2: 2}, // [reg0] = reg4
-
-    //     // NOPs
-    //     '{eu: eu_e'('1),   subtype: '1,        dst: 0, op1: 0, op2: 0}  // STOP warps
-    // };
 
     logic stop, clk, rst_n;
 

@@ -74,7 +74,9 @@ typedef enum logic [5:0] {
     BRU_BNZ  = 'h00, // Branch if not zero
     BRU_BEZ  = 'h01, // Branch if zero
     BRU_SYNC = 'h02, // Blocks until all threads have reached this instruction
-    BRU_JMP  = 'h03  // Jump to address
+    BRU_JMP  = 'h03, // Jump to address
+
+    BRU_STOP = 6'b111111 // Stop the warp
 } bru_subtype_e;
 
 typedef union packed {

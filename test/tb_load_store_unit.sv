@@ -56,6 +56,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
     // # Type Definitions                                                                    #
     // #######################################################################################
 
+    typedef logic  [        AddressWidth-1:0] addr_t;
     typedef logic  [RegWidth * WarpWidth-1:0] warp_data_t;
     typedef logic  [         RegIdxWidth-1:0] reg_idx_t;
     typedef logic  [          BlockWidth-1:0] block_mask_t;
@@ -119,6 +120,9 @@ module tb_load_store_unit import bgpu_pkg::*; #(
     // Memory Response
     logic     mem_rsp_valid;
     mem_rsp_t mem_rsp;
+
+    // Warp Parameter address
+    addr_t [NumWarps-1:0] warp_dp_addr;
 
     // #######################################################################################
     // # Clock generation                                                                    #
@@ -301,29 +305,33 @@ module tb_load_store_unit import bgpu_pkg::*; #(
     // # DUT                                                                                 #
     // #######################################################################################
 
-    bgpu_pkg::lsu_subtype_e INSTS [6] = {
-        LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD
+    bgpu_pkg::lsu_subtype_e INSTS [7] = {
+        LSU_LOAD_BYTE, LSU_LOAD_HALF, LSU_LOAD_WORD, LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD,
+        LSU_LOAD_PARAM
     };
     bgpu_pkg::lsu_subtype_e inst;
-    assign inst = INSTS[eu_req.inst.subtype % 6];
+    assign inst = INSTS[eu_req.inst.subtype % 7];
 
     act_mask_t non_zero_mask;
     assign non_zero_mask = (eu_req.act_mask != '0) ? eu_req.act_mask : '1;
 
     load_store_unit #(
-        .RegWidth ( RegWidth ),
-        .WarpWidth ( WarpWidth ),
-        .OperandsPerInst ( OperandsPerInst ),
-        .RegIdxWidth  ( RegIdxWidth ),
-        .iid_t        ( iid_t ),
-        .AddressWidth ( AddressWidth ),
-        .BlockIdxBits ( BlockIdxBits ),
-        .OutstandingReqIdxWidth ( OutstandingReqIdxWidth )
+        .NumWarps              ( NumWarps               ),
+        .RegWidth              ( RegWidth               ),
+        .WarpWidth             ( WarpWidth              ),
+        .OperandsPerInst       ( OperandsPerInst        ),
+        .RegIdxWidth           ( RegIdxWidth            ),
+        .iid_t                 ( iid_t                  ),
+        .AddressWidth          ( AddressWidth           ),
+        .BlockIdxBits          ( BlockIdxBits           ),
+        .OutstandingReqIdxWidth( OutstandingReqIdxWidth )
     ) i_load_store_unit (
-        .clk_i  ( clk   ),
-        .rst_ni ( rst_n ),
+        .clk_i ( clk   ),
+        .rst_ni( rst_n ),
 
         .testmode_i( 1'b0 ),
+
+        .fe_to_lsu_warp_dp_addr_i( warp_dp_addr ),
 
         .mem_ready_i      ( mem_ready       ),
         .mem_req_valid_o  ( mem_req_valid   ),
@@ -362,6 +370,7 @@ module tb_load_store_unit import bgpu_pkg::*; #(
     initial begin : golden_model
         eu_rsp_t rsp;
         int unsigned wbyte, size, block_addr, block_offset;
+        addr_t addr;
 
         // Initialize golden memory with some data
         for (int i = 0; i < (1 << BlockAddrWidth); i++) begin
@@ -428,21 +437,26 @@ module tb_load_store_unit import bgpu_pkg::*; #(
                     continue; // Skip inactive threads
                 end
                 if (inst inside `INST_LOAD) begin
+                    addr = eu_req.src_data[1][thread * RegWidth +: AddressWidth];
                     if (inst == LSU_LOAD_BYTE) begin
                         size = 1;
                     end else if (inst == LSU_LOAD_HALF) begin
                         size = 2;
                     end else if (inst == LSU_LOAD_WORD) begin
                         size = 4;
+                    end else if (inst == LSU_LOAD_PARAM) begin
+                        size = RegWidth / 8;
+                        // For param load, adjust address
+                        addr = warp_dp_addr[eu_req.tag[WidWidth-1:0]] +
+                            eu_req.src_data[1][thread * RegWidth +: AddressWidth]
+                            * addr_t'(RegWidth / 8);
                     end else begin
                         $error("Golden Model: Unsupported load instruction %0h", inst);
                     end
                     $display("Golden Model: Thread %0d is performing a LOAD operation of size",
                         thread, size);
-                    block_addr = int'(eu_req.src_data[1][thread * RegWidth +: AddressWidth])
-                        / BlockWidth;
-                    block_offset = int'(eu_req.src_data[1][thread * RegWidth +: AddressWidth])
-                        % BlockWidth;
+                    block_addr = int'(addr) / BlockWidth;
+                    block_offset = int'(addr) % BlockWidth;
                     for (int i = 0; (i < RegWidth / 8) && (i < size); i++) begin
                         // Check that we're not reading outside of a block
                         if (block_offset >= BlockWidth) begin
@@ -589,6 +603,13 @@ module tb_load_store_unit import bgpu_pkg::*; #(
         insts_issued = 0;
         insts_completed = 0;
         occupancy = 0;
+
+        for (int i = 0; i < NumWarps; i++) begin
+            warp_dp_addr[i] = addr_t'($urandom_range(0, (1 << AddressWidth) - 1));
+
+            // Make sure address is aligned to RegWidth
+            warp_dp_addr[i][$clog2(RegWidth/8)-1:0] = '0;
+        end
 
         $timeformat(-9, 0, "ns", 12);
         // configure VCD dump
