@@ -186,8 +186,7 @@ module load_store_unit import bgpu_pkg::*; #(
     end : gen_addr
 
     // Check if the instruction is a write
-    assign opc_to_eu_is_write = opc_to_eu_inst_sub_i inside
-        {LSU_STORE_BYTE, LSU_STORE_HALF, LSU_STORE_WORD};
+    assign opc_to_eu_is_write = opc_to_eu_inst_sub_i inside `INST_STORE;
 
     // Write width
     always_comb begin : operation_width
@@ -200,7 +199,7 @@ module load_store_unit import bgpu_pkg::*; #(
                 if (RegWidthInBytes >= 2)
                     opc_to_eu_width = 'd1; // 2 bytes
             end
-            LSU_STORE_WORD, LSU_LOAD_WORD : begin
+            LSU_STORE_WORD, LSU_LOAD_WORD, LSU_LOAD_PARAM : begin
                 if (RegWidthInBytes >= 4)
                     opc_to_eu_width = 'd2; // 4 bytes
                 else if (RegWidthInBytes >= 2)

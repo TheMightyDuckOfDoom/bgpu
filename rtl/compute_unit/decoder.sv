@@ -118,13 +118,15 @@ module decoder import bgpu_pkg::*; #(
                 if (dec_inst_o[fidx].eu == EU_IU) begin : decode_iu
                     // Two register operands
                     if (dec_inst_o[fidx].subtype inside {
-                        IU_ADD, IU_SUB, IU_AND, IU_OR, IU_XOR, IU_SHL
+                        IU_ADD, IU_SUB, IU_AND, IU_OR, IU_XOR, IU_SHL, IU_SHR, IU_MUL, IU_CMPLT,
+                        IU_CMPNE, IU_MAX, IU_DIV
                     })
                         dec_operands_is_reg_o[fidx] = '1;
 
                     // First operand is an immediate, second is a register
                     if (dec_inst_o[fidx].subtype inside {
-                        IU_ADDI, IU_SUBI, IU_SHLI
+                        IU_ADDI, IU_SUBI, IU_ANDI, IU_ORI, IU_XORI, IU_SHLI, IU_SHRI, IU_MULI,
+                        IU_CMPLTI, IU_CMPNEI, IU_DIVI
                     }) begin
                         dec_operands_is_reg_o[fidx][0] = 1'b0;
                         dec_operands_is_reg_o[fidx][1] = 1'b1;
@@ -137,7 +139,7 @@ module decoder import bgpu_pkg::*; #(
 
                     // Only one register operand
                     if (dec_inst_o[fidx].subtype inside {
-                        FPU_INT_TO_FP, FPU_FP_TO_INT
+                        FPU_EXP2, FPU_LOG2, FPU_RECIP, FPU_INT_TO_FP, FPU_FP_TO_INT
                     })
                         dec_operands_is_reg_o[fidx][1] = 1'b0;
                 end : decode_fpu

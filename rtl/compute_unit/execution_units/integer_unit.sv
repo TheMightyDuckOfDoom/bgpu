@@ -110,9 +110,6 @@ module integer_unit import bgpu_pkg::*; #(
                 IU_TBID: result[i]
                     = fe_to_iu_warp_tblock_idx_i[opc_to_eu_tag_i[WidWidth-1:0]] * WarpWidth + i;
 
-                IU_DPA:  result[i][AddressWidth-1:0]
-                    = fe_to_iu_warp_dp_addr_i[opc_to_eu_tag_i[WidWidth-1:0]]; // Data / Param Addr
-
                 IU_ADD, IU_ADDI: result[i] = operands[1][i] + operands[0][i]; // Add, immediate
                 IU_SUB, IU_SUBI: result[i] = operands[1][i] - operands[0][i]; // Subtract, immediate
 
