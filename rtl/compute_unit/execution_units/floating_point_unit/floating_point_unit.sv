@@ -1,4 +1,4 @@
-// Copyright 2025 Tobias Senti
+// Copyright 2025-2026 Tobias Senti
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 
@@ -238,11 +238,11 @@ module floating_point_unit import bgpu_pkg::*; #(
     // - Divider is not requested, but not ready
     always_comb begin : ready_logic
         eu_to_opc_ready_o = 1'b1;
-        
+
         // All stations are full
         if (&fpu_station_ready)
             eu_to_opc_ready_o = 1'b0;
-        
+
         // Divider selected, but not ready
         if (fdiv_selected && (!fdiv_ready))
             eu_to_opc_ready_o = 1'b0;

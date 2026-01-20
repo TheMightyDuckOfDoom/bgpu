@@ -1,4 +1,4 @@
-# Copyright 2025 Tobias Senti
+# Copyright 2025-2026 Tobias Senti
 # Solderpad Hardware License, Version 0.51, see LICENSE for details.
 # SPDX-License-Identifier: SHL-0.51
 
@@ -29,7 +29,7 @@ TOP                ?= compute_unit
 TB_TOP             ?= tb_$(TOP)
 
 # Source files
-SRCS = $(wildcard rtl/*/*.sv rtl/*/*/*.sv)
+SRCS = $(wildcard rtl/*/*.sv rtl/*/*.sv rtl/*/*/*.sv rtl/*/*/*/*.sv)
 TB_SRCS = $(wildcard test/tb_*.sv)
 BENDER_DEPS:= Bender.lock Bender.yml Bender.local
 TBS = $(basename $(notdir $(wildcard test/tb_*.sv)))

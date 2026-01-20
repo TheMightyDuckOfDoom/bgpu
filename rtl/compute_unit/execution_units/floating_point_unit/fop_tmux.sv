@@ -46,7 +46,7 @@ module fop_tmux #(
     parameter int WidthPerUnit = WarpWidth / NumFopUnits;
 
     // Width index
-    parameter int unsigned IdxWidth = WidthPerUnit > 1 ? $clog2(WidthPerUnit) : 1; 
+    parameter int unsigned IdxWidth = WidthPerUnit > 1 ? $clog2(WidthPerUnit) : 1;
 
     // Thread index width
     parameter int unsigned ThreadIdxWidth = WarpWidth > 1 ? $clog2(WarpWidth) : 1;
@@ -147,7 +147,7 @@ module fop_tmux #(
             op_tag_d    = tag_i;
             operand_a_d = operand_a_i;
             operand_b_d = operand_b_i;
-            
+
             // Reset idx
             idx_d = '0;
         end
@@ -163,8 +163,10 @@ module fop_tmux #(
         for (int i = 0; i < NumFopUnits; i++) begin : loop_fop_units
             if (fop_res[i].valid) begin : fop_result_valid
                 valid_o [tidx_t'(i * WidthPerUnit) + tidx_t'(fop_res[i].fop_tag.idx)] = 1'b1;
-                tag_o   [tidx_t'(i * WidthPerUnit) + tidx_t'(fop_res[i].fop_tag.idx)] = fop_res[i].fop_tag.tag;
-                result_o[tidx_t'(i * WidthPerUnit) + tidx_t'(fop_res[i].fop_tag.idx)] = fop_res[i].result;
+                tag_o   [tidx_t'(i * WidthPerUnit) + tidx_t'(fop_res[i].fop_tag.idx)] =
+                    fop_res[i].fop_tag.tag;
+                result_o[tidx_t'(i * WidthPerUnit) + tidx_t'(fop_res[i].fop_tag.idx)] =
+                    fop_res[i].result;
             end : fop_result_valid
         end : loop_fop_units
     end : result_logic
